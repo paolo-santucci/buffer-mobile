@@ -1,28 +1,35 @@
-// BufferApp — MaterialApp skeleton (TASK-16)
+// BufferApp — MaterialApp shell (TASK-16, updated TASK-11)
 //
-// Spec refs: FR-05, NFR-04, NFR-05
+// Spec refs: FR-05, FR-M2-01, FR-M2-02, EC-M2-14, NFR-04, NFR-05, §4.1
 // Canon ref: .claude/docs/canon/ui-design-bible.md
 //   §Design ethos   — content-is-everything; no chrome at rest
 //   §Components §1  — App shell: Adw.ToolbarView + Overlay stack
 //
 // Compliance notes:
-//   - All route placeholder bodies are const empty surfaces (SizedBox.shrink),
-//     matching the canon §Components §1 mandate that M2–M6 fill the shell.
+//   - Route '/' now renders BufferScreen (TASK-11) — chrome-free full-bleed
+//     editor, satisfying canon §Design ethos and §Components §1.
+//   - Routes '/recovery', '/settings', '/about' remain on _EmptyScreen until
+//     M3/M5 fill them.
 //   - NO literal user-facing strings in this file — only AppLocalizations keys
-//     are used (NFR-04). The only string is `appTitle` via l10n.
-//   - ThemeMode.system follows platform brightness by default, matching the
+//     (NFR-04). The only string is `appTitle` via l10n.
+//   - ThemeMode.system follows platform brightness by default, matching
 //     canon §Colour §Scheme matrix (Follow system is the gschema default).
+//   - LifecycleBufferHost is mounted via MaterialApp.builder so it wraps ALL
+//     routed content ABOVE the Navigator and never unmounts on route changes
+//     (EC-M2-14, OQ-M2-03).
 //
 // <!-- CANON GAP: The canon §Components §1 "App shell" specifies a Stack-based
-//      Overlay (editor + chrome overlay + toast). That structure belongs to the
-//      buffer editor screen (M2/TASK-2x). This file provides only the
-//      MaterialApp skeleton shell that wraps it; M2–M6 tasks fill in the
+//      Overlay (editor + chrome overlay + toast). That structure belongs to
+//      the editor screen and later milestones. This file provides only the
+//      MaterialApp skeleton shell that wraps it; M3–M6 tasks fill the
 //      content layer. No chrome is added here per canon §Design ethos. -->
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'package:buffer/l10n/app_localizations.dart';
+import 'package:buffer/presentation/editor/buffer_screen.dart';
+import 'package:buffer/presentation/lifecycle/lifecycle_buffer_host.dart';
 import 'package:buffer/presentation/theme/app_theme.dart';
 
 /// Root widget of the application.
@@ -66,20 +73,29 @@ class BufferApp extends StatelessWidget {
       navigatorKey: navigatorKey,
 
       // -----------------------------------------------------------------------
-      // Route table (FR-05).
-      //
-      // Each placeholder renders a const empty surface per canon §Components §1:
-      // "content-is-everything; no chrome beyond the shell container that M2–M6
-      // fill."  The Scaffold body is SizedBox.shrink() — zero pixels, no chrome.
+      // builder: wraps ALL routed content above the Navigator (EC-M2-14,
+      // OQ-M2-03). LifecycleBufferHost registers as a WidgetsBindingObserver
+      // and must survive route changes — mounting it here guarantees it is
+      // never unmounted by a route push or pop.
+      // -----------------------------------------------------------------------
+      builder: (context, child) =>
+          LifecycleBufferHost(child: child ?? const SizedBox.shrink()),
+
+      // -----------------------------------------------------------------------
+      // Route table (FR-05, FR-M2-01).
       //
       // Named routes:
-      //   "/"          — buffer editor (M2)
-      //   "/recovery"  — recovery list (M3)
-      //   "/settings"  — settings screen (M5)
-      //   "/about"     — about screen (M5)
+      //   "/"          — buffer editor (BufferScreen, TASK-11/M2)
+      //   "/recovery"  — recovery list (M3 — placeholder)
+      //   "/settings"  — settings screen (M5 — placeholder)
+      //   "/about"     — about screen (M5 — placeholder)
+      //
+      // Canon §Design ethos: no chrome is added at '/'; the editor is
+      // chrome-free at rest.  Placeholder routes use _EmptyScreen
+      // (SizedBox.shrink body) until M3–M5 fill them.
       // -----------------------------------------------------------------------
       routes: {
-        '/': (_) => const _EmptyScreen(),
+        '/': (_) => const BufferScreen(),
         '/recovery': (_) => const _EmptyScreen(),
         '/settings': (_) => const _EmptyScreen(),
         '/about': (_) => const _EmptyScreen(),

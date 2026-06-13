@@ -18,7 +18,6 @@ final _privateConstructorUsedError = UnsupportedError(
 /// @nodoc
 mixin _$BufferState {
   String get text => throw _privateConstructorUsedError;
-  bool get isDirty => throw _privateConstructorUsedError;
 
   /// Create a copy of BufferState
   /// with the given fields replaced by the non-null parameter values.
@@ -34,7 +33,7 @@ abstract class $BufferStateCopyWith<$Res> {
     $Res Function(BufferState) then,
   ) = _$BufferStateCopyWithImpl<$Res, BufferState>;
   @useResult
-  $Res call({String text, bool isDirty});
+  $Res call({String text});
 }
 
 /// @nodoc
@@ -51,17 +50,13 @@ class _$BufferStateCopyWithImpl<$Res, $Val extends BufferState>
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({Object? text = null, Object? isDirty = null}) {
+  $Res call({Object? text = null}) {
     return _then(
       _value.copyWith(
             text: null == text
                 ? _value.text
                 : text // ignore: cast_nullable_to_non_nullable
                       as String,
-            isDirty: null == isDirty
-                ? _value.isDirty
-                : isDirty // ignore: cast_nullable_to_non_nullable
-                      as bool,
           )
           as $Val,
     );
@@ -77,7 +72,7 @@ abstract class _$$BufferStateImplCopyWith<$Res>
   ) = __$$BufferStateImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call({String text, bool isDirty});
+  $Res call({String text});
 }
 
 /// @nodoc
@@ -93,17 +88,13 @@ class __$$BufferStateImplCopyWithImpl<$Res>
   /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
-  $Res call({Object? text = null, Object? isDirty = null}) {
+  $Res call({Object? text = null}) {
     return _then(
       _$BufferStateImpl(
         text: null == text
             ? _value.text
             : text // ignore: cast_nullable_to_non_nullable
                   as String,
-        isDirty: null == isDirty
-            ? _value.isDirty
-            : isDirty // ignore: cast_nullable_to_non_nullable
-                  as bool,
       ),
     );
   }
@@ -112,18 +103,15 @@ class __$$BufferStateImplCopyWithImpl<$Res>
 /// @nodoc
 
 class _$BufferStateImpl implements _BufferState {
-  const _$BufferStateImpl({this.text = '', this.isDirty = false});
+  const _$BufferStateImpl({this.text = ''});
 
   @override
   @JsonKey()
   final String text;
-  @override
-  @JsonKey()
-  final bool isDirty;
 
   @override
   String toString() {
-    return 'BufferState(text: $text, isDirty: $isDirty)';
+    return 'BufferState(text: $text)';
   }
 
   @override
@@ -131,12 +119,11 @@ class _$BufferStateImpl implements _BufferState {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
             other is _$BufferStateImpl &&
-            (identical(other.text, text) || other.text == text) &&
-            (identical(other.isDirty, isDirty) || other.isDirty == isDirty));
+            (identical(other.text, text) || other.text == text));
   }
 
   @override
-  int get hashCode => Object.hash(runtimeType, text, isDirty);
+  int get hashCode => Object.hash(runtimeType, text);
 
   /// Create a copy of BufferState
   /// with the given fields replaced by the non-null parameter values.
@@ -148,13 +135,10 @@ class _$BufferStateImpl implements _BufferState {
 }
 
 abstract class _BufferState implements BufferState {
-  const factory _BufferState({final String text, final bool isDirty}) =
-      _$BufferStateImpl;
+  const factory _BufferState({final String text}) = _$BufferStateImpl;
 
   @override
   String get text;
-  @override
-  bool get isDirty;
 
   /// Create a copy of BufferState
   /// with the given fields replaced by the non-null parameter values.

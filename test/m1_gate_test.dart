@@ -10,7 +10,10 @@
 // Test targets (platform: all):
 //   1. Domain purity     — lib/domain/ has 0 `package:flutter/` imports   (FR-07)
 //   2. Ephemerality      — lib/ has 0 `PageStorageKey` occurrences         (NFR-09/EC-08)
-//   3. Share isolation   — lib/ has 0 `import.*receive_sharing_intent` stmts (FR-17/EC-12)
+//   3. Share isolation   — receive_sharing_intent imported in EXACTLY ONE
+//                          designated file (FR-17/EC-12)
+//                          [§6 plan-change 2026-06-13: M1 "zero imports"
+//                           relaxed to "one file" to accommodate TASK-03]
 //   4. No literal Text() — lib/presentation/ has 0 `Text('…')` / `Text("…")`
 //                          constructors with non-empty literals             (NFR-04)
 //   5. ARB key parity    — app_en.arb and app_it.arb have identical key sets (EC-11/NFR-04)
@@ -114,44 +117,72 @@ void main() {
   });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // 3. Share isolation — receive_sharing_intent is not imported in lib/
-  // (FR-17/EC-12)
+  // 3. Share isolation — receive_sharing_intent imported in EXACTLY ONE
+  // designated file (FR-17/EC-12)
   //
-  // Comment references are allowed; only actual import statements are forbidden.
+  // M1 assertion (zero imports in lib/) relaxed in §6 plan-change 2026-06-13:
+  // TASK-03 (M2 Wave 1) legitimately added the isolated adapter at
+  // lib/infrastructure/share/receive_sharing_intent_service.dart. Permitting
+  // exactly one import in that file preserves the isolation contract while
+  // allowing the M2 adapter to co-exist.  The M2 gate (m2_gate_test.dart)
+  // carries the same EC-12 assertion.
+  //
+  // Comment references are allowed; only actual import statements are checked.
   // ──────────────────────────────────────────────────────────────────────────
 
   group('share isolation (FR-17/EC-12)', () {
-    test('should_have_zero_receive_sharing_intent_imports_in_lib', () {
-      // Match: import '<pkg>' or import "<pkg>" — both quote styles.
-      final importPattern = RegExp(
-        r'import\s+['
-        "'"
-        r'"'
-        r'].*receive_sharing_intent',
-      );
-      final hits = <String>[];
-      for (final file in _dartFiles(libDir)) {
-        final lines = file.readAsLinesSync();
-        for (var i = 0; i < lines.length; i++) {
-          final line = lines[i];
-          // Skip comment lines — the package name may legitimately appear in
-          // doc comments (e.g. share_intent_service.dart header).
-          final trimmed = line.trimLeft();
-          if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
-          if (importPattern.hasMatch(line)) {
-            hits.add('${file.path}:${i + 1}: ${line.trim()}');
+    const designatedShareAdapterRelPath =
+        'infrastructure/share/receive_sharing_intent_service.dart';
+
+    test(
+      'should_import_receive_sharing_intent_in_exactly_one_designated_file',
+      () {
+        // Match imports of the `receive_sharing_intent` pub package itself:
+        //   import 'package:receive_sharing_intent/...'
+        // This is distinct from imports of the buffer adapter file
+        // (receive_sharing_intent_service.dart) which appear as
+        //   import 'package:buffer/infrastructure/share/...'
+        // and must NOT be counted here.
+        final packageImportPattern = RegExp(
+          r'''import\s+['"]package:receive_sharing_intent/''',
+        );
+        final hits = <String>[];
+        for (final file in _dartFiles(libDir)) {
+          final lines = file.readAsLinesSync();
+          for (var i = 0; i < lines.length; i++) {
+            final line = lines[i];
+            // Skip comment lines — the package name may legitimately appear in
+            // doc comments (e.g. share_intent_service.dart header).
+            final trimmed = line.trimLeft();
+            if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
+            if (packageImportPattern.hasMatch(line)) {
+              hits.add('${file.path}:${i + 1}: ${line.trim()}');
+            }
           }
         }
-      }
-      expect(
-        hits,
-        isEmpty,
-        reason:
-            'receive_sharing_intent must not be imported in lib/ in M1 — '
-            'the concrete impl is deferred to M2 behind ShareIntentService (FR-17/EC-12).\n'
-            'Offenders:\n${hits.join('\n')}',
-      );
-    });
+
+        // Exactly one hit is expected — the designated adapter file.
+        expect(
+          hits,
+          hasLength(1),
+          reason:
+              'package:receive_sharing_intent/ must be imported in EXACTLY ONE '
+              'file in lib/ — the isolated adapter at '
+              'lib/$designatedShareAdapterRelPath (FR-17/EC-12). '
+              '${hits.isEmpty ? 'No imports found — adapter may be missing.' : 'Unexpected imports:\n${hits.join('\n')}'}',
+        );
+
+        if (hits.isNotEmpty) {
+          expect(
+            hits.first,
+            contains(designatedShareAdapterRelPath),
+            reason:
+                'The sole package:receive_sharing_intent/ import must be in '
+                'lib/$designatedShareAdapterRelPath, not elsewhere (EC-12).',
+          );
+        }
+      },
+    );
   });
 
   // ──────────────────────────────────────────────────────────────────────────

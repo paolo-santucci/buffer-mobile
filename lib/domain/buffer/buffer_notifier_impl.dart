@@ -19,11 +19,16 @@ class BufferNotifierImpl extends Notifier<BufferState>
 
   @override
   void updateText(String text) {
-    state = state.copyWith(text: text, isDirty: true);
+    state = state.copyWith(text: text);
   }
 
   @override
   void reset() {
     state = BufferState.empty();
+  }
+
+  @override
+  void populate(String text) {
+    state = state.copyWith(text: text);
   }
 }

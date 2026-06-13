@@ -67,9 +67,14 @@ fi
 # ──────────────────────────────────────────────────────────────────────────────
 
 echo "--- Gate 3: no print() in lib/ ---"
-# First grep finds any "print(" occurrence; second grep removes lines that are
-# calls to debugPrint( which is allowed.
-print_hits=$(grep -RIn "print(" "$ROOT/lib" 2>/dev/null | grep -v "debugPrint(" || true)
+# Find any "print(" occurrence, then filter out:
+#   a) lines that are calls to debugPrint( (allowed).
+#   b) pure comment lines (trimmed line begins with //) — doc comments may
+#      legitimately contain phrases like "// No print()." as authoring notes.
+print_hits=$(grep -RIn "print(" "$ROOT/lib" 2>/dev/null \
+  | grep -v "debugPrint(" \
+  | grep -v ":[[:space:]]*//" \
+  || true)
 if [ -z "$print_hits" ]; then
   pass "no print() in lib/"
 else
@@ -110,21 +115,47 @@ fi
 pass "ephemerality — no buffer-text writes to recovery store in M1 (R-01)"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Gate 6 — share isolation: receive_sharing_intent is NOT imported anywhere in
-# lib/ in M1  (FR-17/EC-12)
+# Gate 6 — share isolation: receive_sharing_intent imported in EXACTLY ONE
+# designated file in lib/  (FR-17/EC-12)
 #
-# The spec requires the concrete impl (which imports the package) to not be
-# wired in M1. We assert on the import statement, not the bare string, so
-# comments mentioning the package are allowed.
+# §6 plan-change 2026-06-13: M1 originally required zero imports. TASK-03 (M2
+# Wave 1) legitimately added the isolated adapter at
+# lib/infrastructure/share/receive_sharing_intent_service.dart. The assertion
+# is relaxed to "exactly one import in that designated file". Comment lines
+# that merely mention the package name are excluded via the grep pattern.
 # ──────────────────────────────────────────────────────────────────────────────
 
+DESIGNATED_SHARE_ADAPTER="lib/infrastructure/share/receive_sharing_intent_service.dart"
+
 echo "--- Gate 6: share isolation ---"
-share_imports=$(grep -RIn "import.*receive_sharing_intent" "$ROOT/lib" 2>/dev/null || true)
-if [ -z "$share_imports" ]; then
-  pass "share isolation — receive_sharing_intent not imported in lib/"
+# Collect imports of the `receive_sharing_intent` pub package itself:
+#   import 'package:receive_sharing_intent/...'
+# This is intentionally scoped to the package prefix so imports of the buffer
+# adapter file (receive_sharing_intent_service.dart) via the buffer package
+# namespace are NOT counted.
+share_imports=$(grep -RIn "import.*package:receive_sharing_intent/" "$ROOT/lib" 2>/dev/null \
+  | grep -v "^\s*//" || true)
+
+import_count=$(echo "$share_imports" | grep -c "." 2>/dev/null || echo "0")
+# Sanitise: an empty string from grep returns "0" but grep -c may give "1" on
+# some platforms for a single empty match; recount after filtering empty lines.
+if [ -z "$(echo "$share_imports" | tr -d '[:space:]')" ]; then
+  import_count=0
+fi
+
+if [ "$import_count" -eq 1 ]; then
+  # Confirm it is in the designated file.
+  if echo "$share_imports" | grep -q "$DESIGNATED_SHARE_ADAPTER"; then
+    pass "share isolation — package:receive_sharing_intent/ imported in exactly 1 designated file ($DESIGNATED_SHARE_ADAPTER) (FR-17/EC-12)"
+  else
+    echo "$share_imports" >&2
+    fail "Gate 6 FAILED: receive_sharing_intent import is NOT in the designated file ($DESIGNATED_SHARE_ADAPTER) (FR-17/EC-12)"
+  fi
+elif [ "$import_count" -eq 0 ]; then
+  fail "Gate 6 FAILED: package:receive_sharing_intent/ is not imported anywhere in lib/ — the adapter at $DESIGNATED_SHARE_ADAPTER is missing (FR-17/EC-12)"
 else
   echo "$share_imports" >&2
-  fail "Gate 6 FAILED: receive_sharing_intent is imported in lib/ — M1 must not wire the concrete impl (FR-17/EC-12)"
+  fail "Gate 6 FAILED: package:receive_sharing_intent/ imported in $import_count files (expected exactly 1: $DESIGNATED_SHARE_ADAPTER) (FR-17/EC-12)"
 fi
 
 # ──────────────────────────────────────────────────────────────────────────────

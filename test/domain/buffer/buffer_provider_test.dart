@@ -8,8 +8,9 @@
 //   - `bufferProvider` is a NON-auto-disposed `NotifierProvider<BufferNotifierImpl, BufferState>`.
 //   - `BufferNotifierImpl extends Notifier<BufferState> implements BufferNotifier`.
 //   - `build()` returns `BufferState.empty()`.
-//   - `updateText(String)` sets `state.text` and `state.isDirty = true`; never throws.
+//   - `updateText(String)` sets `state.text`; never throws.
 //   - `reset()` returns state to `BufferState.empty()`; idempotent.
+//   - `populate(String)` sets `state.text` from a non-keystroke source; never throws.
 //   - Provider is declared in `lib/domain/buffer/buffer_provider.dart`.
 //   - Impl is declared in `lib/domain/buffer/buffer_notifier_impl.dart`.
 
@@ -92,19 +93,15 @@ void main() {
   // ---------------------------------------------------------------------------
 
   group('BufferNotifierImpl — updateText', () {
-    test(
-      'given_empty_buffer_when_updateText_abc_then_state_text_is_abc_and_isDirty',
-      () {
-        final container = makeContainer();
-        addTearDown(container.dispose);
+    test('given_empty_buffer_when_updateText_abc_then_state_text_is_abc', () {
+      final container = makeContainer();
+      addTearDown(container.dispose);
 
-        container.read(bufferProvider.notifier).updateText('abc');
-        final state = container.read(bufferProvider);
+      container.read(bufferProvider.notifier).updateText('abc');
+      final state = container.read(bufferProvider);
 
-        expect(state.text, equals('abc'));
-        expect(state.isDirty, isTrue);
-      },
-    );
+      expect(state.text, equals('abc'));
+    });
 
     test(
       'given_non_empty_buffer_when_updateText_empty_string_then_no_throw_and_text_empty',

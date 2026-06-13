@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 // ---------------------------------------------------------------------------
 // In-test fake — the only concrete implementation in scope for these tests.
+// If BufferNotifier gains or loses a public member this fake must be updated,
+// which surfaces the contract change at compile time.
 // ---------------------------------------------------------------------------
 
 class _FakeBufferNotifier implements BufferNotifier {
@@ -16,12 +18,17 @@ class _FakeBufferNotifier implements BufferNotifier {
 
   @override
   void updateText(String text) {
-    _state = _state.copyWith(text: text, isDirty: text.isNotEmpty);
+    _state = _state.copyWith(text: text);
   }
 
   @override
   void reset() {
     _state = BufferState.empty();
+  }
+
+  @override
+  void populate(String text) {
+    _state = _state.copyWith(text: text);
   }
 }
 
@@ -32,26 +39,26 @@ class _FakeBufferNotifier implements BufferNotifier {
 void main() {
   group('BufferNotifier contract', () {
     // -----------------------------------------------------------------------
-    // Interface-shape assertions (FR-09)
+    // Interface-shape assertions (FR-09 / FR-M2-09)
     // -----------------------------------------------------------------------
 
     test(
-      'given_BufferNotifier_when_inspected_then_state_getter_exists_and_mutators_are_exactly_updateText_and_reset',
+      'given_BufferNotifier_when_inspected_then_state_getter_and_mutators_are_exactly_updateText_reset_populate',
       () {
-        // A fake that compiles and satisfies the interface is proof the three
-        // members exist with the exact declared signatures.  The compile-time
-        // check IS the shape assertion; if a fourth public mutator were added
-        // to the interface the fake would have to implement it too.
+        // A fake that compiles and satisfies the interface is proof the members
+        // exist with the exact declared signatures.  The compile-time check IS
+        // the shape assertion; if the interface gains or loses a public member
+        // the fake will fail to compile.
         final notifier = _FakeBufferNotifier();
 
         // state getter is accessible
         expect(notifier.state, isA<BufferState>());
 
-        // updateText and reset are callable — no other public mutators exist
-        // because the fake would fail to compile if any were missing.
+        // All three mutators are callable
         notifier.updateText('probe');
         notifier.reset();
-        // reaching here without compile error confirms mutators == {updateText, reset}
+        notifier.populate('seed');
+        // reaching here without compile error confirms mutators == {updateText, reset, populate}
       },
     );
 
@@ -62,9 +69,9 @@ void main() {
     test(
       'given_BufferNotifier_interface_when_member_names_checked_then_no_name_matches_save_persist_write_store_share',
       () {
-        // The interface declares exactly: state, updateText, reset.
+        // The interface declares exactly: state, updateText, reset, populate.
         // Assert none of them match the forbidden pattern.
-        const memberNames = ['state', 'updateText', 'reset'];
+        const memberNames = ['state', 'updateText', 'reset', 'populate'];
         final forbidden = RegExp(
           r'save|persist|write|store|share',
           caseSensitive: false,
@@ -82,7 +89,7 @@ void main() {
     );
 
     // -----------------------------------------------------------------------
-    // Happy-path behaviour (FR-09)
+    // Happy-path behaviour — updateText (FR-09)
     // -----------------------------------------------------------------------
 
     test(
@@ -93,6 +100,32 @@ void main() {
         notifier.updateText('abc');
 
         expect(notifier.state.text, equals('abc'));
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // Happy-path behaviour — populate (FR-M2-09 / §5.1.3)
+    // -----------------------------------------------------------------------
+
+    test(
+      'given_state_is_empty_when_populate_called_with_hello_then_state_text_equals_hello',
+      () {
+        final notifier = _FakeBufferNotifier();
+
+        notifier.populate('hello');
+
+        expect(notifier.state.text, equals('hello'));
+      },
+    );
+
+    test(
+      'given_state_is_empty_when_populate_called_with_empty_string_then_state_text_is_empty',
+      () {
+        final notifier = _FakeBufferNotifier();
+
+        notifier.populate('');
+
+        expect(notifier.state.text, equals(''));
       },
     );
 

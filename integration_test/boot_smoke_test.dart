@@ -13,6 +13,15 @@
 // Run headlessly on Linux CI (no device needed for the Flutter test driver):
 //   flutter test integration_test/boot_smoke_test.dart --platform=vm
 //   (or use the standard `flutter test integration_test/` on the CI runner)
+//
+// TASK-12 note: "/" now routes to BufferScreen (TASK-11 route swap), which
+// reads initialSharedTextProvider and shareIntentServiceProvider. Both must be
+// overridden in the ProviderScope so BufferScreen does not throw
+// UnimplementedError on-device. A fake ShareIntentService and a fake
+// RecoveryRepository are provided to satisfy the full provider graph.
+
+import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,8 +29,35 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:buffer/infrastructure/share/share_intent_service.dart';
+import 'package:buffer/domain/recovery/recovery_repository.dart';
 import 'package:buffer/presentation/app.dart';
+import 'package:buffer/presentation/editor/share_providers.dart';
 import 'package:buffer/presentation/settings/settings_provider.dart';
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Fakes — satisfy the provider graph without touching any platform channel.
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// A no-op [ShareIntentService] that never emits share events and always
+/// returns null for the cold-start read.
+class _FakeShareIntentService implements ShareIntentService {
+  @override
+  Future<String?> initialSharedText() async => null;
+
+  @override
+  Stream<String> sharedTextStream() => const Stream.empty();
+
+  @override
+  void dispose() {}
+}
+
+/// A no-op [RecoveryRepository] that always completes successfully without
+/// touching the filesystem.
+class _FakeRecoveryRepository implements RecoveryRepository {
+  @override
+  Future<File> save(String text) => Future.value(File('/dev/null'));
+}
 
 void main() {
   // Initialise the integration-test binding.  This replaces the standard
@@ -32,9 +68,8 @@ void main() {
   // ──────────────────────────────────────────────────────────────────────────
   // Boot smoke — FR-19 / MC-01
   //
-  // Pump ProviderScope + BufferApp with a mock SharedPreferences seam so
-  // sharedPreferencesProvider is satisfied without touching the platform
-  // channel.  Then assert:
+  // Pump ProviderScope + BufferApp with mock seams so all M2 providers are
+  // satisfied without touching any platform channel. Then assert:
   //   a) exactly one MaterialApp mounts
   //   b) the "/" route renders a Scaffold (AppTheme surface is present)
   //   c) Theme.of(context).brightness resolves to a valid Brightness value
@@ -51,7 +86,22 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
+            // initialSharedTextProvider throws until overridden (see
+            // share_providers.dart). Seed null for a normal cold-start boot.
+            initialSharedTextProvider.overrideWithValue(null),
+            // shareIntentServiceProvider: use a no-op fake so BufferScreen's
+            // sharedTextStream() subscription never reaches the real package.
+            shareIntentServiceProvider.overrideWithValue(
+              _FakeShareIntentService(),
+            ),
+            // recoveryRepositoryProvider: use a no-op fake so paused-lifecycle
+            // saves never touch the filesystem in the smoke test.
+            recoveryRepositoryProvider.overrideWithValue(
+              _FakeRecoveryRepository(),
+            ),
+          ],
           child: const BufferApp(),
         ),
       );

@@ -12,15 +12,29 @@
 //                        resolve without UnknownRoute and render a non-null
 //                        widget tree.
 //   4. FR-05 negative   — "/nonexistent" is handled by onUnknownRoute; no crash.
+//
+// TASK-11 reconciliation: route '/' now renders BufferScreen (not _EmptyScreen).
+//   BufferScreen reads initialSharedTextProvider (throws until overridden),
+//   shareIntentServiceProvider (connects to platform channel), and
+//   recoveryRepositoryProvider (filesystem).  All three are overridden with
+//   fakes in every test in this file.  Tests that previously asserted
+//   _EmptyScreen at '/' are updated; the three unchanged-route assertions
+//   (no crash, no ErrorWidget) remain.
+
+import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:buffer/domain/recovery/recovery_repository.dart';
 import 'package:buffer/domain/settings/app_settings.dart';
 import 'package:buffer/domain/settings/settings_repository.dart';
+import 'package:buffer/infrastructure/share/share_intent_service.dart';
 import 'package:buffer/presentation/app.dart';
+import 'package:buffer/presentation/editor/share_providers.dart';
 import 'package:buffer/presentation/settings/settings_provider.dart';
 
 // ---------------------------------------------------------------------------
@@ -39,6 +53,31 @@ class _ThrowingRepository implements SettingsRepository {
   Future<void> save(AppSettings settings) async {}
 }
 
+/// No-op [RecoveryRepository] — required because route '/' now renders
+/// BufferScreen which reads saveBufferToRecoveryProvider (TASK-11).
+class _FakeRecoveryRepository implements RecoveryRepository {
+  @override
+  Future<File> save(String text) async =>
+      File('/tmp/fake-${DateTime.now().microsecondsSinceEpoch}.txt');
+}
+
+/// Null-stream [ShareIntentService] — required because BufferScreen subscribes
+/// to sharedTextStream() in initState (TASK-11).
+class _FakeShareIntentService implements ShareIntentService {
+  final StreamController<String> _ctrl = StreamController<String>.broadcast();
+
+  @override
+  Future<String?> initialSharedText() async => null;
+
+  @override
+  Stream<String> sharedTextStream() => _ctrl.stream;
+
+  @override
+  void dispose() {
+    if (!_ctrl.isClosed) _ctrl.close();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -49,8 +88,12 @@ Future<SharedPreferences> _emptyPrefs() async {
   return SharedPreferences.getInstance();
 }
 
-/// Pumps [BufferApp] inside a [ProviderScope] with the real (mock) prefs
-/// override.  The optional [extraOverrides] are appended to the scope.
+/// Pumps [BufferApp] inside a [ProviderScope] with the required overrides.
+///
+/// Route '/' now renders BufferScreen (TASK-11), which reads
+/// initialSharedTextProvider, shareIntentServiceProvider, and
+/// recoveryRepositoryProvider.  All three are overridden here in addition to
+/// sharedPreferencesProvider.  The optional [extraOverrides] are appended.
 Future<void> _pumpApp(
   WidgetTester tester, {
   List<Override> extraOverrides = const [],
@@ -61,6 +104,9 @@ Future<void> _pumpApp(
     ProviderScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(resolvedPrefs),
+        initialSharedTextProvider.overrideWithValue(null),
+        shareIntentServiceProvider.overrideWithValue(_FakeShareIntentService()),
+        recoveryRepositoryProvider.overrideWithValue(_FakeRecoveryRepository()),
         ...extraOverrides,
       ],
       child: const BufferApp(),
@@ -154,9 +200,21 @@ void main() {
           SharedPreferences.setMockInitialValues({});
           final prefs = await SharedPreferences.getInstance();
 
+          // TASK-11: route '/' now renders BufferScreen, which requires
+          // initialSharedTextProvider, shareIntentServiceProvider, and
+          // recoveryRepositoryProvider overrides.
           await tester.pumpWidget(
             ProviderScope(
-              overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+              overrides: [
+                sharedPreferencesProvider.overrideWithValue(prefs),
+                initialSharedTextProvider.overrideWithValue(null),
+                shareIntentServiceProvider.overrideWithValue(
+                  _FakeShareIntentService(),
+                ),
+                recoveryRepositoryProvider.overrideWithValue(
+                  _FakeRecoveryRepository(),
+                ),
+              ],
               child: BufferApp(navigatorKey: navigatorKey),
             ),
           );
@@ -188,9 +246,19 @@ void main() {
         SharedPreferences.setMockInitialValues({});
         final prefs = await SharedPreferences.getInstance();
 
+        // TASK-11: route '/' now renders BufferScreen — include share overrides.
         await tester.pumpWidget(
           ProviderScope(
-            overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+            overrides: [
+              sharedPreferencesProvider.overrideWithValue(prefs),
+              initialSharedTextProvider.overrideWithValue(null),
+              shareIntentServiceProvider.overrideWithValue(
+                _FakeShareIntentService(),
+              ),
+              recoveryRepositoryProvider.overrideWithValue(
+                _FakeRecoveryRepository(),
+              ),
+            ],
             child: BufferApp(navigatorKey: navigatorKey),
           ),
         );
