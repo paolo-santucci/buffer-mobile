@@ -1,0 +1,57 @@
+name: buffer
+description: "A minimal ephemeral text editor — Flutter port of the GNOME Buffer app."
+# Licensed under the GNU General Public License v3.0 — see LICENSE file.
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.12.2 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.3.5
+
+  # Immutable value objects
+  freezed_annotation: ^2.4.4
+
+  # Persistence
+  shared_preferences: ^2.3.3
+  path_provider: ^2.1.5
+  # Path composition (used directly by SandboxPathProvider — promoted from transitive)
+  path: ^1.9.0
+
+  # App metadata
+  package_info_plus: ^8.3.0
+
+  # External launch / URLs
+  url_launcher: ^6.3.1
+
+  # Internationalisation
+  intl: ^0.20.2
+
+  # Share intake (M2 — isolated behind ShareIntentService; see D-001-oq14-share-intent.md)
+  receive_sharing_intent: ^1.8.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # Boot-smoke / E2E harness (M1 gate boot smoke; widget-test compatible under flutter test)
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # Code generation
+  build_runner: ^2.4.13
+  freezed: ^2.5.7
+  riverpod_generator: ^2.4.3
+
+flutter:
+  generate: true
+  uses-material-design: true

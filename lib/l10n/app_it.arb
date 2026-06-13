@@ -1,0 +1,7 @@
+{
+  "@@locale": "it",
+  "appTitle": "Buffer",
+  "@appTitle": {
+    "description": "Il titolo dell'applicazione visualizzato nella barra del titolo della finestra e come nome dell'app."
+  }
+}
