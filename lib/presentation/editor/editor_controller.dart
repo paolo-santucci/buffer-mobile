@@ -19,16 +19,18 @@
 //     BufferNotifier.updateText → the recovery repo — not via this controller
 //     directly (NFR-09, R-01).
 //
-// Spec refs: FR-15, EC-07, EC-10, NFR-09
+// Spec refs: FR-15, EC-07, EC-10, EC-26, NFR-09
 
+import 'package:buffer/domain/editor/line_indent.dart';
+import 'package:buffer/domain/editor/list_continuation.dart';
 import 'package:flutter/material.dart';
 
 /// The single [TextEditingController] subclass shared by the M3 text-editor
 /// and the M4 find-replace feature.
 ///
-/// In M1 this class ships the **shape and seams** only — no highlight painting,
-/// no list-continuation logic. Concrete behaviour is added in M3 and M4 while
-/// this file remains the sole [TextEditingController] descendant in the app.
+/// In M1 this class shipped the **shape and seams** only — no highlight
+/// painting, no list-continuation logic. M3 wires the continuation and
+/// indent/outdent delegation surface; M4 adds highlight painting.
 class EditorController extends TextEditingController {
   /// Creates an [EditorController].
   ///
@@ -101,27 +103,90 @@ class EditorController extends TextEditingController {
   }
 
   // ---------------------------------------------------------------------------
-  // List-continuation seam (EC-07, R-03)
+  // List-continuation seam (EC-07, R-03) — M3 delegation surface
   // ---------------------------------------------------------------------------
 
-  /// Returns a new string with `"\n"` inserted at [caretOffset] inside
-  /// [currentText].
+  /// Delegates to [ListContinuation.process] and adapts the result to a
+  /// Flutter-typed record.
   ///
-  /// This is the single continuation function called for EVERY newline event —
-  /// both the soft-keyboard Return key and the hardware Enter key (§5.3,
-  /// R-03). M3 wires the call; M4 must not introduce a parallel path.
+  /// Returns `({String text, TextSelection selection})` when a list rule fires,
+  /// where [TextSelection.isCollapsed] is `true` and
+  /// [TextSelection.baseOffset] equals the caret returned by
+  /// [ListContinuation.process]. Returns `null` when no continuation fires
+  /// (caller inserts a plain `"\n"`).
   ///
-  /// PURE FUNCTION INVARIANT (EC-07):
-  /// - No mutation of this controller's [text], [selection], or any other
-  ///   field.
-  /// - No side effects; safe to call from any context.
+  /// PURE DELEGATION (EC-07):
+  /// - Does NOT mutate [text], [selection], or any other controller field.
+  /// - Does NOT call [notifyListeners].
+  /// - Does NOT touch [highlightRanges] or [currentMatchIndex] (EC-26).
   ///
-  /// M1 default: inserts a plain `"\n"` at [caretOffset] with no list-
-  /// detection logic. M3 replaces the body with Markdown list-continuation.
+  /// This is the single continuation entry point for EVERY newline event —
+  /// both soft-keyboard Return and hardware Enter (§5.3, R-03, EC-07).
   ///
-  /// [currentText] — the string to insert into (need not equal [this.text]).
-  /// [caretOffset] — the insertion point, in code-unit offset terms.
-  String continueListOnNewline(String currentText, int caretOffset) {
-    return '${currentText.substring(0, caretOffset)}\n${currentText.substring(caretOffset)}';
+  /// [currentText] — the buffer text at the moment the newline fires
+  ///                 (need not equal [this.text]).
+  /// [caretOffset] — code-unit offset where the newline is being inserted.
+  ({String text, TextSelection selection})? continueListOnNewline(
+    String currentText,
+    int caretOffset,
+  ) {
+    final result = ListContinuation.process(currentText, caretOffset);
+    if (result == null) return null;
+    return (
+      text: result.text,
+      selection: TextSelection.collapsed(offset: result.caret),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Indent/outdent seam (EC-07, FR-11..FR-13, FR-15) — M3 delegation surface
+  // ---------------------------------------------------------------------------
+
+  /// Reads the controller's current [value.text] and [value.selection],
+  /// delegates to [LineIndent.indent], and returns the adapted record.
+  ///
+  /// PURE DELEGATION (EC-07):
+  /// - Does NOT mutate [value], [text], or [selection].
+  /// - Does NOT call [notifyListeners].
+  /// - Does NOT touch [highlightRanges] or [currentMatchIndex] (EC-26).
+  ///
+  /// The caller ([BufferScreen]) applies the returned record atomically.
+  ({String text, TextSelection selection}) indentSelection() {
+    final result = LineIndent.indent(
+      value.text,
+      value.selection.start,
+      value.selection.end,
+    );
+    return (
+      text: result.text,
+      selection: TextSelection(
+        baseOffset: result.selStart,
+        extentOffset: result.selExtent,
+      ),
+    );
+  }
+
+  /// Reads the controller's current [value.text] and [value.selection],
+  /// delegates to [LineIndent.outdent], and returns the adapted record.
+  ///
+  /// PURE DELEGATION (EC-07):
+  /// - Does NOT mutate [value], [text], or [selection].
+  /// - Does NOT call [notifyListeners].
+  /// - Does NOT touch [highlightRanges] or [currentMatchIndex] (EC-26).
+  ///
+  /// The caller ([BufferScreen]) applies the returned record atomically.
+  ({String text, TextSelection selection}) outdentSelection() {
+    final result = LineIndent.outdent(
+      value.text,
+      value.selection.start,
+      value.selection.end,
+    );
+    return (
+      text: result.text,
+      selection: TextSelection(
+        baseOffset: result.selStart,
+        extentOffset: result.selExtent,
+      ),
+    );
   }
 }

@@ -20,6 +20,9 @@ dependencies:
 
   # Immutable value objects
   freezed_annotation: ^2.4.4
+  # @immutable annotation, used directly by pure-Dart domain value objects
+  # (M3 list_continuation / line_indent) — promoted from transitive.
+  meta: ^1.16.0
 
   # Persistence
   shared_preferences: ^2.3.3
