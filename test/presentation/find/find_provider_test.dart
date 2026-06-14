@@ -653,4 +653,142 @@ void main() {
       },
     );
   });
+
+  // =========================================================================
+  // BUG-002 — replace-then-next advancement (FR-12)
+  // =========================================================================
+
+  group('FindNotifier replace-then-next advancement (BUG-002)', () {
+    // Regression: query "a", replaceTerm "aa", buffer "a a a" (matches at 0,2,4),
+    // index 0 → replaceCurrent() returns {text:"aa a a", nextCaretOffset:2}.
+    // Screen applies text → _onBufferChanged → _scheduleRecompute.
+    // New buffer "aa a a" has matches for "a" at 0,1,3,5 (4 matches, indices
+    // 0..3). The old index 0 clamped against count 4 = 0, pointing back at
+    // the replacement. Fix: advance to the first match at/after nextCaretOffset.
+    test(
+      'given_queryA_replaceTermAA_bufferAAA_indexZero_when_replaceCurrentAndApplyTextAndPumpMicrotasks_then_indexPointsPastReplacement',
+      () async {
+        // "a a a" — spaces between so matches are at 0, 2, 4 (non-overlapping)
+        final container = makeContainer(initialText: 'a a a');
+        final notifier = container.read(findProvider.notifier);
+        notifier.setQuery('a');
+        notifier.setReplaceTerm('aa');
+        notifier.startSearch(entryOffset: 0); // index=0, match at (0,1)
+        await pumpMicrotasks();
+
+        // Confirm initial state: 3 matches, index 0
+        expect(container.read(findProvider).matches.length, equals(3));
+        expect(container.read(findProvider).currentMatchIndex, equals(0));
+
+        // Step 1: call replaceCurrent — captures _pendingReplaceCaret
+        final result = notifier.replaceCurrent();
+        expect(result, isNotNull);
+        // "a a a" → replace [0,1) with "aa" → "aa a a", caret at 2
+        expect(result!.text, equals('aa a a'));
+        expect(result.nextCaretOffset, equals(2));
+
+        // Step 2: simulate screen applying text → bufferProvider update
+        container.read(bufferProvider.notifier).updateText(result.text);
+
+        // Step 3: pump microtask so _runRecompute → _applyRecomputeResult runs
+        await pumpMicrotasks();
+
+        // "aa a a" with query "a":
+        //   matches at: 0 ("a"), 1 ("a"), 3 ("a"), 5 ("a") — 4 matches
+        // nextCaretOffset was 2; first match at/after 2 is index 2 (start=3)
+        // BUG: without fix, clamp(0, 4)=0 → points at char 0 (inside replacement)
+        // EXPECTED: index points to first match at/after offset 2, NOT 0
+        final s = container.read(findProvider);
+        expect(s.matches.length, equals(4));
+        // nextCaretOffset=2, first match start >= 2 is start=3 → index 2
+        expect(s.currentMatchIndex, equals(2));
+      },
+    );
+
+    // Verify ordinary edit (non-replace) still re-clamps as before (no regression).
+    test(
+      'given_activeSearchWithIndexOne_when_ordinaryEditReducesMatchCount_then_indexIsClampedNotAdvanced',
+      () async {
+        // "a b a b a" → 3 matches of "a" at 0,4,8; navigate to index 1
+        final container = makeContainer(initialText: 'a b a b a');
+        final notifier = container.read(findProvider.notifier);
+        notifier.setQuery('a');
+        notifier.startSearch(entryOffset: 0);
+        await pumpMicrotasks();
+
+        notifier.next(); // index → 1
+        expect(container.read(findProvider).currentMatchIndex, equals(1));
+
+        // Ordinary edit (no replace involved): remove last match
+        container.read(bufferProvider.notifier).updateText('a b a b b');
+        await pumpMicrotasks();
+
+        // 2 matches remain (at 0, 4); old index 1 clamped to count-1 = 1
+        final s = container.read(findProvider);
+        expect(s.matches.length, equals(2));
+        expect(s.currentMatchIndex, equals(1)); // clamped, not advanced
+      },
+    );
+
+    // Replace at the LAST match: nextCaretOffset exceeds all match starts →
+    // autoSelectIndex wraps to 0 (FR-02 wrap semantics).
+    test(
+      'given_queryA_replaceTermAA_bufferAAA_indexAtLastMatch_when_replaceCurrentAndApplyText_then_indexWrapsToZero',
+      () async {
+        final container = makeContainer(initialText: 'a a a');
+        final notifier = container.read(findProvider.notifier);
+        notifier.setQuery('a');
+        notifier.setReplaceTerm('aa');
+        notifier.startSearch(
+          entryOffset: 5,
+        ); // offset 5 → wraps to 0 since none >= 5
+        await pumpMicrotasks();
+
+        // startSearch with offset 5: matches at 0,2,4; none start >= 5 → wraps to 0
+        // Actually offset=5 is past all matches (start 4 < 5), wraps to index 0.
+        // Navigate to last match (index 2) via previous
+        notifier.previous(); // 0 → 2 (wrap)
+        expect(container.read(findProvider).currentMatchIndex, equals(2));
+
+        // Replace last match: "a a a", match at (4,5) → "a a aa", caret at 6
+        final result = notifier.replaceCurrent();
+        expect(result, isNotNull);
+        expect(result!.text, equals('a a aa'));
+        expect(result.nextCaretOffset, equals(6));
+
+        container.read(bufferProvider.notifier).updateText(result.text);
+        await pumpMicrotasks();
+
+        // "a a aa" with query "a": matches at 0,2,3,4 — no match start >= 6
+        // autoSelectIndex wraps to 0
+        final s = container.read(findProvider);
+        expect(s.currentMatchIndex, equals(0));
+      },
+    );
+
+    // replaceCurrent returns null when no match exists — preserved behaviour.
+    test(
+      'given_noCurrentMatch_when_replaceCurrent_then_returnsNullAndNoPendingCaretSet',
+      () async {
+        final container = makeContainer(initialText: 'hello');
+        final notifier = container.read(findProvider.notifier);
+        notifier.setQuery('xyz'); // no match
+        notifier.startSearch(entryOffset: 0);
+        await pumpMicrotasks();
+
+        // replaceCurrent returns null — no pending caret to pollute next recompute
+        final result = notifier.replaceCurrent();
+        expect(result, isNull);
+
+        // An ordinary edit after the null replace must still re-clamp normally
+        container.read(bufferProvider.notifier).updateText('hello world');
+        await pumpMicrotasks();
+
+        final s = container.read(findProvider);
+        // "hello world" with query "xyz" → still no matches, index null
+        expect(s.matches, isEmpty);
+        expect(s.currentMatchIndex, isNull);
+      },
+    );
+  });
 }

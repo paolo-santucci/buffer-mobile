@@ -31,6 +31,15 @@ typedef DirectoryFactory = Directory Function(String path);
 /// 4. Writes the text as UTF-8 (FR-M2-12).
 /// 5. Returns the written [File].
 ///
+/// ## Concurrency contract (BUG-004)
+///
+/// All writes are serialised on a private [_writeChain] future. Each [save]
+/// enqueues its resolve+write on the tail of the chain before returning, so
+/// concurrent callers never interleave the [_resolveFile]+[writeAsString]
+/// sequence.  A failing save does NOT poison the chain: the internal chain
+/// tail swallows the error via [catchError] while the future returned to the
+/// caller still propagates it normally (EC-M2-09 is preserved).
+///
 /// ## Error contract
 ///
 /// [FileSystemException] from any I/O operation propagates to the caller
@@ -42,7 +51,7 @@ typedef DirectoryFactory = Directory Function(String path);
 /// The use case ([SaveBufferToRecovery]) guarantees `text.trim().isNotEmpty`
 /// before calling [save]. This class does not re-validate.
 class FileRecoveryRepository implements RecoveryRepository {
-  const FileRecoveryRepository({
+  FileRecoveryRepository({
     required this._pathProvider,
     NowUtcProvider? nowUtc,
     DirectoryFactory? directoryFactory,
@@ -53,11 +62,33 @@ class FileRecoveryRepository implements RecoveryRepository {
   final NowUtcProvider _nowUtc;
   final DirectoryFactory _directoryFactory;
 
+  /// Serialises concurrent saves so that [_resolveFile]+[writeAsString] is
+  /// never interleaved across two callers (BUG-004 / EC-M2-07).
+  ///
+  /// The chain tail only swallows errors to avoid poisoning subsequent saves;
+  /// the future returned to each individual caller still surfaces its own error.
+  Future<void> _writeChain = Future<void>.value();
+
   static DateTime _defaultNow() => DateTime.now().toUtc();
   static Directory _defaultDirectoryFactory(String path) => Directory(path);
 
   @override
-  Future<File> save(String text) async {
+  Future<File> save(String text) {
+    // Enqueue this save on the tail of the chain.  The returned future is the
+    // individual op's future — callers observe THIS op's result or error.
+    // The chain tail uses catchError so a failed op does not block later saves.
+    final op = _writeChain.then((_) => _doSave(text));
+    // Advance the chain on the void-typed projection so the catchError handler
+    // is typed correctly (Future<void> does not require a return value).  The
+    // original `op` future is returned to the caller and still propagates its
+    // own error normally.
+    _writeChain = op.then((_) {}).catchError((_) {});
+    return op;
+  }
+
+  /// Performs the actual directory creation, filename resolution, and write.
+  /// Must only be called from within the serialised [_writeChain].
+  Future<File> _doSave(String text) async {
     final recoveryDir = await _pathProvider.recoveryDirectory();
     final dirToCreate = _directoryFactory(recoveryDir.path);
     await dirToCreate.create(recursive: true);

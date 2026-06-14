@@ -172,7 +172,7 @@ Future<void> _pumpBufferScreen(
   WidgetTester tester, {
   String? initialSharedText,
   _FakeShareIntentService? shareService,
-  _FakeRecoveryRepository? recoveryRepo,
+  RecoveryRepository? recoveryRepo,
   _SpyBufferNotifier? spyNotifier,
   bool? spellingEnabled,
 }) async {
@@ -635,6 +635,91 @@ void main() {
       // Text is still the same 'some text' (not reset).
       expect(container.read(bufferProvider).text, equals('some text'));
     });
+
+    // BUG-003 regression — share-intent serialisation
+    //
+    // Two share events arrive in quick succession while the first save is still
+    // in-flight.  Without the _shareQueue serialiser both async bodies run
+    // concurrently: they both capture the same pre-first-event currentText,
+    // both save it (duplicate recovery file), and event-A's payload is never
+    // persisted to recovery.
+    //
+    // With the fix the chain is strictly sequential:
+    //   event-A: save("initial") → reset() → populate("payload-A")
+    //   event-B: save("payload-A") → reset() → populate("payload-B")
+    //
+    // Discriminating assertion: savedTexts[1] == "payload-A", NOT "initial".
+    //
+    // The test uses instant (non-gated) saves so that pump sequencing is
+    // straightforward.  The race is observable without a slow save: without the
+    // fix, both stream callbacks fire in the same microtask batch before either
+    // async body has mutated the buffer, so both save() calls see the same
+    // pre-event text ("initial").  With the fix, event-B is chained after
+    // event-A's full .then() resolution, so it sees "payload-A".
+    testWidgets(
+      'BUG-003: two rapid share events serialise — event-A payload saved before event-B starts',
+      (tester) async {
+        final fakeRepo = _FakeRecoveryRepository();
+        final spy = _SpyBufferNotifier();
+        final fakeShare = _FakeShareIntentService();
+
+        await _pumpBufferScreen(
+          tester,
+          spyNotifier: spy,
+          shareService: fakeShare,
+          recoveryRepo: fakeRepo,
+        );
+
+        // Establish pre-existing text in the buffer.
+        final element = tester.element(find.byType(TextField).first);
+        final container = ProviderScope.containerOf(element);
+        container.read(bufferProvider.notifier).populate('initial');
+        await tester.pump();
+        fakeRepo.savedTexts.clear();
+
+        // Emit both events back-to-back before any async work can run.
+        // Both are delivered to the stream; the listener queues both immediately.
+        fakeShare.emit('payload-A');
+        fakeShare.emit('payload-B');
+
+        // Drain all microtasks and pending Futures fully.
+        // Multiple pump() calls advance the Dart event loop iteration by
+        // iteration until the widget tree is idle.
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+        await tester.pump();
+
+        // Final buffer text must be event-B's payload (last event wins).
+        expect(
+          container.read(bufferProvider).text,
+          equals('payload-B'),
+          reason: 'Last event wins: final buffer must contain payload-B',
+        );
+
+        // BOTH payloads were saved — no dropped save.
+        // (SaveBufferToRecovery trims whitespace — "initial" is non-empty so
+        //  it is always saved; "payload-A" is non-empty too.)
+        expect(
+          fakeRepo.savedTexts.length,
+          equals(2),
+          reason: 'Exactly two saves: one per event',
+        );
+
+        // Serialisation assertion: event-B's save must have captured
+        // "payload-A" (what A populated), NOT "initial" (the pre-A state).
+        // This is the discriminating assertion: fails without the queue fix.
+        expect(
+          fakeRepo.savedTexts[1],
+          equals('payload-A'),
+          reason:
+              'Event-B must save what event-A populated (serialised), '
+              'not the stale pre-A text (concurrent bug)',
+        );
+      },
+    );
   });
 
   // -----------------------------------------------------------------------

@@ -309,6 +309,123 @@ void main() {
       },
     );
   });
+
+  // ---------------------------------------------------------------------------
+  // Group 7 — concurrent saves never overwrite (BUG-004 / EC-M2-07)
+  // ---------------------------------------------------------------------------
+  //
+  // TOCTOU risk: two save() calls that start before either completes can both
+  // see the same stem absent in _resolveFile and both write to the same file,
+  // causing the second writeAsString to overwrite the first (EC-M2-07 violated).
+  //
+  // Fix: save() serialises work on an internal _writeChain so the
+  // resolve+write of the second call only begins after the first completes.
+  //
+  // Test strategy: force a deterministic stem collision by injecting a fixed
+  // NowUtcProvider that always returns the same timestamp, then fire two
+  // save() calls without awaiting the first.  Under the unfixed code both ops
+  // see the base file absent, both resolve to <stem>.txt, and the second
+  // writeAsString replaces the first content — only ONE file with ONE content
+  // survives.  Under the fixed code the chain ensures the second op runs after
+  // the first has already written <stem>.txt, so the collision loop advances
+  // to <stem>-1.txt and TWO distinct files exist with their respective
+  // contents.
+  //
+  // RED confirmation: without the _writeChain fix, the test below fails
+  // because two files do NOT exist (or one file contains only the later
+  // content, not the earlier one).
+  group('FileRecoveryRepository.save — concurrent saves (BUG-004)', () {
+    test(
+      'given_two_concurrent_saves_with_forced_same_stem_when_both_complete_then_two_distinct_files_with_both_contents_exist',
+      () async {
+        // Fixed clock: always returns the same millisecond — guarantees
+        // _buildStem produces the same value for both saves.
+        final fixedNow = DateTime.utc(2026, 6, 14, 12, 0, 0, 0);
+        final repo = FileRecoveryRepository(
+          pathProvider: SandboxPathProvider(resolver: resolverFor(tempDir!)),
+          nowUtc: () => fixedNow,
+        );
+
+        // Pre-create the recovery dir (save() does this anyway, but doing it
+        // here ensures both concurrent saves skip the create() race and we
+        // test purely the resolve+write serialisation).
+        Directory('${tempDir!.path}/recovery').createSync(recursive: true);
+
+        // Fire both saves concurrently — do NOT await the first before
+        // starting the second.  This is the scenario that triggers the TOCTOU
+        // bug under the unfixed code.
+        final f1 = repo.save('content-A');
+        final f2 = repo.save('content-B');
+        final results = await Future.wait([f1, f2]);
+
+        final file1 = results[0];
+        final file2 = results[1];
+
+        // The two files must have DISTINCT paths.
+        expect(
+          file1.path,
+          isNot(equals(file2.path)),
+          reason: 'concurrent saves must write to different files (EC-M2-07)',
+        );
+
+        // Both files must exist.
+        expect(
+          file1.existsSync(),
+          isTrue,
+          reason: 'first save file must exist',
+        );
+        expect(
+          file2.existsSync(),
+          isTrue,
+          reason: 'second save file must exist',
+        );
+
+        // Both original contents must be intact — neither was overwritten.
+        final contents = {
+          await file1.readAsString(encoding: utf8),
+          await file2.readAsString(encoding: utf8),
+        };
+        expect(
+          contents,
+          containsAll(['content-A', 'content-B']),
+          reason: 'both save contents must survive (neither overwritten)',
+        );
+      },
+    );
+
+    test(
+      'given_failing_first_save_when_second_save_concurrent_then_second_save_still_completes',
+      () async {
+        // Arrange: first save fails due to a throwing directory factory on the
+        // first call, then succeeds on subsequent calls.
+        var callCount = 0;
+        final fixedNow = DateTime.utc(2026, 6, 14, 12, 0, 0, 0);
+        final repo = FileRecoveryRepository(
+          pathProvider: SandboxPathProvider(resolver: resolverFor(tempDir!)),
+          nowUtc: () => fixedNow,
+          directoryFactory: (path) {
+            callCount++;
+            if (callCount == 1) return _ThrowingDirectory(path);
+            return Directory(path);
+          },
+        );
+
+        // First save must throw (its error propagates to the caller).
+        final f1 = repo.save('will-fail');
+        // Second save is enqueued immediately — it must not be poisoned by f1.
+        final f2 = repo.save('will-succeed');
+
+        // f1 throws; f2 must still succeed despite f1 failing.
+        await expectLater(f1, throwsA(isA<FileSystemException>()));
+        final file2 = await f2;
+        expect(file2.existsSync(), isTrue);
+        expect(
+          await file2.readAsString(encoding: utf8),
+          equals('will-succeed'),
+        );
+      },
+    );
+  });
 }
 
 // ---------------------------------------------------------------------------

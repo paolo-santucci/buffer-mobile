@@ -42,7 +42,7 @@ final shareIntentServiceProvider = Provider<ShareIntentService>(
 //    Overridable in tests with a fake [RecoveryRepository].
 // ---------------------------------------------------------------------------
 final recoveryRepositoryProvider = Provider<RecoveryRepository>(
-  (ref) => const FileRecoveryRepository(pathProvider: SandboxPathProvider()),
+  (ref) => FileRecoveryRepository(pathProvider: SandboxPathProvider()),
 );
 
 // ---------------------------------------------------------------------------

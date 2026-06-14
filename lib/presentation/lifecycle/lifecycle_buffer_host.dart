@@ -113,7 +113,11 @@ class LifecycleBufferHostState extends ConsumerState<LifecycleBufferHost>
     final settings = ref.read(settingsProvider).value ?? const AppSettings();
     if (!settings.emergencyRecoveryEnabled) return;
 
-    _savedSinceLastResume = true;
+    // BUG-001 fix: do NOT set _savedSinceLastResume here.  The guard is set
+    // only inside _save()'s .then() callback, after the write succeeds.
+    // This keeps the guard false while the async write is in-flight so that
+    // _onDetached() can fire its own compensating save if the OS kills the
+    // process before the paused write flushes to disk.
     _save(text);
   }
 
@@ -127,6 +131,13 @@ class LifecycleBufferHostState extends ConsumerState<LifecycleBufferHost>
   ///
   /// Per LP §5.3: [_onPaused] is the inviolable primary trigger;
   /// [_onDetached] must never be the only save path.
+  ///
+  /// BUG-001 fix: _savedSinceLastResume is NOT set here synchronously.
+  /// The guard flips only inside _save()'s .then() on success.  This means
+  /// that if _onPaused fired but its write has not yet flushed, _onDetached
+  /// (guard still false) correctly triggers a second best-effort save.  A
+  /// duplicate recovery file is harmless: FileRecoveryRepository uses
+  /// ms-timestamp filenames and trim-to-10 prevents unbounded growth.
   void _onDetached() {
     if (_savedSinceLastResume) return;
 
@@ -138,11 +149,16 @@ class LifecycleBufferHostState extends ConsumerState<LifecycleBufferHost>
     final settings = ref.read(settingsProvider).value ?? const AppSettings();
     if (!settings.emergencyRecoveryEnabled) return;
 
-    _savedSinceLastResume = true;
     _save(text);
   }
 
   /// Invokes the [saveBufferToRecoveryProvider] use case.
+  ///
+  /// Sets [_savedSinceLastResume] to `true` ONLY on a successful write
+  /// (BUG-001 fix).  This keeps the guard false during the async in-flight
+  /// window so that [_onDetached] can fire a compensating save if needed.
+  ///
+  /// On failure the guard stays false, allowing [_onDetached] to retry.
   ///
   /// Any [FileSystemException] is caught and logged — a backgrounding app must
   /// NEVER crash (EC-M2-08). Uses [dart:developer log()] — NEVER print().
@@ -150,7 +166,8 @@ class LifecycleBufferHostState extends ConsumerState<LifecycleBufferHost>
     final useCase = ref.read(saveBufferToRecoveryProvider);
     useCase(text)
         .then((_) {
-          // Save succeeded — no action needed.
+          // BUG-001 fix: flip the guard only after a confirmed successful write.
+          _savedSinceLastResume = true;
         })
         .catchError((Object error, StackTrace stack) {
           if (error is FileSystemException) {

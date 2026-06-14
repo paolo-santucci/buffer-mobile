@@ -5,6 +5,10 @@
 //
 // TASK-13: emergencyRecoveryEnabled gate (FR-M5-16, NFR-M5-03).
 //
+// BUG-001 regression tests: guard must only flip true on save SUCCESS, not
+// synchronously at _onPaused/_onDetached dispatch time.  Tests use a
+// _CompleterRecoveryRepository to control async timing deterministically.
+//
 // TDD: tests written and run to FAIL before implementation.
 //
 // All lifecycle state changes are driven by calling
@@ -12,6 +16,7 @@
 // avoiding dependency on platform channels.  Providers are overridden with
 // fakes via ProviderScope.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -62,6 +67,56 @@ class _ThrowingRecoveryRepository implements RecoveryRepository {
       Future.error(const FileSystemException('disk full', '/tmp/recovery'));
 
   // M5 stubs — not exercised by these throwing tests.
+  @override
+  Future<List<RecoveryNote>> list() async => const [];
+  @override
+  Future<String> read(RecoveryNote note) async => '';
+  @override
+  Future<void> delete(RecoveryNote note) async {}
+  @override
+  Future<void> deleteAll() async {}
+  @override
+  Future<void> trim(int keep) async {}
+}
+
+/// Completer-controlled [RecoveryRepository] — lets tests control exactly
+/// when each [save] call resolves or rejects.
+///
+/// Call [completeSave] to resolve the pending future, or [failSave] to
+/// reject it with a [FileSystemException].  Each new [save] call replaces
+/// [_completer] so only the most-recent call is controlled.
+class _CompleterRecoveryRepository implements RecoveryRepository {
+  final List<String> savedTexts = [];
+  Completer<File>? _completer;
+
+  /// Number of times [save] has been called.
+  int get saveCallCount =>
+      savedTexts.length +
+      (_completer != null && !(_completer?.isCompleted ?? true) ? 0 : 0);
+  int _rawCallCount = 0;
+  int get rawSaveCallCount => _rawCallCount;
+
+  @override
+  Future<File> save(String text) {
+    _rawCallCount++;
+    savedTexts.add(text);
+    _completer = Completer<File>();
+    return _completer!.future;
+  }
+
+  /// Resolves the current in-flight [save] future successfully.
+  void completeSave() {
+    _completer?.complete(File('/tmp/completer_sentinel.txt'));
+  }
+
+  /// Rejects the current in-flight [save] future with [FileSystemException].
+  void failSave() {
+    _completer?.completeError(
+      const FileSystemException('disk full', '/tmp/recovery'),
+    );
+  }
+
+  // M5 stubs.
   @override
   Future<List<RecoveryNote>> list() async => const [];
   @override
@@ -172,10 +227,13 @@ void main() {
   group('LifecycleBufferHost — paused trigger (R-07 guard)', () {
     testWidgets(
       'state.text="hello", _saved=false: paused → use case called exactly once; '
-      '_savedSinceLastResume becomes true',
+      '_savedSinceLastResume becomes true AFTER save completes (BUG-001)',
       (tester) async {
+        final completerRepo = _CompleterRecoveryRepository();
+        final completerUseCase = SaveBufferToRecovery(completerRepo);
+
         await tester.pumpWidget(
-          _buildTestTree(notifier: notifier, useCase: useCase),
+          _buildTestTree(notifier: notifier, useCase: completerUseCase),
         );
 
         // Seed the buffer state with non-empty text.
@@ -191,18 +249,30 @@ void main() {
         hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
         await tester.pump();
 
-        // Use case must have been called exactly once with "hello".
-        expect(spyRepo.savedTexts, equals(['hello']));
-        // Guard must be set.
+        // Use case must have been invoked (save in-flight).
+        expect(completerRepo.rawSaveCallCount, equals(1));
+
+        // BUG-001: guard must NOT be set yet — save hasn't completed.
+        expect(hostState.savedSinceLastResumeForTest, isFalse);
+
+        // Now complete the save future.
+        completerRepo.completeSave();
+        await tester.pump();
+
+        // Guard flips true only after success.
         expect(hostState.savedSinceLastResumeForTest, isTrue);
       },
     );
 
     testWidgets(
-      '_saved=true: second paused → use case NOT called again (R-07 burst guard)',
+      '_saved=true: second paused AFTER first save completes → use case NOT '
+      'called again (R-07 burst guard)',
       (tester) async {
+        final completerRepo = _CompleterRecoveryRepository();
+        final completerUseCase = SaveBufferToRecovery(completerRepo);
+
         await tester.pumpWidget(
-          _buildTestTree(notifier: notifier, useCase: useCase),
+          _buildTestTree(notifier: notifier, useCase: completerUseCase),
         );
 
         final container = tester.element(find.byType(LifecycleBufferHost));
@@ -214,15 +284,20 @@ void main() {
           find.byType(LifecycleBufferHost),
         );
 
-        // First paused — saves once.
+        // First paused — starts save.
         hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
         await tester.pump();
-        expect(spyRepo.savedTexts.length, equals(1));
+        expect(completerRepo.rawSaveCallCount, equals(1));
 
-        // Second paused (burst guard) — must NOT save again.
+        // Complete the save so the guard flips true.
+        completerRepo.completeSave();
+        await tester.pump();
+        expect(hostState.savedSinceLastResumeForTest, isTrue);
+
+        // Second paused (burst guard active) — must NOT save again.
         hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
         await tester.pump();
-        expect(spyRepo.savedTexts.length, equals(1));
+        expect(completerRepo.rawSaveCallCount, equals(1));
       },
     );
 
@@ -253,8 +328,11 @@ void main() {
   group('LifecycleBufferHost — resumed clears guard and resets buffer', () {
     testWidgets('resumed → bufferProvider.reset() called; _saved cleared; '
         'a following paused saves again', (tester) async {
+      final completerRepo = _CompleterRecoveryRepository();
+      final completerUseCase = SaveBufferToRecovery(completerRepo);
+
       await tester.pumpWidget(
-        _buildTestTree(notifier: notifier, useCase: useCase),
+        _buildTestTree(notifier: notifier, useCase: completerUseCase),
       );
 
       final container = tester.element(find.byType(LifecycleBufferHost));
@@ -266,10 +344,14 @@ void main() {
         find.byType(LifecycleBufferHost),
       );
 
-      // Paused — saves.
+      // Paused — starts save.
       hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
       await tester.pump();
-      expect(spyRepo.savedTexts.length, equals(1));
+      expect(completerRepo.rawSaveCallCount, equals(1));
+
+      // Complete the save so guard flips.
+      completerRepo.completeSave();
+      await tester.pump();
       expect(hostState.savedSinceLastResumeForTest, isTrue);
 
       // Resumed — resets buffer and clears guard.
@@ -286,8 +368,8 @@ void main() {
 
       hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
       await tester.pump();
-      expect(spyRepo.savedTexts.length, equals(2));
-      expect(spyRepo.savedTexts.last, equals('world'));
+      expect(completerRepo.rawSaveCallCount, equals(2));
+      expect(completerRepo.savedTexts.last, equals('world'));
     });
   });
 
@@ -323,8 +405,11 @@ void main() {
 
   group('LifecycleBufferHost — detached (secondary path)', () {
     testWidgets('_saved=true: detached → no second save', (tester) async {
+      final completerRepo = _CompleterRecoveryRepository();
+      final completerUseCase = SaveBufferToRecovery(completerRepo);
+
       await tester.pumpWidget(
-        _buildTestTree(notifier: notifier, useCase: useCase),
+        _buildTestTree(notifier: notifier, useCase: completerUseCase),
       );
 
       final container = tester.element(find.byType(LifecycleBufferHost));
@@ -336,15 +421,18 @@ void main() {
         find.byType(LifecycleBufferHost),
       );
 
-      // Paused saves once.
+      // Paused starts save, then complete it so guard flips true.
       hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
       await tester.pump();
-      expect(spyRepo.savedTexts.length, equals(1));
+      completerRepo.completeSave();
+      await tester.pump();
+      expect(hostState.savedSinceLastResumeForTest, isTrue);
+      expect(completerRepo.rawSaveCallCount, equals(1));
 
       // Detached: _saved=true → no additional save.
       hostState.didChangeAppLifecycleState(AppLifecycleState.detached);
       await tester.pump(const Duration(milliseconds: 50));
-      expect(spyRepo.savedTexts.length, equals(1));
+      expect(completerRepo.rawSaveCallCount, equals(1));
     });
 
     testWidgets(
@@ -370,6 +458,132 @@ void main() {
         expect(spyRepo.savedTexts, equals(['unsaved content']));
       },
     );
+  });
+
+  // ---------------------------------------------------------------------------
+  // BUG-001 regression tests — guard must flip on save SUCCESS only.
+  // ---------------------------------------------------------------------------
+
+  group('BUG-001 regression — guard ordering: set on success, not synchronously', () {
+    testWidgets(
+      'paused starts in-flight save (guard still false); detached fires before '
+      'save completes → use-case invoked TWICE (compensating secondary save)',
+      (tester) async {
+        final completerRepo = _CompleterRecoveryRepository();
+        final completerUseCase = SaveBufferToRecovery(completerRepo);
+
+        await tester.pumpWidget(
+          _buildTestTree(notifier: notifier, useCase: completerUseCase),
+        );
+
+        final container = tester.element(find.byType(LifecycleBufferHost));
+        final ref = ProviderScope.containerOf(container);
+        ref.read(bufferProvider.notifier).populate('race content');
+        await tester.pump();
+
+        final hostState = tester.state<LifecycleBufferHostState>(
+          find.byType(LifecycleBufferHost),
+        );
+
+        // Paused: starts save #1 — future is NOT yet completed.
+        hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
+        await tester.pump();
+
+        // Guard must still be false (save not yet done).
+        expect(hostState.savedSinceLastResumeForTest, isFalse);
+        expect(completerRepo.rawSaveCallCount, equals(1));
+
+        // Detached fires BEFORE the paused save completes.
+        hostState.didChangeAppLifecycleState(AppLifecycleState.detached);
+        await tester.pump();
+
+        // Detached must have triggered a SECOND save attempt (compensating path).
+        expect(completerRepo.rawSaveCallCount, equals(2));
+
+        // Clean up: complete both in-flight futures to avoid unhandled errors.
+        completerRepo.completeSave();
+        await tester.pump();
+      },
+    );
+
+    testWidgets(
+      'paused save completes successfully → guard flips true; subsequent '
+      'detached does NOT save (guard blocks it)',
+      (tester) async {
+        final completerRepo = _CompleterRecoveryRepository();
+        final completerUseCase = SaveBufferToRecovery(completerRepo);
+
+        await tester.pumpWidget(
+          _buildTestTree(notifier: notifier, useCase: completerUseCase),
+        );
+
+        final container = tester.element(find.byType(LifecycleBufferHost));
+        final ref = ProviderScope.containerOf(container);
+        ref.read(bufferProvider.notifier).populate('saved content');
+        await tester.pump();
+
+        final hostState = tester.state<LifecycleBufferHostState>(
+          find.byType(LifecycleBufferHost),
+        );
+
+        // Paused: starts save.
+        hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
+        await tester.pump();
+        expect(hostState.savedSinceLastResumeForTest, isFalse);
+
+        // Complete the save → guard flips true.
+        completerRepo.completeSave();
+        await tester.pump();
+        expect(hostState.savedSinceLastResumeForTest, isTrue);
+        expect(completerRepo.rawSaveCallCount, equals(1));
+
+        // Detached fires AFTER save completes: guard is true → no second save.
+        hostState.didChangeAppLifecycleState(AppLifecycleState.detached);
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(completerRepo.rawSaveCallCount, equals(1));
+      },
+    );
+
+    testWidgets('paused save FAILS (FileSystemException) → guard stays false → '
+        'detached retries save (compensating path)', (tester) async {
+      final completerRepo = _CompleterRecoveryRepository();
+      final completerUseCase = SaveBufferToRecovery(completerRepo);
+
+      await tester.pumpWidget(
+        _buildTestTree(notifier: notifier, useCase: completerUseCase),
+      );
+
+      final container = tester.element(find.byType(LifecycleBufferHost));
+      final ref = ProviderScope.containerOf(container);
+      ref.read(bufferProvider.notifier).populate('failure content');
+      await tester.pump();
+
+      final hostState = tester.state<LifecycleBufferHostState>(
+        find.byType(LifecycleBufferHost),
+      );
+
+      // Paused: starts save.
+      hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
+      await tester.pump();
+      expect(completerRepo.rawSaveCallCount, equals(1));
+
+      // Paused save FAILS.
+      completerRepo.failSave();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // Guard must remain false after a failed save.
+      expect(hostState.savedSinceLastResumeForTest, isFalse);
+
+      // Detached now fires: guard=false → should retry.
+      hostState.didChangeAppLifecycleState(AppLifecycleState.detached);
+      await tester.pump();
+      expect(completerRepo.rawSaveCallCount, equals(2));
+
+      // Clean up: complete the detached save to avoid unhandled errors.
+      completerRepo.completeSave();
+      await tester.pump();
+    });
   });
 
   group('LifecycleBufferHost — EC-M2-14 non-auto-dispose', () {
@@ -549,37 +763,46 @@ void main() {
       },
     );
 
-    testWidgets('gate ON + non-empty buffer + paused twice without resume → '
-        'call invoked exactly once (R-07 burst guard regression)', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _buildTestTreeWithSettings(
-          notifier: notifier,
-          useCase: useCase,
-          settingsValue: const AsyncData(AppSettings()),
-        ),
-      );
+    testWidgets(
+      'gate ON + non-empty buffer + paused twice without resume → '
+      'call invoked exactly once after first save completes (R-07 burst guard)',
+      (tester) async {
+        final completerRepo = _CompleterRecoveryRepository();
+        final completerUseCase = SaveBufferToRecovery(completerRepo);
 
-      final container = tester.element(find.byType(LifecycleBufferHost));
-      final ref = ProviderScope.containerOf(container);
-      ref.read(bufferProvider.notifier).populate('burst text');
-      await tester.pump();
+        await tester.pumpWidget(
+          _buildTestTreeWithSettings(
+            notifier: notifier,
+            useCase: completerUseCase,
+            settingsValue: const AsyncData(AppSettings()),
+          ),
+        );
 
-      final hostState = tester.state<LifecycleBufferHostState>(
-        find.byType(LifecycleBufferHost),
-      );
+        final container = tester.element(find.byType(LifecycleBufferHost));
+        final ref = ProviderScope.containerOf(container);
+        ref.read(bufferProvider.notifier).populate('burst text');
+        await tester.pump();
 
-      // First paused — saves once.
-      hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
-      await tester.pump();
-      expect(spyRepo.savedTexts.length, equals(1));
+        final hostState = tester.state<LifecycleBufferHostState>(
+          find.byType(LifecycleBufferHost),
+        );
 
-      // Second paused without resume — burst guard must block.
-      hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
-      await tester.pump();
-      expect(spyRepo.savedTexts.length, equals(1));
-    });
+        // First paused — starts save.
+        hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
+        await tester.pump();
+        expect(completerRepo.rawSaveCallCount, equals(1));
+
+        // Complete the save so the guard flips true.
+        completerRepo.completeSave();
+        await tester.pump();
+        expect(hostState.savedSinceLastResumeForTest, isTrue);
+
+        // Second paused without resume — burst guard must block.
+        hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
+        await tester.pump();
+        expect(completerRepo.rawSaveCallCount, equals(1));
+      },
+    );
   });
 
   group(
@@ -640,12 +863,16 @@ void main() {
       });
 
       testWidgets(
-        'gate ON + already-saved (paused first): detached → no-op (burst guard)',
+        'gate ON + already-saved (paused first, save completed): detached → '
+        'no-op (burst guard)',
         (tester) async {
+          final completerRepo = _CompleterRecoveryRepository();
+          final completerUseCase = SaveBufferToRecovery(completerRepo);
+
           await tester.pumpWidget(
             _buildTestTreeWithSettings(
               notifier: notifier,
-              useCase: useCase,
+              useCase: completerUseCase,
               settingsValue: const AsyncData(AppSettings()),
             ),
           );
@@ -659,15 +886,18 @@ void main() {
             find.byType(LifecycleBufferHost),
           );
 
-          // Paused saves first.
+          // Paused saves first; complete save so guard flips.
           hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
           await tester.pump();
-          expect(spyRepo.savedTexts.length, equals(1));
+          completerRepo.completeSave();
+          await tester.pump();
+          expect(hostState.savedSinceLastResumeForTest, isTrue);
+          expect(completerRepo.rawSaveCallCount, equals(1));
 
           // Detached: guard already set → no additional save.
           hostState.didChangeAppLifecycleState(AppLifecycleState.detached);
           await tester.pump(const Duration(milliseconds: 50));
-          expect(spyRepo.savedTexts.length, equals(1));
+          expect(completerRepo.rawSaveCallCount, equals(1));
         },
       );
     },

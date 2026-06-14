@@ -45,6 +45,16 @@ class FindNotifier extends Notifier<FindState> {
   /// rejection (FR-09).
   Future<void>? _inflight;
 
+  /// Set by [replaceCurrent] to the caret position just past the inserted
+  /// replacement text (FR-12 replace-then-next). Consumed by
+  /// [_applyRecomputeResult] to advance [currentMatchIndex] to the first match
+  /// at/after this offset instead of re-clamping the old index.
+  ///
+  /// Cleared only when a result is actually applied (after the stale guard
+  /// passes), NOT when a stale result is dropped — so it survives across
+  /// rapid edits until the definitive recompute lands.
+  int? _pendingReplaceCaret;
+
   // ---------------------------------------------------------------------------
   // build
   // ---------------------------------------------------------------------------
@@ -122,12 +132,18 @@ class FindNotifier extends Notifier<FindState> {
   /// Returns null when there is no current match (Replace disabled, FR-15).
   /// MUST NOT write `_controller.value` or call `updateText`; those are the
   /// responsibility of the screen wiring layer (NFR-04 / spec §5.2).
+  ///
+  /// Sets [_pendingReplaceCaret] so the next [_applyRecomputeResult] advances
+  /// [currentMatchIndex] to the first match at/after the inserted replacement,
+  /// instead of re-clamping the old index (FR-12 replace-then-next).
   ({String text, int nextCaretOffset})? replaceCurrent() {
     final match = state.currentMatch;
     if (match == null) return null;
 
     final text = ref.read(bufferProvider).text;
-    return FindEngine.replaceRange(text, match, state.replaceTerm);
+    final result = FindEngine.replaceRange(text, match, state.replaceTerm);
+    _pendingReplaceCaret = result.nextCaretOffset;
+    return result;
   }
 
   /// FR-20. Deactivates search: clears active flag, matches, and
@@ -191,17 +207,32 @@ class FindNotifier extends Notifier<FindState> {
   }
 
   /// Applies a recompute result, enforcing stale-result rejection (FR-09) and
-  /// index re-clamping (spec §5.2).
+  /// index advancement after a replace (FR-12) or re-clamping after ordinary
+  /// edits (spec §5.2).
   void _applyRecomputeResult({
     required String sourceText,
     required List<MatchSpan> matches,
   }) {
     // Stale-result rejection: drop if source text != current buffer text.
+    // Do NOT consume _pendingReplaceCaret here — it must survive until the
+    // definitive (non-stale) result for the post-replace buffer arrives.
     final currentText = ref.read(bufferProvider).text;
     if (sourceText != currentText) return; // FR-09: retain prior matches
 
     final count = matches.length;
-    final newIndex = _clampIndex(state.currentMatchIndex, count);
+    final int? newIndex;
+
+    final pendingCaret = _pendingReplaceCaret;
+    if (pendingCaret != null) {
+      // FR-12 replace-then-next: advance to the first match at/after the
+      // caret placed just past the replacement, skipping the inserted text.
+      _pendingReplaceCaret = null;
+      newIndex = FindEngine.autoSelectIndex(matches, pendingCaret);
+    } else {
+      // Ordinary edit: re-clamp the existing index against the new list.
+      newIndex = _clampIndex(state.currentMatchIndex, count);
+    }
+
     state = state.copyWith(matches: matches, currentMatchIndex: newIndex);
   }
 

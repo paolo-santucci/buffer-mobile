@@ -221,6 +221,11 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
   late final ScrollController _scrollController;
   StreamSubscription<String>? _shareSubscription;
 
+  // BUG-003 fix: serialises back-to-back share events so event N+1 does not
+  // start until event N's save→reset→populate chain has fully completed.
+  // Initialised to a resolved future so the first event starts immediately.
+  Future<void> _shareQueue = Future<void>.value();
+
   // -------------------------------------------------------------------------
   // M4: FocusNode ownership (FR-22, spec §5.5)
   // -------------------------------------------------------------------------
@@ -334,10 +339,12 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     _controller.addListener(_onControllerChanged);
 
     // Warm-start subscriber: live share-intent events → save→reset→populate.
+    // Events are serialised through _shareQueue (BUG-003): event N+1 does not
+    // begin until event N's entire async chain has completed.
     _shareSubscription = ref
         .read(shareIntentServiceProvider)
         .sharedTextStream()
-        .listen(_onSharedText);
+        .listen(_enqueueSharedText);
   }
 
   @override
@@ -863,10 +870,29 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
   // Warm-start subscriber (FR-M2-16, FR-M2-17, EC-M2-12)
   // -------------------------------------------------------------------------
 
+  /// Stream-listener entry point. Chains [sharedText] onto [_shareQueue] so
+  /// successive share events are processed strictly one-at-a-time (BUG-003).
+  ///
+  /// A failed event's error is caught and swallowed here so the queue future
+  /// itself stays resolved and subsequent events are not poisoned.
+  void _enqueueSharedText(String sharedText) {
+    _shareQueue = _shareQueue.then((_) => _onSharedText(sharedText)).catchError(
+      (_) {
+        /* swallow: keep queue alive for next event */
+      },
+    );
+  }
+
+  /// The unit of work for one share event: save → reset → populate.
+  ///
+  /// The [!mounted] guard after the await prevents provider mutations when the
+  /// widget has been disposed mid-chain (e.g. a queued event fires after the
+  /// screen is popped).
   Future<void> _onSharedText(String sharedText) async {
     final currentText = ref.read(bufferProvider).text;
     final saveUseCase = ref.read(saveBufferToRecoveryProvider);
     await saveUseCase(currentText);
+    if (!mounted) return;
     ref.read(bufferProvider.notifier).reset();
     ref.read(bufferProvider.notifier).populate(sharedText);
   }
