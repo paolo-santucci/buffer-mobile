@@ -46,3 +46,6 @@ app.*.map.json
 
 # Editor / personal tooling
 .obsidian/
+.claude/
+STATUS.yaml
+CLAUDE.md
