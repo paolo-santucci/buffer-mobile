@@ -29,8 +29,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:buffer/infrastructure/share/share_intent_service.dart';
+import 'package:buffer/domain/recovery/recovery_note.dart';
 import 'package:buffer/domain/recovery/recovery_repository.dart';
+import 'package:buffer/infrastructure/share/share_intent_service.dart';
 import 'package:buffer/presentation/app.dart';
 import 'package:buffer/presentation/editor/share_providers.dart';
 import 'package:buffer/presentation/settings/settings_provider.dart';
@@ -57,6 +58,18 @@ class _FakeShareIntentService implements ShareIntentService {
 class _FakeRecoveryRepository implements RecoveryRepository {
   @override
   Future<File> save(String text) => Future.value(File('/dev/null'));
+
+  // M5 stubs — not exercised by this smoke test.
+  @override
+  Future<List<RecoveryNote>> list() async => const [];
+  @override
+  Future<String> read(RecoveryNote note) async => '';
+  @override
+  Future<void> delete(RecoveryNote note) async {}
+  @override
+  Future<void> deleteAll() async {}
+  @override
+  Future<void> trim(int keep) async {}
 }
 
 void main() {

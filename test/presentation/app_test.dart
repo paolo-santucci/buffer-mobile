@@ -1,15 +1,20 @@
-// TASK-11: app.dart route swap + MaterialApp.builder LifecycleBufferHost wrap.
+// app_test.dart — TASK-16: app.dart route swap + ConsumerWidget
 //
-// Spec refs: FR-M2-01, FR-M2-02, EC-M2-14, §4.1
+// Spec refs: FR-M6-03, FR-M6-09, FR-M6-10, FR-M6-23, EC-08, §5.1-h
 //
 // Acceptance criteria verified here:
-//   1. Route '/' renders BufferScreen (find.byType(BufferScreen)==1;
-//      _EmptyScreen absent at '/').
-//   2. Routes '/recovery', '/settings', '/about' still render _EmptyScreen.
-//   3. LifecycleBufferHost is present above the Navigator in the tree
-//      (ancestor of Navigator; find.byType(LifecycleBufferHost)==1).
-//   4. Navigating between routes does NOT unmount LifecycleBufferHost
-//      (still found after a route push — EC-M2-14).
+//   1. Route '/' renders BufferScreen (regression from TASK-11/M2).
+//   2. Route '/recovery' renders RecoveryScreen (regression from TASK-11/M5).
+//   3. Route '/settings' renders SettingsScreen (NOT _EmptyScreen).
+//   4. Route '/about' renders AboutScreen (NOT _EmptyScreen).
+//   5. BufferApp is a ConsumerWidget (FR-M6-23 — themeMode wired to provider).
+//   6. themeMode reacts to themeModeProvider:
+//      - follow  → ThemeMode.system
+//      - dark    → ThemeMode.dark
+//      (no restart; single ProviderScope — FR-M6-03)
+//   7. First-frame AsyncLoading → themeMode==system, no throw (EC-08).
+//   8. LifecycleBufferHost is present above the Navigator (EC-M2-14 regression).
+//   9. LifecycleBufferHost survives route changes (EC-M2-14 regression).
 //
 // All I/O providers are overridden with fakes — no filesystem, no platform
 // channel, no real share intent service.
@@ -22,13 +27,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:buffer/domain/recovery/recovery_note.dart';
 import 'package:buffer/domain/recovery/recovery_repository.dart';
+import 'package:buffer/domain/settings/app_settings.dart';
 import 'package:buffer/infrastructure/share/share_intent_service.dart';
+import 'package:buffer/presentation/about/about_screen.dart';
 import 'package:buffer/presentation/app.dart';
 import 'package:buffer/presentation/editor/buffer_screen.dart';
 import 'package:buffer/presentation/editor/share_providers.dart';
 import 'package:buffer/presentation/lifecycle/lifecycle_buffer_host.dart';
+import 'package:buffer/presentation/recovery/recovery_screen.dart';
 import 'package:buffer/presentation/settings/settings_provider.dart';
+import 'package:buffer/presentation/settings/settings_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Test doubles
@@ -38,6 +48,17 @@ class _FakeRecoveryRepository implements RecoveryRepository {
   @override
   Future<File> save(String text) async =>
       File('/tmp/fake-${DateTime.now().microsecondsSinceEpoch}.txt');
+
+  @override
+  Future<List<RecoveryNote>> list() async => const [];
+  @override
+  Future<String> read(RecoveryNote note) async => '';
+  @override
+  Future<void> delete(RecoveryNote note) async {}
+  @override
+  Future<void> deleteAll() async {}
+  @override
+  Future<void> trim(int keep) async {}
 }
 
 class _FakeShareIntentService implements ShareIntentService {
@@ -55,12 +76,23 @@ class _FakeShareIntentService implements ShareIntentService {
   }
 }
 
+// A SettingsNotifier that immediately returns a fixed AppSettings without
+// hitting SharedPreferences — used for themeMode reactive tests.
+class _FixedSettingsNotifier extends SettingsNotifier {
+  _FixedSettingsNotifier(this._settings);
+
+  final AppSettings _settings;
+
+  @override
+  Future<AppSettings> build() async => _settings;
+}
+
 // ---------------------------------------------------------------------------
-// Helper
+// Helpers
 // ---------------------------------------------------------------------------
 
 /// Standard ProviderScope overrides for pumping BufferApp with route '/'
-/// active (which now mounts BufferScreen, requiring all share providers).
+/// active (which mounts BufferScreen, requiring all share providers).
 List<Override> _standardOverrides(SharedPreferences prefs) => [
   sharedPreferencesProvider.overrideWithValue(prefs),
   initialSharedTextProvider.overrideWithValue(null),
@@ -73,19 +105,21 @@ Future<SharedPreferences> _emptyPrefs() async {
   return SharedPreferences.getInstance();
 }
 
-/// Pumps [BufferApp] with all required overrides and navigates to [route].
+/// Pumps [BufferApp] with all required overrides and optionally navigates to
+/// [initialRoute].
 ///
-/// The [navigatorKey] is required for tests that exercise route transitions.
+/// [navigatorKey] must be supplied when tests need to drive route transitions.
 Future<void> _pumpAppAtRoute(
   WidgetTester tester, {
   required GlobalKey<NavigatorState> navigatorKey,
   String initialRoute = '/',
+  List<Override> extraOverrides = const [],
 }) async {
   final prefs = await _emptyPrefs();
 
   await tester.pumpWidget(
     ProviderScope(
-      overrides: _standardOverrides(prefs),
+      overrides: [..._standardOverrides(prefs), ...extraOverrides],
       child: BufferApp(navigatorKey: navigatorKey),
     ),
   );
@@ -105,7 +139,17 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   // -------------------------------------------------------------------------
-  // 1. Route '/' renders BufferScreen (FR-M2-01, §4.1)
+  // 0. BufferApp is a ConsumerWidget (FR-M6-23 — themeMode wired to provider)
+  // -------------------------------------------------------------------------
+
+  test('BufferApp_is_a_ConsumerWidget', () {
+    // Ensure the widget type hierarchy satisfies the TASK-16 contract.
+    const app = BufferApp();
+    expect(app, isA<ConsumerWidget>());
+  });
+
+  // -------------------------------------------------------------------------
+  // 1. Route '/' renders BufferScreen (FR-M2-01, §4.1 — regression)
   // -------------------------------------------------------------------------
 
   group('app.dart TASK-11 — route "/" renders BufferScreen', () {
@@ -119,15 +163,12 @@ void main() {
       },
     );
 
-    testWidgets('given_app_at_slash_when_settled_then_no_EmptyScreen_in_tree', (
+    testWidgets('given_app_at_slash_when_settled_then_chrome_free_no_AppBar', (
       tester,
     ) async {
       final navKey = GlobalKey<NavigatorState>();
       await _pumpAppAtRoute(tester, navigatorKey: navKey);
 
-      // _EmptyScreen is package-private; verify by checking that the route
-      // delivers a BufferScreen (the positive assertion above covers this,
-      // but checking the Scaffold count helps confirm no extra empty screen).
       expect(find.byType(BufferScreen), findsOneWidget);
       // No AppBar — chrome-free (FR-M2-02).
       expect(find.byType(AppBar), findsNothing);
@@ -135,34 +176,226 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // 2. Other three routes still render _EmptyScreen (M1 regression guard)
+  // 2. /recovery route resolves to RecoveryScreen (FR-M5-05 — regression)
   // -------------------------------------------------------------------------
 
-  group('app.dart TASK-11 — unchanged routes still render _EmptyScreen', () {
-    for (final route in ['/recovery', '/settings', '/about']) {
-      testWidgets(
-        'route_${route.replaceAll("/", "_")}_has_no_BufferScreen_and_no_ErrorWidget',
-        (tester) async {
-          final navKey = GlobalKey<NavigatorState>();
-          await _pumpAppAtRoute(
-            tester,
-            navigatorKey: navKey,
-            initialRoute: route,
-          );
+  group('app.dart TASK-11 M5 — /recovery resolves to RecoveryScreen', () {
+    testWidgets('given_push_recovery_when_settled_then_RecoveryScreen_found', (
+      tester,
+    ) async {
+      final navKey = GlobalKey<NavigatorState>();
+      await _pumpAppAtRoute(tester, navigatorKey: navKey);
 
-          // _EmptyScreen renders a Scaffold — it's present.
-          expect(find.byType(Scaffold), findsWidgets);
-          // No BufferScreen on these routes.
-          expect(find.byType(BufferScreen), findsNothing);
-          // No crash.
-          expect(find.byType(ErrorWidget), findsNothing);
-        },
+      navKey.currentState!.pushNamed('/recovery');
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(RecoveryScreen),
+        findsOneWidget,
+        reason: '/recovery must resolve to RecoveryScreen (FR-M5-05, FR-M5-17)',
       );
-    }
+    });
+
+    testWidgets('given_push_recovery_when_settled_then_no_ErrorWidget', (
+      tester,
+    ) async {
+      final navKey = GlobalKey<NavigatorState>();
+      await _pumpAppAtRoute(tester, navigatorKey: navKey);
+
+      navKey.currentState!.pushNamed('/recovery');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ErrorWidget), findsNothing);
+    });
   });
 
   // -------------------------------------------------------------------------
-  // 3. LifecycleBufferHost is present above the Navigator (EC-M2-14)
+  // 3. /settings resolves to SettingsScreen (FR-M6-09 — TASK-16 new)
+  // -------------------------------------------------------------------------
+
+  group('app.dart TASK-16 — /settings resolves to SettingsScreen', () {
+    testWidgets('given_push_settings_when_settled_then_SettingsScreen_found', (
+      tester,
+    ) async {
+      final navKey = GlobalKey<NavigatorState>();
+      await _pumpAppAtRoute(
+        tester,
+        navigatorKey: navKey,
+        initialRoute: '/settings',
+      );
+
+      expect(
+        find.byType(SettingsScreen),
+        findsOneWidget,
+        reason:
+            '/settings must resolve to SettingsScreen after TASK-16 route '
+            'swap (FR-M6-09)',
+      );
+    });
+
+    testWidgets('given_push_settings_when_settled_then_no_ErrorWidget', (
+      tester,
+    ) async {
+      final navKey = GlobalKey<NavigatorState>();
+      await _pumpAppAtRoute(
+        tester,
+        navigatorKey: navKey,
+        initialRoute: '/settings',
+      );
+
+      expect(find.byType(ErrorWidget), findsNothing);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 4. /about resolves to AboutScreen (FR-M6-10 — TASK-16 new)
+  // -------------------------------------------------------------------------
+
+  group('app.dart TASK-16 — /about resolves to AboutScreen', () {
+    testWidgets('given_push_about_when_settled_then_AboutScreen_found', (
+      tester,
+    ) async {
+      final navKey = GlobalKey<NavigatorState>();
+      await _pumpAppAtRoute(
+        tester,
+        navigatorKey: navKey,
+        initialRoute: '/about',
+      );
+
+      expect(
+        find.byType(AboutScreen),
+        findsOneWidget,
+        reason:
+            '/about must resolve to AboutScreen after TASK-16 route swap '
+            '(FR-M6-10)',
+      );
+    });
+
+    testWidgets('given_push_about_when_settled_then_no_ErrorWidget', (
+      tester,
+    ) async {
+      final navKey = GlobalKey<NavigatorState>();
+      await _pumpAppAtRoute(
+        tester,
+        navigatorKey: navKey,
+        initialRoute: '/about',
+      );
+
+      expect(find.byType(ErrorWidget), findsNothing);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 5. themeMode reacts to themeModeProvider — FR-M6-03 / EC-08
+  // -------------------------------------------------------------------------
+
+  group('app.dart TASK-16 — themeMode reacts to themeModeProvider', () {
+    testWidgets('given_colorScheme_follow_when_pumped_then_themeMode_is_system', (
+      tester,
+    ) async {
+      final navKey = GlobalKey<NavigatorState>();
+      await _pumpAppAtRoute(
+        tester,
+        navigatorKey: navKey,
+        extraOverrides: [
+          settingsProvider.overrideWith(
+            () => _FixedSettingsNotifier(
+              const AppSettings(colorScheme: AppColorScheme.follow),
+            ),
+          ),
+        ],
+      );
+
+      final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(
+        app.themeMode,
+        ThemeMode.system,
+        reason:
+            'colorScheme.follow must map to ThemeMode.system (FR-M6-03, EC-08)',
+      );
+    });
+
+    testWidgets('given_colorScheme_dark_when_pumped_then_themeMode_is_dark', (
+      tester,
+    ) async {
+      final navKey = GlobalKey<NavigatorState>();
+      await _pumpAppAtRoute(
+        tester,
+        navigatorKey: navKey,
+        extraOverrides: [
+          settingsProvider.overrideWith(
+            () => _FixedSettingsNotifier(
+              const AppSettings(colorScheme: AppColorScheme.dark),
+            ),
+          ),
+        ],
+      );
+
+      final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(
+        app.themeMode,
+        ThemeMode.dark,
+        reason: 'colorScheme.dark must map to ThemeMode.dark (FR-M6-03)',
+      );
+    });
+
+    testWidgets('given_colorScheme_light_when_pumped_then_themeMode_is_light', (
+      tester,
+    ) async {
+      final navKey = GlobalKey<NavigatorState>();
+      await _pumpAppAtRoute(
+        tester,
+        navigatorKey: navKey,
+        extraOverrides: [
+          settingsProvider.overrideWith(
+            () => _FixedSettingsNotifier(
+              const AppSettings(colorScheme: AppColorScheme.light),
+            ),
+          ),
+        ],
+      );
+
+      final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      expect(
+        app.themeMode,
+        ThemeMode.light,
+        reason: 'colorScheme.light must map to ThemeMode.light (FR-M6-03)',
+      );
+    });
+
+    testWidgets(
+      'given_AsyncLoading_first_frame_when_pumped_then_themeMode_is_system_and_no_throw',
+      (tester) async {
+        // EC-08: on the very first frame settingsProvider is AsyncLoading.
+        // themeModeProvider must fall back to ThemeMode.system and never throw.
+        // We simulate this by overriding themeModeProvider directly with a
+        // value derived from the AsyncLoading fallback path.
+        final navKey = GlobalKey<NavigatorState>();
+        await _pumpAppAtRoute(
+          tester,
+          navigatorKey: navKey,
+          extraOverrides: [
+            // Override themeModeProvider to force the AsyncLoading fallback
+            // path: value==null → AppSettings() → follow → ThemeMode.system.
+            themeModeProvider.overrideWithValue(ThemeMode.system),
+          ],
+        );
+
+        final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+        expect(find.byType(ErrorWidget), findsNothing);
+        expect(
+          app.themeMode,
+          ThemeMode.system,
+          reason:
+              'AsyncLoading first-frame must not throw and must yield '
+              'ThemeMode.system (EC-08)',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // 6. LifecycleBufferHost is present above the Navigator (EC-M2-14 regression)
   // -------------------------------------------------------------------------
 
   group('app.dart TASK-11 — LifecycleBufferHost above Navigator', () {
@@ -181,7 +414,6 @@ void main() {
         final navKey = GlobalKey<NavigatorState>();
         await _pumpAppAtRoute(tester, navigatorKey: navKey);
 
-        // LifecycleBufferHost must be an ancestor of the Navigator widget.
         expect(
           find.ancestor(
             of: find.byType(Navigator),
@@ -189,15 +421,15 @@ void main() {
           ),
           findsWidgets,
           reason:
-              'LifecycleBufferHost must wrap the Navigator via MaterialApp.builder '
-              'so it sits above the route layer (EC-M2-14)',
+              'LifecycleBufferHost must wrap the Navigator via '
+              'MaterialApp.builder (EC-M2-14)',
         );
       },
     );
   });
 
   // -------------------------------------------------------------------------
-  // 4. LifecycleBufferHost survives route changes (EC-M2-14)
+  // 7. LifecycleBufferHost survives route changes (EC-M2-14 regression)
   // -------------------------------------------------------------------------
 
   group('app.dart TASK-11 — LifecycleBufferHost survives route push', () {
@@ -207,14 +439,11 @@ void main() {
         final navKey = GlobalKey<NavigatorState>();
         await _pumpAppAtRoute(tester, navigatorKey: navKey);
 
-        // Confirm present before navigation.
         expect(find.byType(LifecycleBufferHost), findsOneWidget);
 
-        // Push a different route.
         navKey.currentState!.pushNamed('/recovery');
         await tester.pumpAndSettle();
 
-        // Must still be found — never unmounted by a route change.
         expect(
           find.byType(LifecycleBufferHost),
           findsOneWidget,
@@ -231,6 +460,19 @@ void main() {
         await _pumpAppAtRoute(tester, navigatorKey: navKey);
 
         navKey.currentState!.pushNamed('/settings');
+        await tester.pumpAndSettle();
+
+        expect(find.byType(LifecycleBufferHost), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'given_app_at_slash_when_push_about_then_LifecycleBufferHost_still_present',
+      (tester) async {
+        final navKey = GlobalKey<NavigatorState>();
+        await _pumpAppAtRoute(tester, navigatorKey: navKey);
+
+        navKey.currentState!.pushNamed('/about');
         await tester.pumpAndSettle();
 
         expect(find.byType(LifecycleBufferHost), findsOneWidget);

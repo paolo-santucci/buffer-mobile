@@ -1,12 +1,14 @@
 import 'dart:io';
 
+import 'package:buffer/domain/recovery/recovery_note.dart';
+
 /// Domain port (repository interface) for the recovery persistence boundary.
 ///
 /// ## M2 surface (FR-M2-09, §5.1.1)
 ///
 /// The sole M2 member is [save]. The Emergency-Recovery milestone (M5 /
-/// Phase 4) extends this SAME interface additively with `list`, `restore`,
-/// `delete`, and `trim` — do NOT add those members here (OCP: new behaviour
+/// Phase 4) extends this SAME interface additively with `list`, `read`,
+/// `delete`, `deleteAll`, and `trim` — added below (OCP: new behaviour
 /// via additive implementation, not edits to this interface).
 ///
 /// ## Precondition (caller-enforced)
@@ -24,8 +26,9 @@ import 'dart:io';
 ///
 /// ## Domain purity
 ///
-/// This file imports only `dart:io` for [File]. It must never import the
-/// Flutter SDK or any infrastructure package.
+/// This file imports only `dart:io` for [File] and the co-located
+/// [RecoveryNote] domain entity. It must never import the Flutter SDK or any
+/// infrastructure package.
 abstract interface class RecoveryRepository {
   /// Persists [text] to the recovery store and returns the written [File].
   ///
@@ -33,4 +36,32 @@ abstract interface class RecoveryRepository {
   /// On [FileSystemException]: propagates to the caller unchanged (not
   /// swallowed).
   Future<File> save(String text);
+
+  // --- M5, ADDED (additive; no breaking change) ---
+
+  /// Returns saved notes NEWEST-FIRST. When the recovery directory is absent,
+  /// returns const []. Never creates the directory. savedAt parsed from the
+  /// filename. Malformed filenames are skipped. Propagates FileSystemException
+  /// (UI-path caller catches and renders).
+  Future<List<RecoveryNote>> list();
+
+  /// Returns the full UTF-8 text of the note's backing file. Used by restore.
+  /// Propagates FileSystemException (UI-path caller catches).
+  Future<String> read(RecoveryNote note);
+
+  /// Deletes exactly the one file identified by [note] (siblings untouched).
+  /// No-op when the directory or the file is absent. Never creates the
+  /// directory. Propagates FileSystemException (UI-path caller catches).
+  Future<void> delete(RecoveryNote note);
+
+  /// Deletes every recovery `.txt` file. No-op when the directory is absent.
+  /// Never creates the directory. Propagates FileSystemException.
+  Future<void> deleteAll();
+
+  /// Retains the newest [keep] files by LEXICOGRAPHIC FILENAME, deletes the
+  /// rest. No-op when the directory is absent or file count <= keep. Tie-break
+  /// by filename, NEVER mtime. Called as trim(10) from SaveBufferToRecovery
+  /// AFTER a successful save. Propagates FileSystemException UNCHANGED like
+  /// save (background path — lifecycle host catches/logs).
+  Future<void> trim(int keep);
 }

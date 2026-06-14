@@ -1,8 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:buffer/domain/recovery/recovery_filename.dart';
+import 'package:buffer/domain/recovery/recovery_note.dart';
+import 'package:buffer/domain/recovery/recovery_preview.dart';
 import 'package:buffer/domain/recovery/recovery_repository.dart';
 import 'package:buffer/infrastructure/paths/sandbox_path_provider.dart';
+import 'package:path/path.dart' as p;
 
 /// Produces UTC ISO-8601 timestamps. Injectable for deterministic tests.
 typedef NowUtcProvider = DateTime Function();
@@ -63,6 +67,105 @@ class FileRecoveryRepository implements RecoveryRepository {
 
     await file.writeAsString(text, encoding: utf8);
     return file;
+  }
+
+  // --- M5 additions (list/read/delete/deleteAll/trim) ----------------------
+
+  @override
+  Future<List<RecoveryNote>> list() async {
+    final recoveryDir = await _pathProvider.recoveryDirectory();
+    if (!recoveryDir.existsSync()) return const [];
+
+    final txtFiles = _listTxtFiles(recoveryDir);
+
+    final notes = <RecoveryNote>[];
+    for (final file in txtFiles) {
+      final filename = p.basename(file.path);
+      final savedAt = RecoveryFilename.parse(filename);
+      if (savedAt == null) continue; // skip malformed — never fatal
+
+      final head = _readHead(file);
+      final preview = RecoveryPreview.truncate(head);
+      notes.add(
+        RecoveryNote(path: file.path, savedAt: savedAt, preview: preview),
+      );
+    }
+
+    // Return newest-first (descending by savedAt parsed from filename).
+    notes.sort((a, b) => b.savedAt.compareTo(a.savedAt));
+    return notes;
+  }
+
+  @override
+  Future<String> read(RecoveryNote note) async {
+    return File(note.path).readAsString(encoding: utf8);
+  }
+
+  @override
+  Future<void> delete(RecoveryNote note) async {
+    final recoveryDir = await _pathProvider.recoveryDirectory();
+    if (!recoveryDir.existsSync()) return;
+
+    final file = File(note.path);
+    if (file.existsSync()) {
+      await file.delete();
+    }
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    final recoveryDir = await _pathProvider.recoveryDirectory();
+    if (!recoveryDir.existsSync()) return;
+
+    for (final file in _listTxtFiles(recoveryDir)) {
+      await file.delete();
+    }
+  }
+
+  @override
+  Future<void> trim(int keep) async {
+    final recoveryDir = await _pathProvider.recoveryDirectory();
+    if (!recoveryDir.existsSync()) return;
+
+    final files = _listTxtFiles(recoveryDir);
+    if (files.length <= keep) return;
+
+    // Sort lexicographically by filename (fixed-width UTC ISO-8601 names =>
+    // name order == chronological order). NEVER use mtime (NFR-M5-01).
+    files.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+
+    // Delete the oldest (smallest names) — the N-keep at the front.
+    final toDelete = files.sublist(0, files.length - keep);
+    for (final file in toDelete) {
+      await file.delete();
+    }
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────────────
+
+  /// Returns all `.txt` [File]s in [dir] without sorting (caller sorts).
+  List<File> _listTxtFiles(Directory dir) {
+    return dir
+        .listSync()
+        .whereType<File>()
+        .where((f) => p.extension(f.path) == '.txt')
+        .toList();
+  }
+
+  /// Reads at most [_previewReadLimit] bytes from the start of [file] as UTF-8.
+  ///
+  /// A bounded read avoids loading arbitrarily large files for a preview.
+  /// [RecoveryPreview.truncate] then collapses newlines and hard-cuts to 80.
+  static const int _previewReadLimit = 512;
+
+  String _readHead(File file) {
+    final raf = file.openSync();
+    try {
+      final bytes = raf.readSync(_previewReadLimit);
+      return utf8.decode(bytes, allowMalformed: true);
+    } finally {
+      raf.closeSync();
+    }
   }
 
   /// Converts [now] to the canonical filename stem, e.g. `2026-06-13T19-20-05-123Z`.

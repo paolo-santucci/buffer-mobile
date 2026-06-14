@@ -19,6 +19,8 @@ abstract interface class SettingsRepository {
 
   /// Persists [settings] to the backing store.
   ///
-  /// All fields are written in a single operation (single mutation point).
+  /// Writes every field sequentially (single mutation point for callers).
+  /// Implementations may issue one write per field internally; partial writes
+  /// across a crash between two writes are acceptable given the recovery model.
   Future<void> save(AppSettings settings);
 }

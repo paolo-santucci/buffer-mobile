@@ -104,21 +104,225 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  // FR-15 — buildTextSpan seam: returns TextSpan containing the editor text
+  // FR-15 / FR-13 — buildTextSpan: text preserved + highlight painting (M4)
+  //
+  // These tests cover:
+  //   (a) base text still reaches the output (super called for base style)
+  //   (b) secondaryContainer background on non-current match runs
+  //   (c) primaryContainer background on the current-match run
+  //   (d) no background on text outside any match
+  //   (e) empty highlightRanges → output equals super (EC-26 composing stays green)
+  //   (f) no selection read/write during build (EC-10)
+  //   (g) surrogate-pair safe: concatenated text == original (EC-12)
   // ---------------------------------------------------------------------------
-  group('buildTextSpan (FR-15 — seam exercised)', () {
-    testWidgets(
-      'returns a TextSpan whose flattened text contains the editor text',
-      (WidgetTester tester) async {
-        final ec = EditorController(text: 'hello');
+  group('buildTextSpan (FR-15 / FR-13 — highlight painting, M4)', () {
+    // Helpers ----------------------------------------------------------------
 
-        // buildTextSpan requires a BuildContext; pump a minimal widget to get one.
-        late BuildContext capturedContext;
+    /// Flattens all text across the TextSpan tree.
+    String flatText(InlineSpan root) {
+      final buf = StringBuffer();
+      void collect(InlineSpan s) {
+        if (s is TextSpan) {
+          if (s.text != null) buf.write(s.text);
+          s.children?.forEach(collect);
+        }
+      }
+
+      collect(root);
+      return buf.toString();
+    }
+
+    /// Collects all (text, background) pairs for TextSpan leaves that have text.
+    List<(String, Color?)> spansWithBg(InlineSpan root) {
+      final result = <(String, Color?)>[];
+      void collect(InlineSpan s) {
+        if (s is TextSpan) {
+          if (s.text != null && s.text!.isNotEmpty) {
+            result.add((s.text!, s.style?.backgroundColor));
+          }
+          s.children?.forEach(collect);
+        }
+      }
+
+      collect(root);
+      return result;
+    }
+
+    // (a) Base text preserved — super called for base style ------------------
+
+    testWidgets('flattened text contains the editor text', (
+      WidgetTester tester,
+    ) async {
+      final ec = EditorController(text: 'hello');
+      late BuildContext ctx;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (c) {
+              ctx = c;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      final span = ec.buildTextSpan(
+        context: ctx,
+        style: null,
+        withComposing: false,
+      );
+      expect(flatText(span), contains('hello'));
+      ec.dispose();
+    });
+
+    // (b/c/d) Highlight painting with one span, currentMatchIndex null -------
+
+    testWidgets(
+      'one highlighted range, no current match → secondaryContainer bg on match '
+      'run, no bg outside',
+      (WidgetTester tester) async {
+        // text: "hello world", match on "hello" (0..5)
+        final ec = EditorController(text: 'hello world');
+        ec.highlightRanges = [const TextRange(start: 0, end: 5)];
+        // currentMatchIndex stays null
+
+        late BuildContext ctx;
         await tester.pumpWidget(
           MaterialApp(
             home: Builder(
-              builder: (context) {
-                capturedContext = context;
+              builder: (c) {
+                ctx = c;
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        );
+
+        final cs = Theme.of(ctx).colorScheme;
+        final span = ec.buildTextSpan(
+          context: ctx,
+          style: null,
+          withComposing: false,
+        );
+        final pairs = spansWithBg(span);
+
+        // The match run must carry secondaryContainer background.
+        final matchRuns = pairs.where((p) => p.$1 == 'hello');
+        expect(matchRuns, isNotEmpty, reason: 'match text "hello" must appear');
+        for (final r in matchRuns) {
+          expect(
+            r.$2,
+            cs.secondaryContainer,
+            reason: 'non-current match run must have secondaryContainer bg',
+          );
+        }
+
+        // Text outside the match must carry NO background override.
+        final outsideRuns = pairs.where((p) => p.$1 == ' world');
+        expect(
+          outsideRuns,
+          isNotEmpty,
+          reason: 'text outside match must appear',
+        );
+        for (final r in outsideRuns) {
+          expect(
+            r.$2,
+            isNull,
+            reason: 'text outside any match must have null background',
+          );
+        }
+
+        // Flattened text must still equal the original.
+        expect(flatText(span), 'hello world');
+        ec.dispose();
+      },
+    );
+
+    // (b/c) Three spans, currentMatchIndex = 1 --------------------------------
+
+    testWidgets(
+      '3 highlighted ranges, currentMatchIndex=1 → primaryContainer on span 1, '
+      'secondaryContainer on spans 0 and 2',
+      (WidgetTester tester) async {
+        // text: "aa bb cc"
+        // spans: "aa"@0..2, "bb"@3..5, "cc"@6..8
+        final ec = EditorController(text: 'aa bb cc');
+        ec.highlightRanges = [
+          const TextRange(start: 0, end: 2),
+          const TextRange(start: 3, end: 5),
+          const TextRange(start: 6, end: 8),
+        ];
+        ec.currentMatchIndex = 1; // "bb" is the current match
+
+        late BuildContext ctx;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (c) {
+                ctx = c;
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        );
+
+        final cs = Theme.of(ctx).colorScheme;
+        final span = ec.buildTextSpan(
+          context: ctx,
+          style: null,
+          withComposing: false,
+        );
+        final pairs = spansWithBg(span);
+
+        // Span 1 (current match "bb") → primaryContainer.
+        final currentRuns = pairs.where((p) => p.$1 == 'bb');
+        expect(currentRuns, isNotEmpty, reason: '"bb" must appear as a span');
+        for (final r in currentRuns) {
+          expect(
+            r.$2,
+            cs.primaryContainer,
+            reason: 'current-match run must have primaryContainer bg',
+          );
+        }
+
+        // Spans 0 and 2 ("aa", "cc") → secondaryContainer.
+        for (final text in ['aa', 'cc']) {
+          final nonCurrentRuns = pairs.where((p) => p.$1 == text);
+          expect(
+            nonCurrentRuns,
+            isNotEmpty,
+            reason: '"$text" must appear as a span',
+          );
+          for (final r in nonCurrentRuns) {
+            expect(
+              r.$2,
+              cs.secondaryContainer,
+              reason:
+                  'non-current match run "$text" must have secondaryContainer bg',
+            );
+          }
+        }
+
+        // Flattened text must still equal the original.
+        expect(flatText(span), 'aa bb cc');
+        ec.dispose();
+      },
+    );
+
+    // (e) Empty highlightRanges → no background; text == super output ----------
+
+    testWidgets(
+      'empty highlightRanges → flattened text equals super; no background override '
+      '(EC-26 composing preserved)',
+      (WidgetTester tester) async {
+        final ec = EditorController(text: 'seam check');
+        // highlightRanges stays [] (default)
+
+        late BuildContext ctx;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (c) {
+                ctx = c;
                 return const SizedBox.shrink();
               },
             ),
@@ -126,22 +330,100 @@ void main() {
         );
 
         final span = ec.buildTextSpan(
-          context: capturedContext,
+          context: ctx,
+          style: null,
+          withComposing: false,
+        );
+        expect(flatText(span), contains('seam check'));
+
+        // No span must carry a non-null background.
+        final pairs = spansWithBg(span);
+        for (final p in pairs) {
+          expect(
+            p.$2,
+            isNull,
+            reason:
+                'with no highlightRanges, no background override must appear',
+          );
+        }
+        ec.dispose();
+      },
+    );
+
+    // (f) No selection read/write during span build (EC-10) -------------------
+
+    testWidgets('buildTextSpan does not mutate selection (EC-10)', (
+      WidgetTester tester,
+    ) async {
+      final ec = EditorController(text: 'hello world');
+      ec.selection = const TextSelection(baseOffset: 2, extentOffset: 7);
+      final selBefore = ec.selection;
+
+      ec.highlightRanges = [const TextRange(start: 0, end: 5)];
+      ec.currentMatchIndex = 0;
+
+      late BuildContext ctx;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (c) {
+              ctx = c;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+
+      ec.buildTextSpan(context: ctx, style: null, withComposing: false);
+
+      expect(
+        ec.selection,
+        selBefore,
+        reason: 'buildTextSpan must not mutate selection (EC-10)',
+      );
+      ec.dispose();
+    });
+
+    // (g) Surrogate-pair safe (EC-12) -----------------------------------------
+
+    testWidgets(
+      'surrogate-pair emoji text: concatenated spans equal original string (EC-12)',
+      (WidgetTester tester) async {
+        // "hi 😀 bye" — 😀 is U+1F600, represented as two UTF-16 code units.
+        // UTF-16 offsets: h=0,i=1,' '=2,😀=3..5,' '=5,b=6,y=7,e=8
+        // Match "bye" at UTF-16 offset 6..9.
+        const text = 'hi 😀 bye';
+        final ec = EditorController(text: text);
+        ec.highlightRanges = [
+          TextRange(start: text.length - 3, end: text.length),
+        ];
+        ec.currentMatchIndex = 0;
+
+        late BuildContext ctx;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (c) {
+                ctx = c;
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        );
+
+        final span = ec.buildTextSpan(
+          context: ctx,
           style: null,
           withComposing: false,
         );
 
-        // Flatten all text across the span tree.
-        final buffer = StringBuffer();
-        void collect(InlineSpan s) {
-          if (s is TextSpan) {
-            if (s.text != null) buffer.write(s.text);
-            s.children?.forEach(collect);
-          }
-        }
-
-        collect(span);
-        expect(buffer.toString(), contains('hello'));
+        // Concatenated text of all spans must exactly equal the original.
+        expect(
+          flatText(span),
+          text,
+          reason:
+              'surrogate-pair text must not be split; concatenated spans == original',
+        );
         ec.dispose();
       },
     );
@@ -479,43 +761,82 @@ void main() {
 
   // ---------------------------------------------------------------------------
   // EC-26 — Find-replace seam regression: buildTextSpan / highlightRanges /
-  //          currentMatchIndex are byte-for-byte unchanged from M1 baseline.
-  //          These tests mirror the M1 EC-10 no-selection-mutation group and
-  //          confirm they remain green after M3 additions.
+  //          currentMatchIndex behaviour after M3 additions.
+  //
+  // REVISED for M4: the delegation assertion has been updated from
+  // "returns super span unchanged" to "calls super for base style/composing
+  // AND layers highlight backgrounds on match runs". The EC-10 no-selection-
+  // mutation invariants remain unchanged and stay green.
   // ---------------------------------------------------------------------------
-  group('EC-26 — seam regression (M4 seams unchanged by M3)', () {
-    testWidgets('buildTextSpan still delegates to super after M3 changes', (
-      WidgetTester tester,
-    ) async {
-      final ec = EditorController(text: 'seam check');
-      late BuildContext ctx;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) {
-              ctx = context;
-              return const SizedBox.shrink();
-            },
+  group('EC-26 — seam regression (M4 painting, M4 seams, EC-10 invariants)', () {
+    // REVISED: buildTextSpan calls super (base style/composing preserved) AND
+    // layers backgrounds on match runs when highlightRanges is non-empty.
+    testWidgets(
+      'buildTextSpan: super called for base style AND highlight backgrounds '
+      'layered on match runs (EC-26 revised for M4)',
+      (WidgetTester tester) async {
+        final ec = EditorController(text: 'seam check');
+        // Set a highlight range so M4 painting fires; secondaryContainer expected.
+        ec.highlightRanges = [const TextRange(start: 0, end: 4)]; // "seam"
+        late BuildContext ctx;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) {
+                ctx = context;
+                return const SizedBox.shrink();
+              },
+            ),
           ),
-        ),
-      );
-      final span = ec.buildTextSpan(
-        context: ctx,
-        style: null,
-        withComposing: false,
-      );
-      final buf = StringBuffer();
-      void collect(InlineSpan s) {
-        if (s is TextSpan) {
-          if (s.text != null) buf.write(s.text);
-          s.children?.forEach(collect);
-        }
-      }
+        );
+        final span = ec.buildTextSpan(
+          context: ctx,
+          style: null,
+          withComposing: false,
+        );
 
-      collect(span);
-      expect(buf.toString(), contains('seam check'));
-      ec.dispose();
-    });
+        // Base text from super must still be present (super called for base style).
+        final buf = StringBuffer();
+        void collect(InlineSpan s) {
+          if (s is TextSpan) {
+            if (s.text != null) buf.write(s.text);
+            s.children?.forEach(collect);
+          }
+        }
+
+        collect(span);
+        expect(
+          buf.toString(),
+          contains('seam check'),
+          reason:
+              'super must be called so base text / composing decoration is present',
+        );
+
+        // The match run must carry secondaryContainer background (M4 layering).
+        final cs = Theme.of(ctx).colorScheme;
+        bool foundMatchBg = false;
+        void findBg(InlineSpan s) {
+          if (s is TextSpan) {
+            if (s.text == 'seam' &&
+                s.style?.backgroundColor == cs.secondaryContainer) {
+              foundMatchBg = true;
+            }
+            s.children?.forEach(findBg);
+          }
+        }
+
+        findBg(span);
+        expect(
+          foundMatchBg,
+          isTrue,
+          reason:
+              'M4 must layer secondaryContainer background on non-current match '
+              'run "seam" (EC-26 revised)',
+        );
+
+        ec.dispose();
+      },
+    );
 
     test(
       'highlightRanges assignment still does NOT mutate selection (EC-26)',

@@ -3,5 +3,233 @@
   "appTitle": "Buffer",
   "@appTitle": {
     "description": "Il titolo dell'applicazione visualizzato nella barra del titolo della finestra e come nome dell'app."
+  },
+  "findHintText": "Cerca",
+  "@findHintText": {
+    "description": "Testo segnaposto mostrato nel campo di ricerca."
+  },
+  "findCountLabel": "{position} di {count}",
+  "@findCountLabel": {
+    "description": "Etichetta che mostra la posizione della corrispondenza attuale e il numero totale di corrispondenze. Vuota quando non ci sono corrispondenze.",
+    "placeholders": {
+      "position": {
+        "type": "int",
+        "example": "2"
+      },
+      "count": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "findPreviousTooltip": "Risultato precedente",
+  "@findPreviousTooltip": {
+    "description": "Tooltip per il pulsante di ricerca precedente nella barra di ricerca."
+  },
+  "findNextTooltip": "Risultato successivo",
+  "@findNextTooltip": {
+    "description": "Tooltip per il pulsante di ricerca successivo nella barra di ricerca."
+  },
+  "findReplaceHintText": "Sostituisci",
+  "@findReplaceHintText": {
+    "description": "Testo segnaposto mostrato nel campo di sostituzione."
+  },
+  "findReplaceButton": "Sostituisci",
+  "@findReplaceButton": {
+    "description": "Etichetta per il pulsante di sostituzione nella barra di ricerca."
+  },
+  "findReplaceToggleTooltip": "Mostra sostituzione",
+  "@findReplaceToggleTooltip": {
+    "description": "Tooltip per il pulsante di attivazione/disattivazione della sostituzione nella barra di ricerca."
+  },
+  "findCloseTooltip": "Indietro",
+  "@findCloseTooltip": {
+    "description": "Tooltip per il pulsante di chiusura/indietro nella barra di ricerca."
+  },
+  "recoveryTitle": "Recupero",
+  "@recoveryTitle": {
+    "description": "Titolo visualizzato nella barra dell'app della schermata di recupero."
+  },
+  "recoveryEmpty": "Nessuna nota recuperata",
+  "@recoveryEmpty": {
+    "description": "Messaggio di stato vuoto mostrato nella schermata di recupero quando non ci sono note salvate."
+  },
+  "recoveryRestoreTooltip": "Ripristina",
+  "@recoveryRestoreTooltip": {
+    "description": "Tooltip per il pulsante di ripristino su ogni riga di nota recuperata."
+  },
+  "recoveryDeleteTooltip": "Elimina",
+  "@recoveryDeleteTooltip": {
+    "description": "Tooltip per il pulsante di eliminazione su ogni riga di nota recuperata."
+  },
+  "recoveryDeleteAllTooltip": "Elimina tutto",
+  "@recoveryDeleteAllTooltip": {
+    "description": "Tooltip per il pulsante di eliminazione di tutte le note nella barra dell'app della schermata di recupero."
+  },
+  "recoveryRestoreDialogTitle": "Ripristinare la nota?",
+  "@recoveryRestoreDialogTitle": {
+    "description": "Titolo del dialogo di conferma mostrato prima di ripristinare una nota quando il buffer non è vuoto."
+  },
+  "recoveryRestoreDialogBody": "Il ripristino sostituirà il testo attualmente nel buffer.",
+  "@recoveryRestoreDialogBody": {
+    "description": "Testo del dialogo di conferma mostrato prima di ripristinare una nota."
+  },
+  "recoveryRestoreDialogConfirm": "Ripristina",
+  "@recoveryRestoreDialogConfirm": {
+    "description": "Etichetta dell'azione di conferma nel dialogo di ripristino."
+  },
+  "recoveryDeleteDialogTitle": "Eliminare la nota?",
+  "@recoveryDeleteDialogTitle": {
+    "description": "Titolo del dialogo di conferma mostrato prima di eliminare definitivamente una singola nota recuperata."
+  },
+  "recoveryDeleteDialogBody": "La nota verrà eliminata definitivamente.",
+  "@recoveryDeleteDialogBody": {
+    "description": "Testo del dialogo di conferma mostrato prima di eliminare una singola nota recuperata."
+  },
+  "recoveryDeleteDialogConfirm": "Elimina",
+  "@recoveryDeleteDialogConfirm": {
+    "description": "Etichetta dell'azione di conferma nel dialogo di eliminazione singola nota."
+  },
+  "recoveryDeleteAllDialogTitle": "Eliminare tutte le note?",
+  "@recoveryDeleteAllDialogTitle": {
+    "description": "Titolo del dialogo di conferma mostrato prima di eliminare definitivamente tutte le note recuperate."
+  },
+  "recoveryDeleteAllDialogBody": "Tutte le note recuperate verranno eliminate definitivamente.",
+  "@recoveryDeleteAllDialogBody": {
+    "description": "Testo del dialogo di conferma mostrato prima di eliminare tutte le note recuperate."
+  },
+  "recoveryDeleteAllDialogConfirm": "Elimina tutto",
+  "@recoveryDeleteAllDialogConfirm": {
+    "description": "Etichetta dell'azione di conferma nel dialogo di eliminazione di tutte le note."
+  },
+  "recoveryDialogCancel": "Annulla",
+  "@recoveryDialogCancel": {
+    "description": "Etichetta dell'azione di annullamento usata in tutti i dialoghi di conferma del recupero."
+  },
+  "recoveryBackTooltip": "Indietro",
+  "@recoveryBackTooltip": {
+    "description": "Tooltip per il pulsante indietro nella barra dell'app della schermata di recupero."
+  },
+  "recoveryToggleLabel": "Salva i file di recupero di emergenza",
+  "@recoveryToggleLabel": {
+    "description": "Etichetta per l'interruttore che abilita o disabilita il salvataggio dei file di recupero di emergenza."
+  },
+  "recoveryToggleTooltip": "Se attivo, il buffer viene salvato quando l'app va in background; vengono conservati gli ultimi dieci.",
+  "@recoveryToggleTooltip": {
+    "description": "Tooltip che descrive il comportamento dell'interruttore di recupero di emergenza."
+  },
+  "themeFollowSystem": "Segui stile di sistema",
+  "@themeFollowSystem": {
+    "description": "Etichetta per il selettore tema «Segui sistema» nel selettore del tema. Usata verbatim come etichetta semantica."
+  },
+  "themeLight": "Stile chiaro",
+  "@themeLight": {
+    "description": "Etichetta per il selettore tema chiaro nel selettore del tema. Usata verbatim come etichetta semantica."
+  },
+  "themeDark": "Stile scuro",
+  "@themeDark": {
+    "description": "Etichetta per il selettore tema scuro nel selettore del tema. Usata verbatim come etichetta semantica."
+  },
+  "themeSelectorLabel": "Tema",
+  "@themeSelectorLabel": {
+    "description": "Etichetta di accessibilità per il widget selettore del tema."
+  },
+  "menuTooltip": "Apri menu",
+  "@menuTooltip": {
+    "description": "Tooltip ed etichetta di accessibilità per il pulsante del menu principale che apre il foglio del menu."
+  },
+  "menuPreferences": "Preferenze",
+  "@menuPreferences": {
+    "description": "Etichetta per la voce Preferenze nel foglio del menu principale, che naviga alla schermata delle impostazioni."
+  },
+  "menuAbout": "Informazioni",
+  "@menuAbout": {
+    "description": "Etichetta per la voce Informazioni nel foglio del menu principale, che naviga alla schermata informazioni."
+  },
+  "menuRecovery": "Recupero",
+  "@menuRecovery": {
+    "description": "Etichetta per la voce Recupero nel foglio del menu principale, che naviga alla schermata di recupero."
+  },
+  "settingsTitle": "Preferenze",
+  "@settingsTitle": {
+    "description": "Titolo visualizzato nella barra dell'app della schermata delle impostazioni."
+  },
+  "settingsAppearance": "Aspetto",
+  "@settingsAppearance": {
+    "description": "Intestazione di sezione per il gruppo Aspetto nella schermata delle impostazioni."
+  },
+  "settingsBehavior": "Comportamento",
+  "@settingsBehavior": {
+    "description": "Intestazione di sezione per il gruppo Comportamento nella schermata delle impostazioni."
+  },
+  "settingsThemeMode": "Tema",
+  "@settingsThemeMode": {
+    "description": "Etichetta per la riga della modalità tema nella sezione Aspetto della schermata delle impostazioni."
+  },
+  "settingsRecoveryEnabled": "Salva i file di recupero di emergenza",
+  "@settingsRecoveryEnabled": {
+    "description": "Etichetta per l'interruttore di recupero di emergenza nella sezione Comportamento della schermata delle impostazioni."
+  },
+  "settingsSpellCheck": "Controllo ortografico",
+  "@settingsSpellCheck": {
+    "description": "Etichetta per l'interruttore del controllo ortografico nella sezione Comportamento della schermata delle impostazioni."
+  },
+  "aboutTitle": "Informazioni su Buffer",
+  "@aboutTitle": {
+    "description": "Titolo visualizzato nella barra dell'app della schermata informazioni."
+  },
+  "aboutDeveloper": "Chris Heywood",
+  "@aboutDeveloper": {
+    "description": "Nome dello sviluppatore visualizzato nella schermata informazioni."
+  },
+  "aboutVersion": "Versione",
+  "@aboutVersion": {
+    "description": "Prefisso dell'etichetta per la riga della versione nella schermata informazioni. Il numero di versione viene aggiunto a runtime."
+  },
+  "aboutLicense": "GPL-3.0",
+  "@aboutLicense": {
+    "description": "Identificatore della licenza visualizzato nella schermata informazioni. Deve essere GPL-3.0 per corrispondere alla licenza upstream (NFR-M6-06)."
+  },
+  "aboutIssues": "Segnala un problema",
+  "@aboutIssues": {
+    "description": "Etichetta per il link al tracker dei problemi nella schermata informazioni. L'URL non è localizzato."
+  },
+  "aboutWebsite": "Sito web",
+  "@aboutWebsite": {
+    "description": "Etichetta per il link al sito web del progetto nella schermata informazioni. L'URL non è localizzato."
+  },
+  "fontSizeToast": "Dimensione carattere: {n} pt",
+  "@fontSizeToast": {
+    "description": "Messaggio toast mostrato quando cambia la dimensione del carattere. Il segnaposto {n} viene sostituito con la nuova dimensione in punti. Definito per l'uso in M7 — non emesso da M6 (FR-M6-16 / D2).",
+    "placeholders": {
+      "n": {
+        "type": "int",
+        "example": "16"
+      }
+    }
+  },
+  "editorIndentLabel": "Rientra",
+  "@editorIndentLabel": {
+    "description": "Etichetta di accessibilità per il pulsante della barra degli strumenti per aumentare il rientro nell'editor."
+  },
+  "editorOutdentLabel": "Riduci rientro",
+  "@editorOutdentLabel": {
+    "description": "Etichetta di accessibilità per il pulsante della barra degli strumenti per ridurre il rientro nell'editor."
+  },
+  "settingsFontSize": "Dimensione carattere",
+  "@settingsFontSize": {
+    "description": "Etichetta per la riga della dimensione del carattere nella sezione Aspetto della schermata delle impostazioni e nel foglio del menu."
+  },
+  "settingsMonospaceFont": "Carattere monospazio",
+  "@settingsMonospaceFont": {
+    "description": "Etichetta per l'interruttore del carattere monospazio nella sezione Aspetto della schermata delle impostazioni."
+  },
+  "a11yZoomIn": "Aumenta dimensione carattere",
+  "@a11yZoomIn": {
+    "description": "Etichetta di accessibilità per il pulsante di aumento della dimensione del carattere (zoom in) nel FontSizeStepper."
+  },
+  "a11yZoomOut": "Riduci dimensione carattere",
+  "@a11yZoomOut": {
+    "description": "Etichetta di accessibilità per il pulsante di riduzione della dimensione del carattere (zoom out) nel FontSizeStepper."
   }
 }

@@ -4,11 +4,25 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// [SettingsRepository] implementation backed by [SharedPreferences].
 ///
-/// Key contract (OQ-B1):
-/// - Writes exactly six upstream gschema keys on [save]: four bools and two
-///   derived ints. No "line-length-enabled" bool key. No "font-size" key.
+/// Key contract (OQ-B1 + M6 + M7):
+/// - Writes exactly eight upstream gschema keys on [save]: four bools, two
+///   derived ints, one string, and one int. No "line-length-enabled" bool key.
+///   Keys in write order:
+///     1. "use-monospace-font"       (bool)
+///     2. "show-line-numbers"        (bool)
+///     3. "check-spelling"           (bool)
+///     4. "save-emergency-files"     (bool)
+///     5. "emergency-recovery-files" (int: 0 or 10)
+///     6. "line-length"              (int: 800 or 100000)
+///     7. "color-scheme"             (string: follow|light|dark)
+///     8. "font-size"                (int: 0–20, the fontSizeIndex slot)
 /// - [load] derives [AppSettings.lineLengthEnabled] from the stored
 ///   "line-length" int: enabled iff (stored ?? 800) <= 800.
+/// - [load] parses "color-scheme" via a safe switch with a follow fallback —
+///   NEVER [AppColorScheme.values.byName] which throws on unknown values (EC-01).
+/// - [load] reads "font-size" as int: absent or corrupt (wrong type) → default
+///   index 8; stored value → clamped to [0, AppSettings.slotList.length-1] so
+///   the index is always valid and never causes a bounds error (NFR-M7-04).
 /// - [load] never throws on absent or corrupt (wrong-type) keys; falls back to
 ///   [AppSettings] canon defaults (EC-04).
 class SharedPreferencesSettingsRepository implements SettingsRepository {
@@ -28,12 +42,25 @@ class SharedPreferencesSettingsRepository implements SettingsRepository {
     final ll = _safeInt(AppSettings.kLineLength) ?? 800;
     final lineLengthEnabled = ll <= 800;
 
+    // color-scheme: safe parse — absent or unknown value → follow (EC-01).
+    final colorScheme = _parseColorScheme(
+      _prefs.getString(AppSettings.kColorScheme),
+    );
+
+    // font-size: absent or corrupt → default 8; stored → clamped [0, 20] (NFR-M7-04).
+    final fontSizeIndex = (_safeInt(AppSettings.kFontSize) ?? 8).clamp(
+      0,
+      AppSettings.slotList.length - 1,
+    );
+
     return AppSettings(
       useMonospaceFont: useMonospaceFont,
       showLineNumbers: showLineNumbers,
       spellingEnabled: spellingEnabled,
       emergencyRecoveryEnabled: emergencyRecoveryEnabled,
       lineLengthEnabled: lineLengthEnabled,
+      colorScheme: colorScheme,
+      fontSizeIndex: fontSizeIndex,
     );
   }
 
@@ -51,6 +78,10 @@ class SharedPreferencesSettingsRepository implements SettingsRepository {
       s.emergencyRecoveryFiles,
     );
     await _prefs.setInt(AppSettings.kLineLength, s.lineLength);
+    // Single mutation point for color-scheme (FR-M6-12 / NFR-M6-07).
+    await _prefs.setString(AppSettings.kColorScheme, s.colorScheme.name);
+    // Font-size index — 8th key, FR-M7-03.
+    await _prefs.setInt(AppSettings.kFontSize, s.fontSizeIndex);
   }
 
   /// Returns null if the key is absent or the stored type is not a bool (EC-04).
@@ -68,6 +99,23 @@ class SharedPreferencesSettingsRepository implements SettingsRepository {
       return _prefs.getInt(key);
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Parses the stored [value] string to [AppColorScheme].
+  ///
+  /// Returns [AppColorScheme.follow] for null, absent, or unrecognised values
+  /// (EC-01). Uses an explicit switch — never [AppColorScheme.values.byName]
+  /// which throws on unknown input.
+  AppColorScheme _parseColorScheme(String? value) {
+    switch (value) {
+      case 'light':
+        return AppColorScheme.light;
+      case 'dark':
+        return AppColorScheme.dark;
+      default:
+        // 'follow', null, absent, or any garbage value → canonical default.
+        return AppColorScheme.follow;
     }
   }
 }

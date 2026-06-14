@@ -1,19 +1,27 @@
-// TDD — TASK-05 (M2): SaveBufferToRecovery use case.
+// TDD — TASK-05 (M2) + TASK-06 (M5): SaveBufferToRecovery use case.
 //
 // Test strategy:
-//   A fake RecoveryRepository records every call to save() and returns a
-//   sentinel File. The four scenarios from the spec (§5.1.2, EC-M2-02):
+//   A fake RecoveryRepository records the CALL ORDER across save() and trim()
+//   so TASK-06 tests can assert trim(10) always runs AFTER save — and never
+//   when save throws or when the trim-empty guard fires.
 //
+//   M2 scenarios (§5.1.2, EC-M2-02):
 //   1. Non-empty text  → delegates RAW text to repo.save; returns the sentinel.
 //   2. Empty string    → returns null; repo.save NEVER called.
 //   3. Whitespace-only → returns null; repo.save NEVER called.
 //   4. Padded text     → trim is non-empty, so delegates the RAW (un-trimmed)
 //                        text to repo.save; NOT the trimmed version.
 //
+//   M5 scenarios (FR-M5-03, §5.1.4):
+//   5. Non-empty text  → call order is ['save:<text>', 'trim:10'].
+//   6. save() throws   → exception propagates; trim NOT called.
+//   7. Whitespace-only → returns null; neither save nor trim called.
+//
 // Format: given_<context>_when_<action>_then_<outcome>
 
 import 'dart:io';
 
+import 'package:buffer/domain/recovery/recovery_note.dart';
 import 'package:buffer/domain/recovery/recovery_repository.dart';
 import 'package:buffer/domain/recovery/save_buffer_to_recovery.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,16 +31,43 @@ import 'package:flutter_test/flutter_test.dart';
 // ---------------------------------------------------------------------------
 
 class _FakeRecoveryRepository implements RecoveryRepository {
-  final List<String> calls = [];
+  /// Ordered record of every call made. Entries have the form:
+  ///   `save:<text>`  — for save(text)
+  ///   `trim:<keep>`  — for trim(keep)
+  final List<String> callLog = [];
+
+  /// When non-null, save() throws this exception instead of returning.
+  Object? saveError;
+
   final File sentinel;
 
   _FakeRecoveryRepository(this.sentinel);
 
   @override
   Future<File> save(String text) async {
-    calls.add(text);
+    if (saveError != null) throw saveError!;
+    callLog.add('save:$text');
     return sentinel;
   }
+
+  @override
+  Future<void> trim(int keep) async {
+    callLog.add('trim:$keep');
+  }
+
+  // --- stubs for M5 members not exercised by this use case ---
+
+  @override
+  Future<List<RecoveryNote>> list() async => const [];
+
+  @override
+  Future<String> read(RecoveryNote note) async => '';
+
+  @override
+  Future<void> delete(RecoveryNote note) async {}
+
+  @override
+  Future<void> deleteAll() async {}
 }
 
 // ---------------------------------------------------------------------------
@@ -52,7 +87,7 @@ void main() {
 
   group('SaveBufferToRecovery', () {
     // -------------------------------------------------------------------------
-    // Non-empty text → delegates raw text, returns sentinel (FR-M2-13, §5.1.2)
+    // M2: Non-empty text → delegates raw text, returns sentinel (FR-M2-13, §5.1.2)
     // -------------------------------------------------------------------------
 
     test(
@@ -60,13 +95,13 @@ void main() {
       () async {
         final result = await useCase('hello');
 
-        expect(fakeRepo.calls, equals(['hello']));
+        expect(fakeRepo.callLog, contains('save:hello'));
         expect(result, equals(sentinel));
       },
     );
 
     // -------------------------------------------------------------------------
-    // Empty string → null, zero I/O (EC-M2-02)
+    // M2: Empty string → null, zero I/O (EC-M2-02)
     // -------------------------------------------------------------------------
 
     test(
@@ -75,12 +110,12 @@ void main() {
         final result = await useCase('');
 
         expect(result, isNull);
-        expect(fakeRepo.calls, isEmpty);
+        expect(fakeRepo.callLog, isEmpty);
       },
     );
 
     // -------------------------------------------------------------------------
-    // Whitespace-only → null, zero I/O (EC-M2-02)
+    // M2: Whitespace-only → null, zero I/O (EC-M2-02)
     // -------------------------------------------------------------------------
 
     test(
@@ -89,12 +124,12 @@ void main() {
         final result = await useCase('   \n\t');
 
         expect(result, isNull);
-        expect(fakeRepo.calls, isEmpty);
+        expect(fakeRepo.callLog, isEmpty);
       },
     );
 
     // -------------------------------------------------------------------------
-    // Padded text → trim decides empty/non-empty, but RAW text is delegated
+    // M2: Padded text → trim decides empty/non-empty, but RAW text is delegated
     // -------------------------------------------------------------------------
 
     test(
@@ -102,8 +137,52 @@ void main() {
       () async {
         final result = await useCase('  hi  ');
 
-        expect(fakeRepo.calls, equals(['  hi  ']));
+        expect(fakeRepo.callLog, contains('save:  hi  '));
         expect(result, equals(sentinel));
+      },
+    );
+
+    // -------------------------------------------------------------------------
+    // M5: trim(10) called AFTER save, in that order (FR-M5-03, §5.1.4)
+    // -------------------------------------------------------------------------
+
+    test(
+      'given_non_empty_text_when_called_then_trim10_invoked_strictly_after_save',
+      () async {
+        await useCase('hello');
+
+        expect(fakeRepo.callLog, equals(['save:hello', 'trim:10']));
+      },
+    );
+
+    // -------------------------------------------------------------------------
+    // M5: save throws → trim NOT called; exception propagates (§5.1.4)
+    // -------------------------------------------------------------------------
+
+    test(
+      'given_repository_save_throws_when_called_then_exception_propagates_and_trim_is_not_called',
+      () async {
+        fakeRepo.saveError = const FileSystemException('disk full');
+
+        await expectLater(
+          () => useCase('hello'),
+          throwsA(isA<FileSystemException>()),
+        );
+        expect(fakeRepo.callLog, isEmpty);
+      },
+    );
+
+    // -------------------------------------------------------------------------
+    // M5: whitespace-only → M2 guard fires; neither save nor trim invoked
+    // -------------------------------------------------------------------------
+
+    test(
+      'given_whitespace_only_text_when_called_then_neither_save_nor_trim_invoked',
+      () async {
+        final result = await useCase('   ');
+
+        expect(result, isNull);
+        expect(fakeRepo.callLog, isEmpty);
       },
     );
   });

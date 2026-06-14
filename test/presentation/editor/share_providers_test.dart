@@ -15,6 +15,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:buffer/domain/recovery/recovery_note.dart';
 import 'package:buffer/domain/recovery/recovery_repository.dart';
 import 'package:buffer/domain/recovery/save_buffer_to_recovery.dart';
 import 'package:buffer/infrastructure/share/share_intent_service.dart';
@@ -46,6 +47,18 @@ class _FakeRecoveryRepository implements RecoveryRepository {
     // Return a non-existent sentinel File — the test only checks saveCalled.
     return File('/tmp/sentinel.txt');
   }
+
+  // M5 stubs — not exercised by these provider-graph tests.
+  @override
+  Future<List<RecoveryNote>> list() async => const [];
+  @override
+  Future<String> read(RecoveryNote note) async => '';
+  @override
+  Future<void> delete(RecoveryNote note) async {}
+  @override
+  Future<void> deleteAll() async {}
+  @override
+  Future<void> trim(int keep) async {}
 }
 
 // ---------------------------------------------------------------------------

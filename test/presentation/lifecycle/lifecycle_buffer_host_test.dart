@@ -3,6 +3,8 @@
 // Spec refs: FR-M2-05, FR-M2-06, FR-M2-07, FR-M2-08, EC-M2-02, EC-M2-06,
 //            EC-M2-08, EC-M2-13, EC-M2-14, §4.1, §4.2
 //
+// TASK-13: emergencyRecoveryEnabled gate (FR-M5-16, NFR-M5-03).
+//
 // TDD: tests written and run to FAIL before implementation.
 //
 // All lifecycle state changes are driven by calling
@@ -17,11 +19,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:buffer/domain/buffer/buffer_notifier_impl.dart';
+import 'package:buffer/domain/recovery/recovery_note.dart';
 import 'package:buffer/domain/recovery/recovery_repository.dart';
 import 'package:buffer/domain/recovery/save_buffer_to_recovery.dart';
 import 'package:buffer/domain/buffer/buffer_provider.dart';
+import 'package:buffer/domain/settings/app_settings.dart';
 import 'package:buffer/presentation/editor/share_providers.dart';
 import 'package:buffer/presentation/lifecycle/lifecycle_buffer_host.dart';
+import 'package:buffer/presentation/settings/settings_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Test doubles
@@ -36,6 +41,18 @@ class _SpyRecoveryRepository implements RecoveryRepository {
     savedTexts.add(text);
     return File('/tmp/spy_sentinel.txt');
   }
+
+  // M5 stubs — not exercised by lifecycle tests.
+  @override
+  Future<List<RecoveryNote>> list() async => const [];
+  @override
+  Future<String> read(RecoveryNote note) async => '';
+  @override
+  Future<void> delete(RecoveryNote note) async {}
+  @override
+  Future<void> deleteAll() async {}
+  @override
+  Future<void> trim(int keep) async {}
 }
 
 /// Throwing [RecoveryRepository] — simulates [FileSystemException] on save.
@@ -43,6 +60,18 @@ class _ThrowingRecoveryRepository implements RecoveryRepository {
   @override
   Future<File> save(String text) =>
       Future.error(const FileSystemException('disk full', '/tmp/recovery'));
+
+  // M5 stubs — not exercised by these throwing tests.
+  @override
+  Future<List<RecoveryNote>> list() async => const [];
+  @override
+  Future<String> read(RecoveryNote note) async => '';
+  @override
+  Future<void> delete(RecoveryNote note) async {}
+  @override
+  Future<void> deleteAll() async {}
+  @override
+  Future<void> trim(int keep) async {}
 }
 
 /// Spy [BufferNotifierImpl] — extends the concrete class so it can be
@@ -85,6 +114,44 @@ Widget _buildTestTree({
     ],
     child: MaterialApp(home: LifecycleBufferHost(child: child)),
   );
+}
+
+/// Build a testable tree with an explicit [settingsProvider] override.
+///
+/// Used by TASK-13 tests to control [emergencyRecoveryEnabled] and
+/// [AsyncLoading] states without real SharedPreferences.
+Widget _buildTestTreeWithSettings({
+  required _SpyBufferNotifier notifier,
+  required SaveBufferToRecovery useCase,
+  required AsyncValue<AppSettings> settingsValue,
+  Widget child = const SizedBox.shrink(),
+}) {
+  return ProviderScope(
+    overrides: [
+      bufferProvider.overrideWith(() => notifier),
+      saveBufferToRecoveryProvider.overrideWithValue(useCase),
+      initialSharedTextProvider.overrideWithValue(null),
+      settingsProvider.overrideWith(() => _StubSettingsNotifier(settingsValue)),
+    ],
+    child: MaterialApp(home: LifecycleBufferHost(child: child)),
+  );
+}
+
+/// Stub [SettingsNotifier] that returns a fixed [AsyncValue<AppSettings>].
+///
+/// Used in TASK-13 tests to control the settings state without real
+/// SharedPreferences (supports AsyncLoading, AsyncData, AsyncError).
+class _StubSettingsNotifier extends SettingsNotifier {
+  _StubSettingsNotifier(this._fixedValue);
+
+  final AsyncValue<AppSettings> _fixedValue;
+
+  @override
+  Future<AppSettings> build() async {
+    state = _fixedValue;
+    // Return the value or default; if loading/error, return the default.
+    return _fixedValue.value ?? const AppSettings();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -389,4 +456,220 @@ void main() {
       },
     );
   });
+
+  // ---------------------------------------------------------------------------
+  // TASK-13: emergencyRecoveryEnabled gate (FR-M5-16, NFR-M5-03)
+  // ---------------------------------------------------------------------------
+
+  group('LifecycleBufferHost — emergencyRecoveryEnabled gate (paused path)', () {
+    testWidgets(
+      'gate OFF: non-empty buffer + paused → SaveBufferToRecovery NOT invoked',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestTreeWithSettings(
+            notifier: notifier,
+            useCase: useCase,
+            settingsValue: const AsyncData(
+              AppSettings(emergencyRecoveryEnabled: false),
+            ),
+          ),
+        );
+
+        final container = tester.element(find.byType(LifecycleBufferHost));
+        final ref = ProviderScope.containerOf(container);
+        ref.read(bufferProvider.notifier).populate('hello');
+        await tester.pump();
+
+        final hostState = tester.state<LifecycleBufferHostState>(
+          find.byType(LifecycleBufferHost),
+        );
+        hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
+        await tester.pump();
+
+        // Gate is OFF → use case must NOT be called.
+        expect(spyRepo.savedTexts, isEmpty);
+      },
+    );
+
+    testWidgets(
+      'gate ON (default): non-empty buffer + paused → SaveBufferToRecovery '
+      'invoked exactly once',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestTreeWithSettings(
+            notifier: notifier,
+            useCase: useCase,
+            settingsValue: const AsyncData(AppSettings()),
+          ),
+        );
+
+        final container = tester.element(find.byType(LifecycleBufferHost));
+        final ref = ProviderScope.containerOf(container);
+        ref.read(bufferProvider.notifier).populate('hello');
+        await tester.pump();
+
+        final hostState = tester.state<LifecycleBufferHostState>(
+          find.byType(LifecycleBufferHost),
+        );
+        hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
+        await tester.pump();
+
+        // Gate is ON → call must have fired once.
+        expect(spyRepo.savedTexts, equals(['hello']));
+      },
+    );
+
+    testWidgets(
+      'settings AsyncLoading + non-empty buffer + paused → defaults to '
+      'emergencyRecoveryEnabled=true, call invoked, no throw (EC-08, NFR-M5-03)',
+      (tester) async {
+        await tester.pumpWidget(
+          _buildTestTreeWithSettings(
+            notifier: notifier,
+            useCase: useCase,
+            settingsValue: const AsyncLoading(),
+          ),
+        );
+
+        final container = tester.element(find.byType(LifecycleBufferHost));
+        final ref = ProviderScope.containerOf(container);
+        ref.read(bufferProvider.notifier).populate('async-loading text');
+        await tester.pump();
+
+        final hostState = tester.state<LifecycleBufferHostState>(
+          find.byType(LifecycleBufferHost),
+        );
+
+        // Must not throw (EC-08 / NFR-M5-03 — no requireValue).
+        hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
+        await tester.pump();
+
+        // Default AppSettings() has emergencyRecoveryEnabled=true → saves.
+        expect(spyRepo.savedTexts, equals(['async-loading text']));
+      },
+    );
+
+    testWidgets('gate ON + non-empty buffer + paused twice without resume → '
+        'call invoked exactly once (R-07 burst guard regression)', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildTestTreeWithSettings(
+          notifier: notifier,
+          useCase: useCase,
+          settingsValue: const AsyncData(AppSettings()),
+        ),
+      );
+
+      final container = tester.element(find.byType(LifecycleBufferHost));
+      final ref = ProviderScope.containerOf(container);
+      ref.read(bufferProvider.notifier).populate('burst text');
+      await tester.pump();
+
+      final hostState = tester.state<LifecycleBufferHostState>(
+        find.byType(LifecycleBufferHost),
+      );
+
+      // First paused — saves once.
+      hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
+      await tester.pump();
+      expect(spyRepo.savedTexts.length, equals(1));
+
+      // Second paused without resume — burst guard must block.
+      hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
+      await tester.pump();
+      expect(spyRepo.savedTexts.length, equals(1));
+    });
+  });
+
+  group(
+    'LifecycleBufferHost — emergencyRecoveryEnabled gate (detached path)',
+    () {
+      testWidgets('gate OFF + not-yet-saved: detached → no save', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _buildTestTreeWithSettings(
+            notifier: notifier,
+            useCase: useCase,
+            settingsValue: const AsyncData(
+              AppSettings(emergencyRecoveryEnabled: false),
+            ),
+          ),
+        );
+
+        final container = tester.element(find.byType(LifecycleBufferHost));
+        final ref = ProviderScope.containerOf(container);
+        ref.read(bufferProvider.notifier).populate('detached text');
+        await tester.pump();
+
+        final hostState = tester.state<LifecycleBufferHostState>(
+          find.byType(LifecycleBufferHost),
+        );
+        hostState.didChangeAppLifecycleState(AppLifecycleState.detached);
+        await tester.pump(const Duration(milliseconds: 50));
+
+        // Gate is OFF → use case must NOT be called.
+        expect(spyRepo.savedTexts, isEmpty);
+      });
+
+      testWidgets('gate ON + not-yet-saved: detached → save once', (
+        tester,
+      ) async {
+        await tester.pumpWidget(
+          _buildTestTreeWithSettings(
+            notifier: notifier,
+            useCase: useCase,
+            settingsValue: const AsyncData(AppSettings()),
+          ),
+        );
+
+        final container = tester.element(find.byType(LifecycleBufferHost));
+        final ref = ProviderScope.containerOf(container);
+        ref.read(bufferProvider.notifier).populate('detached text');
+        await tester.pump();
+
+        final hostState = tester.state<LifecycleBufferHostState>(
+          find.byType(LifecycleBufferHost),
+        );
+        hostState.didChangeAppLifecycleState(AppLifecycleState.detached);
+        await tester.pump(const Duration(milliseconds: 50));
+
+        // Gate is ON + guard was clear → save must have fired once.
+        expect(spyRepo.savedTexts, equals(['detached text']));
+      });
+
+      testWidgets(
+        'gate ON + already-saved (paused first): detached → no-op (burst guard)',
+        (tester) async {
+          await tester.pumpWidget(
+            _buildTestTreeWithSettings(
+              notifier: notifier,
+              useCase: useCase,
+              settingsValue: const AsyncData(AppSettings()),
+            ),
+          );
+
+          final container = tester.element(find.byType(LifecycleBufferHost));
+          final ref = ProviderScope.containerOf(container);
+          ref.read(bufferProvider.notifier).populate('hello');
+          await tester.pump();
+
+          final hostState = tester.state<LifecycleBufferHostState>(
+            find.byType(LifecycleBufferHost),
+          );
+
+          // Paused saves first.
+          hostState.didChangeAppLifecycleState(AppLifecycleState.paused);
+          await tester.pump();
+          expect(spyRepo.savedTexts.length, equals(1));
+
+          // Detached: guard already set → no additional save.
+          hostState.didChangeAppLifecycleState(AppLifecycleState.detached);
+          await tester.pump(const Duration(milliseconds: 50));
+          expect(spyRepo.savedTexts.length, equals(1));
+        },
+      );
+    },
+  );
 }

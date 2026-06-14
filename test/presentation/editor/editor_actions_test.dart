@@ -1,14 +1,18 @@
-// Tests for EditorActions — TASK-04 (M3 Text Editor).
+// Tests for EditorActions — TASK-04 (M3 Text Editor) + TASK-06 (M4 Find/Replace)
+//                           + TASK-14 (M6 PasteIntent / DismissChromeIntent).
 //
-// TDD discipline: these tests are written BEFORE the implementation file
-// (lib/presentation/editor/editor_actions.dart) exists. They must fail
-// (red) on first run, then pass (green) after implementation.
+// TDD discipline: new TASK-14 tests written BEFORE implementation. Red-phase
+// confirmed before adding PasteIntent/PasteAction/DismissChromeIntent/
+// DismissChromeAction to editor_actions.dart.
 //
-// Spec refs: FR-08, FR-14, FR-15, §5.4(c), §4.1
+// Spec refs: FR-08, FR-14, FR-15, §5.4(c), §4.1 (M3)
+//            FR-21, §5.3 intents (M4)
+//            FR-M6-20, FR-M6-21, FR-M6-22, EC-11, §5.1-g (M6)
 
 import 'package:buffer/presentation/editor/editor_actions.dart';
 import 'package:buffer/presentation/editor/editor_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // ---------------------------------------------------------------------------
@@ -76,7 +80,31 @@ class _ApplyCapture {
 }
 
 // ---------------------------------------------------------------------------
-// Tests
+// Call-recording helpers for find Actions
+// (Actions take explicit VoidCallbacks / named callbacks — no WidgetRef,
+// no concrete FindNotifier import — keeping them testable without a tree)
+// ---------------------------------------------------------------------------
+
+/// Records calls to findProvider.startSearch({required int entryOffset}).
+class _StartSearchCapture {
+  int callCount = 0;
+  int? lastOffset;
+
+  void call({required int entryOffset}) {
+    callCount++;
+    lastOffset = entryOffset;
+  }
+}
+
+/// Records calls to a single no-arg verb (next / previous / close).
+class _VerbCapture {
+  int callCount = 0;
+
+  void call() => callCount++;
+}
+
+// ---------------------------------------------------------------------------
+// Tests — M3 intents/actions (existing; keep intact)
 // ---------------------------------------------------------------------------
 
 void main() {
@@ -521,5 +549,608 @@ void main() {
         expect(controller.continueCallCount, 1);
       },
     );
+  });
+
+  // =========================================================================
+  // M4 Find/Replace Intents & Actions (TASK-06, FR-21, spec §5.3 intents)
+  // =========================================================================
+
+  // -------------------------------------------------------------------------
+  // Intent type identity — each intent is a distinct concrete Intent subclass
+  // recognised by its paired Action (FR-21 / spec §5.3)
+  // -------------------------------------------------------------------------
+  group('Find intents — type identity', () {
+    test('OpenFindIntent is a concrete Intent subclass', () {
+      expect(const OpenFindIntent(), isA<Intent>());
+    });
+
+    test('FindNextIntent is a concrete Intent subclass', () {
+      expect(const FindNextIntent(), isA<Intent>());
+    });
+
+    test('FindPrevIntent is a concrete Intent subclass', () {
+      expect(const FindPrevIntent(), isA<Intent>());
+    });
+
+    test('ToggleReplaceIntent is a concrete Intent subclass', () {
+      expect(const ToggleReplaceIntent(), isA<Intent>());
+    });
+
+    test('CloseFindIntent is a concrete Intent subclass', () {
+      expect(const CloseFindIntent(), isA<Intent>());
+    });
+
+    test('OpenFindIntent, FindNextIntent, FindPrevIntent, ToggleReplaceIntent, '
+        'CloseFindIntent are all distinct runtime types', () {
+      expect(
+        const OpenFindIntent().runtimeType,
+        isNot(equals(const FindNextIntent().runtimeType)),
+      );
+      expect(
+        const FindNextIntent().runtimeType,
+        isNot(equals(const FindPrevIntent().runtimeType)),
+      );
+      expect(
+        const FindPrevIntent().runtimeType,
+        isNot(equals(const ToggleReplaceIntent().runtimeType)),
+      );
+      expect(
+        const ToggleReplaceIntent().runtimeType,
+        isNot(equals(const CloseFindIntent().runtimeType)),
+      );
+    });
+
+    test('find intent const constructors produce identical instances', () {
+      expect(identical(const OpenFindIntent(), const OpenFindIntent()), isTrue);
+      expect(identical(const FindNextIntent(), const FindNextIntent()), isTrue);
+      expect(identical(const FindPrevIntent(), const FindPrevIntent()), isTrue);
+      expect(
+        identical(const ToggleReplaceIntent(), const ToggleReplaceIntent()),
+        isTrue,
+      );
+      expect(
+        identical(const CloseFindIntent(), const CloseFindIntent()),
+        isTrue,
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // OpenFindIntent → OpenFindAction
+  // Invokes findProvider.startSearch(entryOffset) with the caret offset
+  // captured from the controller (FR-21, spec §5.3).
+  // -------------------------------------------------------------------------
+  group('OpenFindAction', () {
+    late _FakeController controller;
+    late _StartSearchCapture startSearch;
+    late OpenFindAction action;
+
+    setUp(() {
+      controller = _FakeController(text: 'hello world');
+      controller.selection = const TextSelection.collapsed(offset: 5);
+      startSearch = _StartSearchCapture();
+      action = OpenFindAction(
+        controller: controller,
+        startSearch: startSearch.call,
+      );
+    });
+
+    test('is enabled for OpenFindIntent', () {
+      expect(action.isEnabled(const OpenFindIntent()), isTrue);
+    });
+
+    test('invokes findProvider.startSearch with current caret offset', () {
+      action.invoke(const OpenFindIntent());
+      expect(startSearch.callCount, 1);
+      expect(startSearch.lastOffset, 5);
+    });
+
+    test('caret offset reflects controller.selection.baseOffset', () {
+      controller.selection = const TextSelection.collapsed(offset: 7);
+      action.invoke(const OpenFindIntent());
+      expect(startSearch.lastOffset, 7);
+    });
+
+    test('startSearch called exactly once per invoke', () {
+      action.invoke(const OpenFindIntent());
+      action.invoke(const OpenFindIntent());
+      expect(startSearch.callCount, 2);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // FindNextIntent → FindNextAction
+  // Invokes findProvider.next() exactly once; no divergent second path
+  // (FR-21 single-path convergence, EC-16).
+  // -------------------------------------------------------------------------
+  group('FindNextAction', () {
+    late _VerbCapture nextCapture;
+    late FindNextAction action;
+
+    setUp(() {
+      nextCapture = _VerbCapture();
+      action = FindNextAction(next: nextCapture.call);
+    });
+
+    test('is enabled for FindNextIntent', () {
+      expect(action.isEnabled(const FindNextIntent()), isTrue);
+    });
+
+    test('invokes findProvider.next() exactly once', () {
+      action.invoke(const FindNextIntent());
+      expect(nextCapture.callCount, 1);
+    });
+
+    test('next called once per invoke (no duplicate calls)', () {
+      action.invoke(const FindNextIntent());
+      action.invoke(const FindNextIntent());
+      expect(nextCapture.callCount, 2);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // FindPrevIntent → FindPrevAction
+  // Invokes findProvider.previous() exactly once; no divergent second path
+  // (FR-21 single-path convergence).
+  // -------------------------------------------------------------------------
+  group('FindPrevAction', () {
+    late _VerbCapture prevCapture;
+    late FindPrevAction action;
+
+    setUp(() {
+      prevCapture = _VerbCapture();
+      action = FindPrevAction(previous: prevCapture.call);
+    });
+
+    test('is enabled for FindPrevIntent', () {
+      expect(action.isEnabled(const FindPrevIntent()), isTrue);
+    });
+
+    test('invokes findProvider.previous() exactly once', () {
+      action.invoke(const FindPrevIntent());
+      expect(prevCapture.callCount, 1);
+    });
+
+    test('previous called once per invoke (no duplicate calls)', () {
+      action.invoke(const FindPrevIntent());
+      action.invoke(const FindPrevIntent());
+      expect(prevCapture.callCount, 2);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // ToggleReplaceIntent → ToggleReplaceAction
+  // Toggles the replace row via a screen-owned VoidCallback (UI-row concern
+  // per spec §5.3 — the replace-row visibility is owned by FindSearchBar,
+  // not by the find provider).
+  // -------------------------------------------------------------------------
+  group('ToggleReplaceAction', () {
+    test('is enabled for ToggleReplaceIntent', () {
+      int callCount = 0;
+      final action = ToggleReplaceAction(onToggle: () => callCount++);
+      expect(action.isEnabled(const ToggleReplaceIntent()), isTrue);
+    });
+
+    test('invokes the onToggle callback exactly once per invoke', () {
+      int callCount = 0;
+      final action = ToggleReplaceAction(onToggle: () => callCount++);
+      action.invoke(const ToggleReplaceIntent());
+      expect(callCount, 1);
+    });
+
+    test('invokes onToggle a second time on second invoke', () {
+      int callCount = 0;
+      final action = ToggleReplaceAction(onToggle: () => callCount++);
+      action.invoke(const ToggleReplaceIntent());
+      action.invoke(const ToggleReplaceIntent());
+      expect(callCount, 2);
+    });
+
+    test('does NOT require findProvider — VoidCallback only', () {
+      // ToggleReplaceAction only holds the VoidCallback; its construction
+      // does not require a notifier — verifying it compiles and invokes
+      // without a notifier is sufficient.
+      bool toggled = false;
+      final action = ToggleReplaceAction(onToggle: () => toggled = true);
+      action.invoke(const ToggleReplaceIntent());
+      expect(toggled, isTrue);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // CloseFindIntent → CloseFindAction
+  // Invokes findProvider.close() on activation (FR-21, FR-20).
+  // -------------------------------------------------------------------------
+  group('CloseFindAction', () {
+    late _VerbCapture closeCapture;
+    late CloseFindAction action;
+
+    setUp(() {
+      closeCapture = _VerbCapture();
+      action = CloseFindAction(close: closeCapture.call);
+    });
+
+    test('is enabled for CloseFindIntent', () {
+      expect(action.isEnabled(const CloseFindIntent()), isTrue);
+    });
+
+    test('invokes findProvider.close() exactly once', () {
+      action.invoke(const CloseFindIntent());
+      expect(closeCapture.callCount, 1);
+    });
+
+    test('close called once per invoke (no duplicate calls)', () {
+      action.invoke(const CloseFindIntent());
+      action.invoke(const CloseFindIntent());
+      expect(closeCapture.callCount, 2);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Single-path convergence (FR-21 / EC-16) — hardware shortcut Actions
+  // call the same findProvider verbs the on-screen buttons call.
+  // Testable without a widget tree: Actions take explicit callbacks that
+  // bind to findProvider.startSearch / .next / .previous / .close at the
+  // BufferScreen wiring site (TASK-07); no divergent second codepath exists.
+  // -------------------------------------------------------------------------
+  group('Single-path convergence (FR-21 / EC-16)', () {
+    test('all five find Actions operate without a widget tree '
+        '— zero widget infrastructure', () {
+      final controller = _FakeController(text: 'some text');
+      controller.selection = const TextSelection.collapsed(offset: 4);
+
+      final startSearch = _StartSearchCapture();
+      final nextVerb = _VerbCapture();
+      final prevVerb = _VerbCapture();
+      final closeVerb = _VerbCapture();
+      int toggleCount = 0;
+
+      final openAction = OpenFindAction(
+        controller: controller,
+        startSearch: startSearch.call,
+      );
+      final nextAction = FindNextAction(next: nextVerb.call);
+      final prevAction = FindPrevAction(previous: prevVerb.call);
+      final closeAction = CloseFindAction(close: closeVerb.call);
+      final toggleAction = ToggleReplaceAction(onToggle: () => toggleCount++);
+
+      openAction.invoke(const OpenFindIntent());
+      nextAction.invoke(const FindNextIntent());
+      prevAction.invoke(const FindPrevIntent());
+      closeAction.invoke(const CloseFindIntent());
+      toggleAction.invoke(const ToggleReplaceIntent());
+
+      expect(startSearch.callCount, 1);
+      expect(startSearch.lastOffset, 4);
+      expect(nextVerb.callCount, 1);
+      expect(prevVerb.callCount, 1);
+      expect(closeVerb.callCount, 1);
+      expect(toggleCount, 1);
+    });
+  });
+
+  // =========================================================================
+  // M6 — PasteIntent / PasteAction (TASK-14, FR-M6-20, EC-11, §5.1-g)
+  // =========================================================================
+  //
+  // The Clipboard platform channel is stubbed via
+  // TestDefaultBinaryMessengerBinding so no real clipboard is accessed.
+  // PasteAction takes (controller, apply) — identical dependency-pair
+  // pattern as EditorIndentAction. It reads getData synchronously in tests
+  // by stubbing the MethodChannel codec.
+  //
+  // Stub helper: registers a handler on BasicMessageChannel used by
+  // Clipboard.getData that returns the supplied ClipboardData map, then
+  // cleans up after the test.
+
+  // ---------------------------------------------------------------------------
+  // Clipboard stub utilities
+  // ---------------------------------------------------------------------------
+
+  /// Registers a fake Clipboard.getData response on the platform channel.
+  ///
+  /// [data] — the text to return, or null to simulate an empty clipboard.
+  /// Returns a teardown callback; call it (or pass to addTearDown) to
+  /// remove the handler after the test.
+  void Function() stubClipboard(String? data) {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (
+          MethodCall call,
+        ) async {
+          if (call.method == 'Clipboard.getData') {
+            return data == null ? null : {'text': data};
+          }
+          return null;
+        });
+    return () {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // PasteIntent — type identity
+  // -------------------------------------------------------------------------
+  group('PasteIntent — type identity', () {
+    test('PasteIntent is a concrete Intent subclass', () {
+      expect(const PasteIntent(), isA<Intent>());
+    });
+
+    test('PasteIntent const constructor produces identical instances', () {
+      expect(identical(const PasteIntent(), const PasteIntent()), isTrue);
+    });
+
+    test('PasteIntent is distinct from all M4 intent runtime types', () {
+      expect(
+        const PasteIntent().runtimeType,
+        isNot(equals(const OpenFindIntent().runtimeType)),
+      );
+      expect(
+        const PasteIntent().runtimeType,
+        isNot(equals(const CloseFindIntent().runtimeType)),
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // PasteAction — clipboard has data → insert at caret via apply callback
+  //
+  // Uses testWidgets because PasteAction.invoke is async (Clipboard.getData
+  // returns a Future) and we need a WidgetTester pump to drive the async call.
+  // -------------------------------------------------------------------------
+  group('PasteAction — clipboard has data (FR-M6-20, EC-11)', () {
+    testWidgets(
+      'inserts clipboard text at caret and forwards to apply callback',
+      (tester) async {
+        final teardown = stubClipboard('pasted');
+        addTearDown(teardown);
+
+        final controller = _FakeController(text: 'hello world');
+        // caret at offset 5 (between 'hello' and ' world')
+        controller.selection = const TextSelection.collapsed(offset: 5);
+
+        ({String text, TextSelection selection})? applied;
+        final action = PasteAction(
+          controller: controller,
+          apply: (r) => applied = r,
+        );
+
+        action.invoke(const PasteIntent());
+        await tester.pump();
+
+        expect(applied, isNotNull);
+        expect(applied!.text, 'hellopasted world');
+        expect(applied!.selection.baseOffset, 11); // 5 + 'pasted'.length
+        expect(applied!.selection.isCollapsed, isTrue);
+      },
+    );
+
+    testWidgets('Clipboard.getData is called exactly once per invoke', (
+      tester,
+    ) async {
+      int callCount = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (
+            MethodCall call,
+          ) async {
+            if (call.method == 'Clipboard.getData') {
+              callCount++;
+              return {'text': 'x'};
+            }
+            return null;
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+      });
+
+      final controller = _FakeController(text: 'abc');
+      controller.selection = const TextSelection.collapsed(offset: 3);
+      final action = PasteAction(controller: controller, apply: (_) {});
+
+      action.invoke(const PasteIntent());
+      await tester.pump();
+
+      expect(callCount, 1);
+    });
+
+    testWidgets(
+      'routes through the single write path — apply called exactly once',
+      (tester) async {
+        final teardown = stubClipboard('data');
+        addTearDown(teardown);
+
+        final controller = _FakeController(text: 'text');
+        controller.selection = const TextSelection.collapsed(offset: 4);
+        int applyCount = 0;
+        final action = PasteAction(
+          controller: controller,
+          apply: (_) => applyCount++,
+        );
+
+        action.invoke(const PasteIntent());
+        await tester.pump();
+
+        expect(applyCount, 1);
+      },
+    );
+
+    testWidgets('is enabled for PasteIntent', (tester) async {
+      final teardown = stubClipboard('anything');
+      addTearDown(teardown);
+
+      final controller = _FakeController(text: '');
+      controller.selection = const TextSelection.collapsed(offset: 0);
+      final action = PasteAction(controller: controller, apply: (_) {});
+
+      expect(action.isEnabled(const PasteIntent()), isTrue);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // PasteAction — clipboard null / empty → no-op, no exception (EC-11)
+  // -------------------------------------------------------------------------
+  group('PasteAction — null clipboard (EC-11 no-op)', () {
+    testWidgets('null clipboard data → apply NOT called, no exception', (
+      tester,
+    ) async {
+      final teardown = stubClipboard(null);
+      addTearDown(teardown);
+
+      final controller = _FakeController(text: 'original');
+      controller.selection = const TextSelection.collapsed(offset: 8);
+      ({String text, TextSelection selection})? applied;
+      final action = PasteAction(
+        controller: controller,
+        apply: (r) => applied = r,
+      );
+
+      // Must not throw.
+      action.invoke(const PasteIntent());
+      await tester.pump();
+
+      expect(applied, isNull, reason: 'no-op: apply must not be called');
+    });
+
+    testWidgets('empty-string clipboard data → apply NOT called', (
+      tester,
+    ) async {
+      final teardown = stubClipboard('');
+      addTearDown(teardown);
+
+      final controller = _FakeController(text: 'original');
+      controller.selection = const TextSelection.collapsed(offset: 3);
+      ({String text, TextSelection selection})? applied;
+      final action = PasteAction(
+        controller: controller,
+        apply: (r) => applied = r,
+      );
+
+      action.invoke(const PasteIntent());
+      await tester.pump();
+
+      expect(applied, isNull, reason: 'empty clipboard → no-op');
+    });
+  });
+
+  // =========================================================================
+  // M6 — DismissChromeIntent / DismissChromeAction
+  //      (TASK-14, FR-M6-22, §5.1-g)
+  // =========================================================================
+
+  // -------------------------------------------------------------------------
+  // DismissChromeIntent — type identity
+  // -------------------------------------------------------------------------
+  group('DismissChromeIntent — type identity', () {
+    test('DismissChromeIntent is a concrete Intent subclass', () {
+      expect(const DismissChromeIntent(), isA<Intent>());
+    });
+
+    test(
+      'DismissChromeIntent const constructor produces identical instances',
+      () {
+        expect(
+          identical(const DismissChromeIntent(), const DismissChromeIntent()),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'DismissChromeIntent is distinct from PasteIntent and all M4 intents',
+      () {
+        expect(
+          const DismissChromeIntent().runtimeType,
+          isNot(equals(const PasteIntent().runtimeType)),
+        );
+        expect(
+          const DismissChromeIntent().runtimeType,
+          isNot(equals(const CloseFindIntent().runtimeType)),
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // DismissChromeAction — calls the onDismiss callback
+  //
+  // Design: explicit-dependency pattern (VoidCallback), identical to
+  // CloseFindAction. No WidgetRef / Riverpod import; the callback binds to
+  // ref.read(chromeVisibilityProvider.notifier).onTextChanged() at the
+  // BufferScreen wiring site (TASK-12), setting visibility to false.
+  // -------------------------------------------------------------------------
+  group('DismissChromeAction (FR-M6-22)', () {
+    test('is enabled for DismissChromeIntent', () {
+      int callCount = 0;
+      final action = DismissChromeAction(onDismiss: () => callCount++);
+      expect(action.isEnabled(const DismissChromeIntent()), isTrue);
+    });
+
+    test('calls onDismiss callback exactly once per invoke', () {
+      int callCount = 0;
+      final action = DismissChromeAction(onDismiss: () => callCount++);
+      action.invoke(const DismissChromeIntent());
+      expect(callCount, 1);
+    });
+
+    test('calls onDismiss a second time on second invoke', () {
+      int callCount = 0;
+      final action = DismissChromeAction(onDismiss: () => callCount++);
+      action.invoke(const DismissChromeIntent());
+      action.invoke(const DismissChromeIntent());
+      expect(callCount, 2);
+    });
+
+    test('does NOT require WidgetRef — VoidCallback only', () {
+      // DismissChromeAction only holds the VoidCallback; its construction
+      // does not require a notifier.
+      bool dismissed = false;
+      final action = DismissChromeAction(onDismiss: () => dismissed = true);
+      action.invoke(const DismissChromeIntent());
+      expect(dismissed, isTrue);
+    });
+  });
+
+  // =========================================================================
+  // M6 regression — existing M4 intents unchanged after TASK-14 additions
+  // =========================================================================
+  group('M4 intents unchanged after M6 additions (regression)', () {
+    test('CloseFindIntent still concrete Intent subclass', () {
+      expect(const CloseFindIntent(), isA<Intent>());
+    });
+
+    test('OpenFindIntent still concrete Intent subclass', () {
+      expect(const OpenFindIntent(), isA<Intent>());
+    });
+
+    test('CloseFindAction still invokes close callback', () {
+      int closeCount = 0;
+      final action = CloseFindAction(close: () => closeCount++);
+      action.invoke(const CloseFindIntent());
+      expect(closeCount, 1);
+    });
+
+    test('all M4 intent types are distinct from M6 intent types', () {
+      final m4Types = [
+        const OpenFindIntent().runtimeType,
+        const FindNextIntent().runtimeType,
+        const FindPrevIntent().runtimeType,
+        const ToggleReplaceIntent().runtimeType,
+        const CloseFindIntent().runtimeType,
+      ];
+      final m6Types = [
+        const PasteIntent().runtimeType,
+        const DismissChromeIntent().runtimeType,
+      ];
+      for (final m4 in m4Types) {
+        for (final m6 in m6Types) {
+          expect(
+            m4,
+            isNot(equals(m6)),
+            reason: '$m4 must be distinct from $m6',
+          );
+        }
+      }
+    });
   });
 }

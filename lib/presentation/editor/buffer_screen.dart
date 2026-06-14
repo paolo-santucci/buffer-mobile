@@ -1,5 +1,8 @@
 // TASK-09 (M2): BufferScreen — blank chrome-free editor surface.
 // TASK-05 (M3): BufferScreen — M3 behaviour wiring (8 serial sub-steps).
+// TASK-07 (M4): BufferScreen — find/replace integration wiring.
+// TASK-12 (M5): BufferScreen — kDebugMode /recovery entry affordance.
+// TASK-12 (M6): BufferScreen — shell integration (Stack+chrome+toast+menu+paste+Esc).
 //
 // Spec refs (M2): FR-M2-01, FR-M2-02, FR-M2-03, FR-M2-04, FR-M2-15,
 //                 FR-M2-16, FR-M2-17, EC-M2-01, EC-M2-03..EC-M2-05,
@@ -8,28 +11,68 @@
 // Spec refs (M3): FR-01..FR-21, NFR-01..NFR-06, EC-11..EC-14, EC-19..EC-25,
 //                 EC-27, §5.4(a)–(h)
 //
+// Spec refs (M4): FR-05, FR-07, FR-13, FR-14, FR-16, FR-17, FR-18, FR-20,
+//                 FR-21, FR-22; NFR-01, NFR-04, NFR-07; spec §4.3/§5.4/§5.5
+//
+// Spec refs (M6): FR-M6-05, FR-M6-06, FR-M6-07, FR-M6-18, FR-M6-20,
+//                 FR-M6-22, FR-M6-23, EC-04, EC-07, EC-11, NFR-M6-04, §4.3
+//
 // Canon refs: .claude/docs/canon/ui-design-bible.md
 //   §Design ethos — "chrome-free at rest"; content fills the screen.
 //   §Components §1 — App shell: Scaffold body = full-bleed editor.
+//   §Components §2 — Auto-hiding overlay chrome (Stack/Positioned).
 //   §Components §3 — Editor text view: full-bleed, maxLines:null, no border,
 //                    line-height 1.4, monospace, dynamic margins.
+//   §Components §4 — Search header bar mobile adaptation.
+//   §Components §8 — Timed notification toast (Positioned top-centre).
 //   §Typography — line-height factor 1.4 (single TextStyle definition).
 //   §Spacing    — MARGIN_BELOW_CURSOR = 22.0 px below caret.
 //
-// Sub-step summary (§5.4):
+// Sub-step summary (§5.4 M3):
 //  (a) \n-in-change-path interception + detection predicate (OQ-04, R-03)
 //  (b) _continuing re-entrancy guard (distinct from _applyingState, C2,
 //      EC-13/EC-14); atomic _controller.value rewrite; single updateText call.
 //  (c) Shortcuts/Actions hardware-key map: Return/KP_Enter/ISO_Enter →
 //      ContinueListIntent; Tab → IndentIntent; Shift+Tab → OutdentIntent.
+//      M4 adds: Ctrl+F → OpenFindIntent; Ctrl+G → FindNextIntent;
+//      Ctrl+Shift+G → FindPrevIntent; Ctrl+H → ToggleReplaceIntent;
+//      M6 revises Esc: precedence chain (find→chrome) replacing CloseFindIntent.
+//      M6 adds: Ctrl+V → PasteIntent.
 //  (d) WidgetsBindingObserver — didChangeMetrics records viewInsets.bottom;
 //      margin-scroll gated on inset-stability (§4.3, FR-18).
+//      M6: keyboard-dismiss (inset→0) feeds ChromeRevealController.
 //  (e) Two scroll mechanisms on _scrollController: after-Enter (FR-16) and
 //      on-change margin scroll (FR-17). TextField.scrollController = shared one.
+//      M4 adds scroll-to-match via the same shared ScrollController (FR-17).
+//      M6 adds GUARDED chrome scroll listener (4th consumer, EC-07, D5/R-04).
 //  (f) Single editor TextStyle height:1.4, no fontSize, no fontFamily (FR-03).
 //      Pre-existing CANON GAPs (monospace, margin interpolation) left in place.
 //  (g) Spell-check from settingsProvider.spellingEnabled (FR-20/21).
-//  (h) kDebugMode-only indent/outdent debug affordance (OQ-02, EC-22).
+//  (h) M6: kDebugMode debug row REMOVED (FR-M6-23, OQ-M5-08 resolved). Menu
+//      sheet is the sole nav entry via ChromeOverlay affordance.
+//
+// M4 sub-steps (§5.4/§5.5):
+//  (i) FindSearchBar mounted as Stack Positioned slot (top) when active —
+//      NOT a Column row (EC-04). Editor size invariant across find show/hide.
+//  (j) _editorFocusNode + _searchFocusNode: created initState, disposed in
+//      strict order in dispose(); _editorFocusNode wired to editor TextField.
+//  (k) ref.listen<FindState>(findProvider, _applyFindToController): pushes
+//      highlightRanges + currentMatchIndex, drives scroll-to-match.
+//  (l) Replace: FindSearchBar.onReplace → replaceCurrent() → _applyResult.
+//  (m) close() → findProvider.close() + _editorFocusNode.requestFocus() (no
+//      caret move — EC-10).
+//
+// M6 wiring (§4.3):
+//  (n) Stack layout: bottom=editor, top-end=ChromeOverlay, top-centre=ToastOverlay.
+//      FindSearchBar as top Positioned slot inside Stack (EC-04 invariant).
+//  (o) Chrome reveal inputs:
+//        _onControllerChanged → ChromeRevealController.onTextChanged()
+//        guarded scroll listener → ChromeRevealController.onUserScroll(dir)
+//        didChangeMetrics (inset→0) → ChromeRevealController.onKeyboardDismissed()
+//  (p) PasteIntent/PasteAction wired (Ctrl+V → clipboard insert via _applyResult).
+//  (q) Esc precedence: find open → CloseFindIntent; else → DismissChromeIntent.
+//  (r) Semantics(label:'Indent'/'Outdent') localized via ARB editorIndentLabel/
+//      editorOutdentLabel (FR-M6-18).
 //
 // Two-way sync seam (§5.1.5):
 //   controller→state: addListener gated on text inequality → updateText.
@@ -47,33 +90,56 @@
 // No print().
 
 import 'dart:async';
+import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:buffer/domain/buffer/buffer_provider.dart';
 import 'package:buffer/domain/buffer/buffer_state.dart';
+import 'package:buffer/domain/find/find_engine.dart';
+import 'package:buffer/domain/find/find_state.dart';
 import 'package:buffer/domain/settings/app_settings.dart';
 import 'package:buffer/presentation/editor/editor_actions.dart';
 import 'package:buffer/presentation/editor/editor_controller.dart';
+import 'package:buffer/presentation/editor/editor_layout.dart';
 import 'package:buffer/presentation/editor/share_providers.dart';
+import 'package:buffer/presentation/find/find_provider.dart';
+import 'package:buffer/presentation/find/find_search_bar.dart';
+import 'package:buffer/l10n/app_localizations.dart';
 import 'package:buffer/presentation/settings/settings_provider.dart';
+import 'package:buffer/presentation/shell/chrome_overlay.dart';
+import 'package:buffer/presentation/shell/chrome_reveal_controller.dart';
+import 'package:buffer/presentation/shell/menu_sheet.dart';
+import 'package:buffer/presentation/shell/toast_controller.dart';
+import 'package:buffer/presentation/shell/toast_overlay.dart';
 
-// <!-- CANON GAP: §Components §3 specifies a monospace font family resolved
-//      from the platform's system monospace font (Roboto Mono / SF Mono).
-//      Flutter's TextField does not auto-resolve a monospace font by default.
-//      The font family is not wired here until the TypographySettings /
-//      Settings screen integration (M7). For now the TextField inherits
-//      the theme's default font. This gap is pre-existing and tracked in
-//      D-003 and the typography spec open questions. -->
+// M7 (TASK-12): Both CANON GAPs below are RESOLVED in this file.
+//   (c) Font family is now wired from settings.useMonospaceFont (FR-M7-09).
+//   (e) Responsive margin is now a LayoutBuilder inside Positioned.fill (FR-M7-11).
 
-// <!-- CANON GAP: §Components §3 specifies dynamic margin interpolation
-//      (MINIMUM_MARGIN=10 to BASE_MARGIN=36 over viewport widths 400..800).
-//      The padding is hardcoded here to the minimum (10) for M2/M3.
-//      A LayoutBuilder-based interpolation will be wired in a later milestone
-//      per the LP plan §4 "line-width / responsive max-width". M7 owns this. -->
+// ---------------------------------------------------------------------------
+// M7 (TASK-12): Pure pinch scale→slot-index mapping helper.
+//
+// Exported @visibleForTesting so unit tests can call it directly (OQ-M7-09)
+// without requiring synthetic multi-pointer events.
+//
+// Algorithm: log2(scale) maps the continuous scale to a signed step count.
+// Each step of ≈1.15× (factor between adjacent slots) advances one slot.
+// We use a step threshold of 0.2 log-scale units, anchored to startIndex.
+// Clamping to [0, slotList.length-1] is done by the caller.
+// ---------------------------------------------------------------------------
+@visibleForTesting
+int scaleToSlotDelta(double scale, int startIndex) {
+  if (scale <= 0.0 || scale == 1.0) return 0;
+  // ln(scale) / ln(1.15) ≈ number of 15%-apart slots to advance.
+  // A threshold of 0.5 slot-units makes the mapping deterministic and
+  // matches a moderate two-finger pinch.
+  final delta = math.log(scale) / math.log(1.15);
+  return delta.round();
+}
 
 /// Named constant for the on-change cursor-margin scroll threshold (§5.4e,
 /// §5.5, canon §Spacing). The editor always keeps at least this many logical
@@ -83,15 +149,61 @@ import 'package:buffer/presentation/settings/settings_provider.dart';
 // ignore: constant_identifier_names
 const double kMarginBelowCursor = 22.0;
 
+// ---------------------------------------------------------------------------
+// EC-07 / OQ-M6-09: @visibleForTesting seam interface
+//
+// The production state class implements this interface so widget tests can
+// drive the guarded chrome scroll listener and the keyboard-dismiss path
+// without requiring real platform events (scroll notifications, view insets).
+//
+// Tests cast: `tester.state(find.byType(BufferScreen)) as BufferScreenTestSeam`.
+// The cast is valid because [_BufferScreenState] implements this interface.
+// ---------------------------------------------------------------------------
+
+/// Test seam for [BufferScreen]'s guarded chrome scroll listener (EC-07,
+/// OQ-M6-09).
+///
+/// Implemented by [_BufferScreenState] via `@visibleForTesting` methods.
+@visibleForTesting
+abstract interface class BufferScreenTestSeam {
+  /// Simulates a scroll direction notification through the guarded listener.
+  ///
+  /// Respects the `_applyingState || _continuing` guard (EC-07): if either
+  /// flag is true, the call is ignored and chrome state does not change.
+  void testOnScrollNotification(ScrollDirection direction);
+
+  /// Force-sets the `_applyingState` guard to [value].
+  ///
+  /// Used by EC-07 tests to verify that the guard suppresses chrome toggling
+  /// without needing to exercise the real find/continuation code paths.
+  void testSetApplyingState(bool value);
+
+  /// Simulates a keyboard-dismiss event (inset → 0 transition).
+  ///
+  /// Calls [ChromeRevealController.onKeyboardDismissed] directly, bypassing
+  /// the `didChangeMetrics` / `viewInsets` platform channel dependency.
+  void testOnKeyboardDismissed();
+}
+
 /// The primary buffer editing screen.
 ///
-/// Renders a blank, chrome-free, full-bleed text editor. Owns the
-/// [EditorController] and an external [ScrollController] (§5.3 "who owns
-/// scrolling" — the scroll controller is external so that chrome-reveal /
-/// scroll-to-match consumers in later milestones can share it without
-/// re-plumbing).
+/// Renders a full-bleed text editor wrapped in the M6 shell:
+///   - [Stack] hosting the editor [TextField] (fills the stack),
+///     [ChromeOverlay] (Positioned top-end), and [ToastOverlay] (Positioned
+///     top-centre). The [FindSearchBar] mounts as a Positioned top slot in
+///     the same Stack when active (EC-04 — editor size invariant).
+///   - Auto-hiding chrome driven by three inputs: text change, user scroll
+///     (guarded), and keyboard dismiss.
+///   - Menu sheet opened from the chrome affordance tap (FR-M6-23).
+///   - Clipboard paste (Ctrl+V) routed through [_applyResult] (FR-M6-20).
+///   - Esc precedence: find open → close find; else → hide chrome (FR-M6-22).
 ///
-/// This widget does NOT register itself at route `/` — that swap is TASK-11.
+/// Owns the [EditorController] and an external [ScrollController] (§5.3 "who
+/// owns scrolling" — external so chrome-reveal / scroll-to-match consumers
+/// can share it without re-plumbing). The chrome scroll listener is the 4th
+/// consumer of this controller (D5/R-04, EC-07).
+///
+/// This widget does NOT register itself at route `/` — that swap is TASK-16.
 class BufferScreen extends ConsumerStatefulWidget {
   const BufferScreen({super.key});
 
@@ -103,22 +215,67 @@ class BufferScreen extends ConsumerStatefulWidget {
 // Kept out of LifecycleBufferHost (SRP: lifecycle host owns paused/resumed +
 // the R-07 save guard; this observer owns keyboard-inset tracking only).
 class _BufferScreenState extends ConsumerState<BufferScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver
+    implements BufferScreenTestSeam {
   late final EditorController _controller;
   late final ScrollController _scrollController;
   StreamSubscription<String>? _shareSubscription;
+
+  // -------------------------------------------------------------------------
+  // M4: FocusNode ownership (FR-22, spec §5.5)
+  // -------------------------------------------------------------------------
+
+  /// Owns the editor TextField's focus (FR-22 / spec §5.5).
+  ///
+  /// Wired to the editor TextField so the screen can programmatically
+  /// request editor focus on close() without moving the caret (EC-10).
+  late final FocusNode _editorFocusNode;
+
+  /// Owns the FindSearchBar's search-field focus (FR-22 / spec §5.5).
+  ///
+  /// Passed to [FindSearchBar] so the screen can refocus + select-all on
+  /// Ctrl+F re-press (spec §5.3 / OQ-04 refocus path).
+  late final FocusNode _searchFocusNode;
+
+  // -------------------------------------------------------------------------
+  // M4: Replace-row visibility notifier (ToggleReplaceAction / Ctrl+H)
+  // -------------------------------------------------------------------------
+
+  /// External controller for [FindSearchBar]'s replace-row visibility.
+  ///
+  /// Shared between the screen (which toggles it via Ctrl+H /
+  /// [ToggleReplaceAction]) and [FindSearchBar] (which reads/writes it).
+  /// Replace-row visibility is a UI concern, NOT held in [findProvider]
+  /// state (spec §5.3 / [ToggleReplaceIntent] docs).
+  final ValueNotifier<bool> _replaceRowNotifier = ValueNotifier<bool>(false);
+
+  // -------------------------------------------------------------------------
+  // M7 (TASK-12): Pinch-to-zoom state
+  //
+  // Orthogonal to _applyingState/_continuing (those guard text rewrites).
+  // Persisted ONLY in onScaleEnd to avoid excessive provider mutations.
+  // -------------------------------------------------------------------------
+
+  /// The fontSizeIndex captured at the start of a two-pointer pinch gesture.
+  int _scaleStartIndex = 0;
 
   // -------------------------------------------------------------------------
   // Re-entrancy guards
   // -------------------------------------------------------------------------
 
   /// Guards state→controller applies (echo-loop suppression, EC-M2-03).
+  ///
+  /// Also consulted by the chrome scroll listener (EC-07): while this flag
+  /// is set (during a programmatic find `animateTo` or similar), user scroll
+  /// events are ignored so chrome does NOT toggle.
   bool _applyingState = false;
 
   /// (b) Guards the continuation's own atomic _controller.value rewrite
   /// (distinct from _applyingState — different actor, C2, EC-13, EC-14).
   /// Prevents the atomic rewrite from recursively re-entering the detection
   /// predicate and triggering a second continuation.
+  ///
+  /// Also consulted by the chrome scroll listener (EC-07, same as _applyingState).
   bool _continuing = false;
 
   // -------------------------------------------------------------------------
@@ -142,11 +299,6 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
   /// Whether a margin-scroll is pending (deferred until inset is stable).
   bool _pendingMarginScroll = false;
 
-  // -------------------------------------------------------------------------
-  // (c) Late-initialized action surfaces (depend on _controller)
-  // -------------------------------------------------------------------------
-  late final EditorActionCallbacks _actionCallbacks;
-
   @override
   void initState() {
     super.initState();
@@ -154,14 +306,18 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     _controller = EditorController();
     _scrollController = ScrollController();
 
-    // (c) Build the chrome-independent callback surface (FR-15).
-    _actionCallbacks = EditorActionCallbacks(
-      controller: _controller,
-      apply: _applyResult,
-    );
+    // (j) M4: Create FocusNodes in initState (FR-22 / spec §5.5).
+    _editorFocusNode = FocusNode();
+    _searchFocusNode = FocusNode();
 
     // (d) Register as WidgetsBindingObserver for keyboard-inset tracking.
     WidgetsBinding.instance.addObserver(this);
+
+    // M6 (e): Register the guarded chrome scroll listener as the 4th consumer
+    // of _scrollController (D5/R-04). This listener reads scroll direction and
+    // feeds ChromeRevealController.onUserScroll — but ONLY when neither
+    // _applyingState nor _continuing is set (EC-07, §4.3 guard contract).
+    _scrollController.addListener(_onScrollControllerNotification);
 
     // Cold-start seed (NFR-M2-06, B1/R-14):
     final seed = ref.read(initialSharedTextProvider);
@@ -189,6 +345,18 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     // (d) Unregister observer — MUST come before controller.dispose().
     WidgetsBinding.instance.removeObserver(this);
     _controller.removeListener(_onControllerChanged);
+
+    // M6: Remove chrome scroll listener before disposing the controller.
+    _scrollController.removeListener(_onScrollControllerNotification);
+
+    // (j) M4: Dispose FocusNodes in strict order (spec §5.5 / FR-22).
+    // search FocusNode first (outer), then editor FocusNode (inner).
+    _searchFocusNode.dispose();
+    _editorFocusNode.dispose();
+
+    // Dispose the replace-row notifier.
+    _replaceRowNotifier.dispose();
+
     _controller.dispose();
     _scrollController.dispose();
     _shareSubscription?.cancel();
@@ -204,6 +372,14 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     // Read the current bottom inset (keyboard height) from the view.
     // Use MediaQueryData from the binding to avoid context access off-tree.
     final inset = _currentViewInsetBottom();
+
+    // M6 (o): Keyboard dismiss (inset → 0) reveals chrome (FR-M6-06).
+    // Detect the transition: previous inset > 0 and new inset == 0.
+    if (_lastInset > 0.0 && inset == 0.0) {
+      if (mounted) {
+        ref.read(chromeVisibilityProvider.notifier).onKeyboardDismissed();
+      }
+    }
 
     // Shift the sliding window: prevInset ← lastInset, lastInset ← current.
     _prevInset = _lastInset;
@@ -237,11 +413,92 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
   }
 
   // -------------------------------------------------------------------------
+  // M6 (e): Guarded chrome scroll listener (EC-07, D5/R-04, §4.3)
+  // -------------------------------------------------------------------------
+
+  /// The 4th consumer of [_scrollController] (D5/R-04).
+  ///
+  /// Reads the current scroll direction and feeds
+  /// [ChromeRevealController.onUserScroll] — BUT only when neither
+  /// [_applyingState] nor [_continuing] is set.
+  ///
+  /// **Guard (EC-07):** programmatic scrolls — after-Enter [jumpTo],
+  /// cursor-margin [_doMarginScroll], and find `animateTo` — set one of the
+  /// re-entrancy flags before calling [_scrollController]. While either flag
+  /// is set, this listener returns early and chrome state is unchanged. This
+  /// ensures only real user-driven scroll direction changes toggle the chrome.
+  void _onScrollControllerNotification() {
+    // Guard: ignore programmatic scroll events (EC-07, §4.3).
+    if (_applyingState || _continuing) return;
+
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    // Determine scroll direction from the user's activity.
+    // The position.userScrollDirection is set by the framework for
+    // user-initiated scrolls and 'idle' for programmatic scrolls.
+    final direction = position.userScrollDirection;
+    if (!mounted) return;
+    ref.read(chromeVisibilityProvider.notifier).onUserScroll(direction);
+  }
+
+  // -------------------------------------------------------------------------
+  // @visibleForTesting seams (EC-07, OQ-M6-09)
+  // -------------------------------------------------------------------------
+
+  /// @visibleForTesting — drives the guarded scroll listener from tests.
+  ///
+  /// Calls [_onScrollNotificationCore] with [direction], respecting the
+  /// [_applyingState] / [_continuing] guard exactly as the production listener
+  /// does. Used by EC-07 tests to verify guard behaviour without emitting real
+  /// scroll events.
+  @override
+  @visibleForTesting
+  void testOnScrollNotification(ScrollDirection direction) {
+    _onScrollNotificationCore(direction);
+  }
+
+  /// Core scroll→chrome routing (extracted for testability).
+  ///
+  /// Respects the [_applyingState] / [_continuing] re-entrancy guard (EC-07).
+  void _onScrollNotificationCore(ScrollDirection direction) {
+    if (_applyingState || _continuing) return;
+    if (!mounted) return;
+    ref.read(chromeVisibilityProvider.notifier).onUserScroll(direction);
+  }
+
+  /// @visibleForTesting — force-sets [_applyingState] for EC-07 guard tests.
+  @override
+  @visibleForTesting
+  void testSetApplyingState(bool value) {
+    _applyingState = value;
+  }
+
+  /// @visibleForTesting — simulates keyboard-dismiss (inset → 0) from tests.
+  @override
+  @visibleForTesting
+  void testOnKeyboardDismissed() {
+    if (!mounted) return;
+    ref.read(chromeVisibilityProvider.notifier).onKeyboardDismissed();
+  }
+
+  // -------------------------------------------------------------------------
   // (a)/(b) \n-in-change-path interception + _continuing guard
   // -------------------------------------------------------------------------
 
   void _onControllerChanged() {
     final newValue = _controller.value;
+
+    // M6 (o): Feed text-change signal to ChromeRevealController (FR-M6-06).
+    // Only feed when:
+    //  - NOT under a re-entrancy guard (programmatic rewrites must not hide chrome).
+    //  - The TEXT actually changed (selection-only changes, e.g. from focus/autofocus,
+    //    must NOT hide chrome — EC-07 / FR-M6-06 "typing hides").
+    if (!_applyingState &&
+        !_continuing &&
+        mounted &&
+        newValue.text != _priorValue.text) {
+      ref.read(chromeVisibilityProvider.notifier).onTextChanged();
+    }
 
     // --- Detection predicate (§5.4a, OQ-04) ---
     // Fire continuation ONLY when ALL of the following hold:
@@ -305,7 +562,7 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     _scheduleMarginScroll();
   }
 
-  /// (b) Applies a continuation / indent / outdent result atomically to
+  /// (b) Applies a continuation / indent / outdent / paste result atomically to
   /// _controller.value under the _continuing re-entrancy guard.
   ///
   /// The atomic TextEditingValue assignment guards against re-entrancy:
@@ -315,6 +572,10 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
   ///
   /// The natural _onControllerChanged that fires after _continuing is cleared
   /// propagates the final text to bufferProvider exactly once (EC-14, C2).
+  ///
+  /// M4: this is ALSO the only path for replace mutations (FR-14 / NFR-04).
+  /// M6: ALSO the only path for paste mutations (FR-M6-20).
+  /// No direct _controller.value = write outside this method on any find/paste path.
   void _applyResult(({String text, TextSelection selection}) result) {
     _continuing = true;
     try {
@@ -341,18 +602,13 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
   void _trackAfterEnter() {
     if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
-    // Estimate caret bottom from the scroll offset + viewport height heuristic.
-    // A precise caret-bottom measurement requires RenderEditable access, which
-    // is unavailable synchronously here. We use a conservative single-line-step
-    // (controller-inferred from line height × 1.4 approximation).
-    // The safest approach: always attempt to scroll by one estimated line
-    // when continuation fires, which matches GTK move_viewport(Steps,1).
-    // The exact step is line-height; absent a render box, we use the
-    // scroll extent and only scroll if there is room to scroll down.
     if (pos.extentBefore < pos.maxScrollExtent) {
-      // Estimate one line height ≈ 20 × 1.4 = 28 logical px at default size.
-      // This is a conservative heuristic; M7 will refine with real line metrics.
-      const estimatedLineHeight = 28.0;
+      // M7 (g) [CONDITIONAL]: Refine estimatedLineHeight from current font slot.
+      // fontSizePt * lineHeight factor 1.4. Previously hardcoded 28.0 (OQ-M7-07).
+      // Falls back gracefully if settings are not yet loaded (defaults to 14×1.4).
+      final settingsNow =
+          ref.read(settingsProvider).valueOrNull ?? const AppSettings();
+      final estimatedLineHeight = settingsNow.fontSizePt * 1.4;
       final target = (pos.pixels + estimatedLineHeight).clamp(
         pos.minScrollExtent,
         pos.maxScrollExtent,
@@ -423,6 +679,187 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
   }
 
   // -------------------------------------------------------------------------
+  // M4: FindState → controller seam push (spec §4.3 / k)
+  // -------------------------------------------------------------------------
+
+  /// One [ref.listen] for find-state changes (spec §4.3, TASK-07 step k).
+  ///
+  /// On every [FindState] transition:
+  ///  1. Push `matches` → [EditorController.highlightRanges] as [TextRange]s.
+  ///  2. Push `currentMatchIndex` → [EditorController.currentMatchIndex].
+  ///  3. If the current-match index changed, schedule scroll-to-match (FR-17).
+  ///  4. If find deactivated (active=false), restore editor focus (FR-20 / m).
+  void _applyFindToController(FindState? previous, FindState next) {
+    // Push match highlights to the controller (FR-13 / EC-10).
+    // Convert MatchSpan (plain ints) to TextRange (Flutter type).
+    final ranges = next.matches
+        .map((m) => TextRange(start: m.start, end: m.end))
+        .toList(growable: false);
+    _controller.highlightRanges = ranges;
+    _controller.currentMatchIndex = next.currentMatchIndex;
+
+    // Scroll to current match when index changes (FR-17 / spec §5.4).
+    final prevIndex = previous?.currentMatchIndex;
+    final nextIndex = next.currentMatchIndex;
+    if (nextIndex != null && nextIndex != prevIndex) {
+      final match = next.currentMatch;
+      if (match != null) {
+        _scheduleScrollToMatch(match, _controller.text);
+      }
+    }
+
+    // Restore editor focus when find closes without moving caret (FR-20 / m).
+    if (previous != null && previous.active && !next.active) {
+      // Deferred so the widget tree has time to remove FindSearchBar first.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _editorFocusNode.requestFocus();
+      });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // M4: Scroll-to-match (FR-17 / spec §5.4)
+  // -------------------------------------------------------------------------
+
+  /// Schedules a scroll-to-match after the next frame (geometry available).
+  ///
+  /// Uses post-frame to ensure the layout has run before attempting
+  /// [getBoxesForSelection]. Falls back to proportional estimate when boxes
+  /// are empty (headless / pre-layout, spec §5.4 headless fallback).
+  void _scheduleScrollToMatch(MatchSpan match, String text) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _scrollToMatch(match, text);
+    });
+  }
+
+  /// Animates [_scrollController] to bring [match] into view (FR-17 / §5.4).
+  ///
+  /// **Geometry path** (production / on-device): resolves [EditableTextState]
+  /// from the widget tree via [context.findDescendantStateOfType] equivalent,
+  /// then calls [renderEditable.getBoxesForSelection] for the match selection.
+  /// Takes the first box's top coordinate and computes a scroll target leaving
+  /// [kMarginBelowCursor] slack below.
+  ///
+  /// **Proportional fallback** (headless / pre-layout): when no boxes are
+  /// returned, falls back to `(match.start / text.length) * maxScrollExtent`.
+  /// This is deterministic in widget tests and satisfies the spec's "brought
+  /// into view" written requirement (spec §5.4 headless fallback paragraph).
+  ///
+  /// **Reduce-motion** (accessibility): animateTo uses [Duration.zero] when
+  /// [MediaQuery.disableAnimations] is true (bible Motion / design-accessibility).
+  void _scrollToMatch(MatchSpan match, String text) {
+    if (!_scrollController.hasClients) return;
+    final pos = _scrollController.position;
+    if (pos.maxScrollExtent <= 0.0) return; // nothing to scroll
+
+    // Honour reduce-motion (bible Motion / design-accessibility skill).
+    final disableAnimations =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final duration = disableAnimations
+        ? Duration.zero
+        : const Duration(milliseconds: 300);
+    const curve = Curves.easeInOut;
+
+    // --- Geometry path (spec §5.4 mechanism) ---
+    // Try to locate the RenderEditable from the widget tree.
+    // The editor TextField's context contains an EditableText subtree.
+    // We walk the element tree to find it.
+    double? geometryTarget;
+    try {
+      // Find EditableTextState as a descendant of the screen's context.
+      // This works because EditableText is built inside TextField.
+      EditableTextState? edState;
+      void visitElement(Element el) {
+        if (edState != null) return;
+        if (el is StatefulElement && el.state is EditableTextState) {
+          edState = el.state as EditableTextState;
+          return;
+        }
+        el.visitChildren(visitElement);
+      }
+
+      context.visitChildElements(visitElement);
+
+      if (edState != null) {
+        final ro = edState!.renderEditable;
+        final sel = TextSelection(
+          baseOffset: match.start,
+          extentOffset: match.end,
+        );
+        final boxes = ro.getBoxesForSelection(sel);
+        if (boxes.isNotEmpty) {
+          // Top of the first box in RenderEditable local coordinates.
+          final boxTop = boxes.first.top;
+          // Target scroll offset: bring boxTop to 0 with kMarginBelowCursor slack.
+          geometryTarget = (pos.pixels + boxTop - kMarginBelowCursor).clamp(
+            pos.minScrollExtent,
+            pos.maxScrollExtent,
+          );
+        }
+      }
+    } catch (_) {
+      // Geometry unavailable — fall through to proportional fallback.
+    }
+
+    // --- Proportional fallback (spec §5.4 headless fallback) ---
+    final target =
+        geometryTarget ??
+        (text.isEmpty
+            ? 0.0
+            : (match.start / text.length * pos.maxScrollExtent).clamp(
+                pos.minScrollExtent,
+                pos.maxScrollExtent,
+              ));
+
+    if (duration == Duration.zero) {
+      _scrollController.jumpTo(target);
+    } else {
+      _scrollController.animateTo(target, duration: duration, curve: curve);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // M4: Replace callback (l) — routes replaceCurrent() through _applyResult
+  // -------------------------------------------------------------------------
+
+  /// Called by [FindSearchBar.onReplace] when the user taps Replace.
+  ///
+  /// Calls [findProvider.notifier.replaceCurrent()] to get the replace record,
+  /// then routes it through [_applyResult] (the M3 atomic-rewrite path).
+  /// This is the ONLY write on the find/replace path (NFR-04 / §5.2 / §5.3).
+  /// [updateText] fires naturally via the existing two-way-sync listener (EC-14).
+  void _onSearchBarReplace() {
+    final record = ref.read(findProvider.notifier).replaceCurrent();
+    if (record == null) return;
+    _applyResult((
+      text: record.text,
+      selection: TextSelection.collapsed(offset: record.nextCaretOffset),
+    ));
+  }
+
+  // -------------------------------------------------------------------------
+  // M4: Ctrl+F re-press — refocus + select-all (spec §5.3 refocus_search)
+  // -------------------------------------------------------------------------
+
+  /// Called when Ctrl+F is pressed while find is already active.
+  ///
+  /// Per spec §5.3, re-pressing Ctrl+F while active does NOT call
+  /// [startSearch] again. Instead, it refocuses the search field and
+  /// selects all text in it (mobile model: index-based, not selection-based).
+  void _refocusSearch() {
+    _searchFocusNode.requestFocus();
+    // Select-all in the search field is handled by the FocusNode gaining
+    // focus; the TextEditingController inside FindSearchBar is internal.
+    // We rely on the OS/Flutter to restore the cursor to the end or select-all
+    // based on focus gain. For explicit select-all, a GlobalKey on the search
+    // bar's TextEditingController would be needed — not available without
+    // modifying FindSearchBar further.
+    // CANON GAP: select-all on refocus is best-effort here; a future M task
+    // can expose the search controller via FindSearchBar for full compliance.
+  }
+
+  // -------------------------------------------------------------------------
   // Warm-start subscriber (FR-M2-16, FR-M2-17, EC-M2-12)
   // -------------------------------------------------------------------------
 
@@ -454,6 +891,12 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     // state→controller: listen to buffer state changes and apply to controller.
     ref.listen<BufferState>(bufferProvider, _applyStateToController);
 
+    // (k) M4: Single ref.listen for find-state → push seams + scroll-to-match.
+    ref.listen<FindState>(findProvider, _applyFindToController);
+
+    // Watch find state for conditional FindSearchBar mount (i).
+    final findState = ref.watch(findProvider);
+
     // (g) Spell-check wiring (FR-20, FR-21): watch settingsProvider reactively.
     // settingsProvider is an AsyncNotifierProvider<SettingsNotifier, AppSettings>.
     // When loading or erroring, fall back to defaults (spellingEnabled = true).
@@ -478,115 +921,473 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
 
     final textColor = Theme.of(context).colorScheme.onSurface;
 
-    // (f) Single editor TextStyle: height 1.4, no fontSize, no fontFamily.
-    // MUST NOT set fontSize or fontFamily — M7 owns those (NFR-02, EC-25).
+    // M7 (f): Font-toast ref.listen — fires when fontSizeIndex changes.
+    // Single listener; no-op on null/loading; guards against no-change.
+    // Covers BOTH pinch and stepper font-size changes (FR-M7-07).
+    ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
+      if (next.value == null) return;
+      final prevIndex = previous?.value?.fontSizeIndex;
+      final nextIndex = next.value!.fontSizeIndex;
+      if (prevIndex == nextIndex) return;
+      ref
+          .read(toastProvider.notifier)
+          .show(
+            AppLocalizations.of(
+              context,
+            ).fontSizeToast(next.value!.fontSizePt.toInt()),
+          );
+    });
+
+    // M7 (c): Resolve font family and fallback from useMonospaceFont.
+    //
+    // Mono path: 'monospace' as the primary family on Android/general;
+    //   fontFamilyFallback: ['monospace'] for platform resolution to
+    //   Roboto Mono (Android) / SF Mono (iOS/macOS) via the fallback chain.
+    //
+    // Document path: null family (theme default) +
+    //   fontFamilyFallback: ['sans-serif'] for the platform sans-serif
+    //   (Roboto on Android, SF Pro on iOS).
+    //
+    // The literal strings 'monospace' and 'sans-serif' are required by the
+    // M7 gate scan (FR-M7-09).
+    final String? fontFamily;
+    final List<String> fontFamilyFallback;
+    if (settings.useMonospaceFont) {
+      fontFamily = 'monospace';
+      fontFamilyFallback = const ['monospace'];
+    } else {
+      fontFamily = null;
+      fontFamilyFallback = const ['sans-serif'];
+    }
+
+    // M7 (a): Apply fontSize from the 21-slot table (FR-M7-01).
+    // Both editorStyle and strutStyle carry the same fontSize + height:1.4
+    // (EC-M7-11 paired invariant). The strutStyle loses its const because
+    // fontSize is now dynamic.
+    //
+    // M7 (b): textScaler is NOT set here — the framework reads
+    // MediaQuery.textScalerOf(context) automatically (NFR-M7-01/02).
+    // Never pre-multiply fontSize by the textScaler.
+    final double fontSizePt = settings.fontSizePt;
+
+    // (f) Single editor TextStyle: height 1.4, fontSize from settings, family+fallback resolved.
     final editorStyle = TextStyle(
       height: 1.4,
       color: textColor,
-      // fontSize: intentionally absent — M7.
-      // fontFamily: intentionally absent — M7 (CANON GAP: monospace).
+      fontSize: fontSizePt,
+      fontFamily: fontFamily,
+      fontFamilyFallback: fontFamilyFallback,
     );
 
-    // (c) Shortcuts + Actions hardware-key map (§5.4c, FR-08, FR-14).
-    final editorField = Shortcuts(
-      shortcuts: const <ShortcutActivator, Intent>{
-        // Return / Enter → ContinueListIntent.
-        SingleActivator(LogicalKeyboardKey.enter): ContinueListIntent(),
-        SingleActivator(LogicalKeyboardKey.numpadEnter): ContinueListIntent(),
-        // Tab → IndentIntent (consumed — no focus traversal).
-        SingleActivator(LogicalKeyboardKey.tab): IndentIntent(),
-        // Shift+Tab → OutdentIntent (also covers ISO_Left_Tab / X11 Shift+Tab).
-        SingleActivator(LogicalKeyboardKey.tab, shift: true): OutdentIntent(),
-      },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          ContinueListIntent: EditorContinueListAction(
-            controller: _controller,
-            apply: _applyResult,
-          ),
-          IndentIntent: EditorIndentAction(
-            controller: _controller,
-            apply: _applyResult,
-          ),
-          OutdentIntent: EditorOutdentAction(
-            controller: _controller,
-            apply: _applyResult,
-          ),
-        },
-        child: TextField(
-          controller: _controller,
-          // (e) Shared external scroll controller — TextField never self-scrolls (FR-19).
-          scrollController: _scrollController,
-          // Full-bleed multiline text area — canon §Components §3.
-          maxLines: null,
-          expands: true,
-          autofocus: true,
-          // Chrome-free: no border, no label, no hint.
-          decoration: const InputDecoration.collapsed(hintText: null),
-          // (f) Single editor style: height 1.4, colour from theme (FR-03).
-          style: editorStyle,
-          // (f) Matching StrutStyle for consistent line metrics (FR-03).
-          strutStyle: const StrutStyle(height: 1.4, forceStrutHeight: true),
-          // Soft-wrap word/char — canon §Components §3.
-          textAlignVertical: TextAlignVertical.top,
-          // (g) Reactive spell-check from settings (FR-20, FR-21).
-          spellCheckConfiguration: spellCheck,
-        ),
-      ),
-    );
+    // Build the shortcuts + actions + editor field subtree via named helpers.
+    // (TASK-01 extraction — behaviour identical to the pre-extraction inlined
+    // code; helpers are called in build() with the same arguments and return
+    // the exact same widget subtree.)
+    final editorField = _buildShortcuts(context, spellCheck, editorStyle);
 
-    // (h) kDebugMode-only debug affordance (OQ-02, EC-22).
-    // CANON GAP: §Design ethos mandates no chrome at rest; M3 ships a
-    // `kDebugMode`-only indent/outdent affordance for on-device manual testing.
-    // It is compiled out of release builds and is M3→M6 debt — the permanent
-    // visible toolbar is owned by M6. Tracked under `.claude/docs/decisions/`.
-    Widget editorArea = editorField;
-    if (kDebugMode) {
-      editorArea = Column(
-        children: [
-          Expanded(child: editorField),
-          // CANON GAP: M3→M6 debt — debug-only indent/outdent row.
-          // Remove when M6 implements the permanent soft-keyboard toolbar.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // CANON GAP: M3→M6 debt — debug-only indent/outdent buttons.
-              // Using IconButton (not Text) to satisfy the NFR literal-Text()
-              // gate scan (no Text('...') literals in lib/presentation/).
-              Semantics(
-                button: true,
-                label: 'Indent',
-                child: IconButton(
-                  onPressed: _actionCallbacks.onIndent,
-                  icon: const Icon(Icons.format_indent_increase),
-                ),
-              ),
-              Semantics(
-                button: true,
-                label: 'Outdent',
-                child: IconButton(
-                  onPressed: _actionCallbacks.onOutdent,
-                  icon: const Icon(Icons.format_indent_decrease),
-                ),
-              ),
-            ],
-          ),
-        ],
-      );
-    }
+    // M6 (n): Build the Stack host — editor (bottom) + Positioned overlays.
+    //
+    // Stack children (bottom→top):
+    //   1. editorField — fills the entire Stack (Positioned.fill or expands:true)
+    //   2. FindSearchBar — Positioned(top:0) when findState.active (EC-04)
+    //   3. ChromeOverlay — Positioned(top:0, right:0, from canon §Components §2)
+    //   4. ToastOverlay  — Positioned(top:16, left:0, right:0, §Components §8)
+    //
+    // EC-04: The editor's render box is invariant — it always fills the Stack.
+    // Neither the FindSearchBar, ChromeOverlay, nor ToastOverlay are Column
+    // siblings; they are all Positioned overlays that do not affect layout.
+    //
+    // (i) M4: FindSearchBar is now a Positioned top slot in the Stack (not
+    // a Column sibling). When active, it overlays the editor from the top;
+    // the editor TextField (expands:true) fills the full Stack regardless.
 
     return Scaffold(
       // No AppBar — canon §Design ethos "no chrome at rest".
       extendBodyBehindAppBar: true,
       body: SafeArea(
-        child: Padding(
-          // Dynamic margin: M2/M3 uses MINIMUM_MARGIN (10dp) per §Spacing.
-          // <!-- CANON GAP: full interpolated margin (10→36 over 400..800px)
-          //      deferred to M7. -->
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: editorArea,
+        // M7 (d): Page-level pinch GestureDetector (FR-M7-05).
+        //
+        // Wraps the whole screen so the gesture is captured regardless of where
+        // the two fingers land. Single-finger interactions (tap, drag, text
+        // selection) are unaffected because:
+        //  - onScaleStart fires for both one- and two-pointer gestures; we
+        //    capture the start index here for both cases (cheap).
+        //  - onScaleUpdate has a MANDATORY pointerCount == 2 guard (NFR-M7-03):
+        //    single-finger drags (pointerCount == 1) do not change the slot.
+        //  - Persist via setFontSizeIndex ONLY on onScaleEnd (MC-02).
+        //
+        // Pinch state (_scaleStartIndex) is ORTHOGONAL to _applyingState /
+        // _continuing — those guard text rewrites; this guards font-size only.
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onScaleStart: (details) {
+            // Capture the start index so slot steps are anchored to it.
+            _scaleStartIndex =
+                (ref.read(settingsProvider).valueOrNull ?? const AppSettings())
+                    .fontSizeIndex;
+          },
+          onScaleUpdate: (details) {
+            // MANDATORY guard (NFR-M7-03): only respond to two-pointer pinch.
+            // Single-finger drags must not change font size.
+            if (details.pointerCount != 2) return;
+
+            // Compute target index from scale and start index.
+            final delta = scaleToSlotDelta(details.scale, _scaleStartIndex);
+            final target = (_scaleStartIndex + delta).clamp(
+              0,
+              AppSettings.slotList.length - 1,
+            );
+
+            // Optimistic in-flight update: update settings provider during
+            // the gesture so the editor reflects the new size immediately.
+            // This is a lightweight read — no file I/O (setFontSizeIndex is
+            // no-op when identical, so redundant calls are cheap).
+            // Persist (file I/O) only on onScaleEnd.
+            ref.read(settingsProvider.notifier).setFontSizeIndex(target);
+          },
+          onScaleEnd: (details) {
+            // Persist the final index on gesture end (MC-02: persist-on-end).
+            // Re-read to get whatever index onScaleUpdate last set.
+            final finalIndex =
+                (ref.read(settingsProvider).valueOrNull ?? const AppSettings())
+                    .fontSizeIndex;
+            ref.read(settingsProvider.notifier).setFontSizeIndex(finalIndex);
+          },
+          child: Stack(
+            children: [
+              // ---------------------------------------------------------------
+              // M7 (e): Bottom layer — LayoutBuilder → responsive column.
+              //
+              // Replaces the old Padding(horizontal:10) wrapper.
+              // The LayoutBuilder reads constraints.maxWidth to compute:
+              //   - verticalMargin: interpolated 10→36 over 400..800dp.
+              //   - horizontal margin: the editor is capped at 720dp max-width
+              //     and filled below (no max-width clipping on narrow screens).
+              //
+              // EC-M7-04: editor is still inside Positioned.fill — it never
+              // becomes a Column sibling of the overlays.
+              // ---------------------------------------------------------------
+              Positioned.fill(
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final vMargin = verticalMargin(constraints.maxWidth);
+                    return Padding(
+                      padding: EdgeInsets.symmetric(vertical: vMargin),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 720.0),
+                          child: editorField,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              // ---------------------------------------------------------------
+              // Find search bar: Positioned at top when active (EC-04).
+              // Not a Column sibling — never resizes the editor.
+              // ---------------------------------------------------------------
+              if (findState.active)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: FindSearchBar(
+                    onReplace: _onSearchBarReplace,
+                    focusNode: _searchFocusNode,
+                    replaceRowNotifier: _replaceRowNotifier,
+                  ),
+                ),
+
+              // ---------------------------------------------------------------
+              // ChromeOverlay: Positioned top-end (canon §Components §2).
+              // Wires onMenuTap → openMenuSheet(context) (FR-M6-23).
+              // ---------------------------------------------------------------
+              ChromeOverlay(onMenuTap: () => openMenuSheet(context)),
+
+              // ---------------------------------------------------------------
+              // ToastOverlay: Positioned top-centre (canon §Components §8).
+              // Pure overlay — never resizes the editor (EC-04).
+              // ---------------------------------------------------------------
+              const ToastOverlay(),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  // -------------------------------------------------------------------------
+  // Build helpers (TASK-01 extraction — FR-M6-05, OQ-M6-08)
+  //
+  // Pure method extraction of the original inlined build() body.
+  // No behaviour change — every widget, property, callback, and guard is
+  // identical to the pre-extraction code. The helpers enable TASK-12 (Wave 5)
+  // to integrate shell overlays into the editor host without touching the
+  // editor subtree itself.
+  // -------------------------------------------------------------------------
+
+  /// Builds the hardware-key [Shortcuts] map wrapping the editor field.
+  ///
+  /// (c) + M4 + M6: Maps Return/KP_Enter, Tab, Shift+Tab, Ctrl+F/G/Shift+G/H,
+  /// Ctrl+V, Esc to their corresponding [Intent]s.
+  ///
+  /// M6 Esc precedence (FR-M6-22, D7): A single [EscPrecedenceIntent] is fired;
+  /// the paired [_EscPrecedenceAction] resolves the chain:
+  ///   1. find active → dispatch [CloseFindIntent]
+  ///   2. else → dispatch [DismissChromeIntent]
+  /// Delegates inner content to [_buildActions].
+  Widget _buildShortcuts(
+    BuildContext context,
+    SpellCheckConfiguration spellCheck,
+    TextStyle editorStyle,
+  ) {
+    return Shortcuts(
+      shortcuts: <ShortcutActivator, Intent>{
+        // Return / Enter → ContinueListIntent.
+        const SingleActivator(LogicalKeyboardKey.enter):
+            const ContinueListIntent(),
+        const SingleActivator(LogicalKeyboardKey.numpadEnter):
+            const ContinueListIntent(),
+        // Tab → IndentIntent (consumed — no focus traversal).
+        const SingleActivator(LogicalKeyboardKey.tab): const IndentIntent(),
+        // Shift+Tab → OutdentIntent (also covers ISO_Left_Tab / X11 Shift+Tab).
+        const SingleActivator(LogicalKeyboardKey.tab, shift: true):
+            const OutdentIntent(),
+        // M4: Find/Replace hardware shortcuts (FR-21 / spec §5.3).
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            const OpenFindIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyG, control: true):
+            const FindNextIntent(),
+        const SingleActivator(
+          LogicalKeyboardKey.keyG,
+          control: true,
+          shift: true,
+        ): const FindPrevIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyH, control: true):
+            const ToggleReplaceIntent(),
+        // M6: Esc — precedence chain (FR-M6-22, D7):
+        //   1. find active → CloseFindIntent
+        //   2. else → DismissChromeIntent (hide chrome)
+        // Implemented via _EscPrecedenceAction which dispatches the appropriate
+        // child intent.
+        const SingleActivator(LogicalKeyboardKey.escape):
+            const _EscPrecedenceIntent(),
+        // M6: Ctrl+V → PasteIntent (FR-M6-20).
+        const SingleActivator(LogicalKeyboardKey.keyV, control: true):
+            const PasteIntent(),
+      },
+      child: _buildActions(context, spellCheck, editorStyle),
+    );
+  }
+
+  /// Builds the [Actions] map binding each [Intent] to its concrete [Action].
+  ///
+  /// Delegates the editor [TextField] itself to [_buildEditorField].
+  Widget _buildActions(
+    BuildContext context,
+    SpellCheckConfiguration spellCheck,
+    TextStyle editorStyle,
+  ) {
+    return Actions(
+      actions: <Type, Action<Intent>>{
+        ContinueListIntent: EditorContinueListAction(
+          controller: _controller,
+          apply: _applyResult,
+        ),
+        IndentIntent: EditorIndentAction(
+          controller: _controller,
+          apply: _applyResult,
+        ),
+        OutdentIntent: EditorOutdentAction(
+          controller: _controller,
+          apply: _applyResult,
+        ),
+        // M4: Find actions — all delegate to findProvider verbs (FR-21).
+        // OpenFindAction: if already active → refocus search; else startSearch.
+        OpenFindIntent: _OpenFindOrRefocusAction(
+          controller: _controller,
+          startSearch: ({required int entryOffset}) {
+            ref
+                .read(findProvider.notifier)
+                .startSearch(entryOffset: entryOffset);
+          },
+          isActive: () => ref.read(findProvider).active,
+          refocusSearch: _refocusSearch,
+        ),
+        FindNextIntent: FindNextAction(
+          next: () => ref.read(findProvider.notifier).next(),
+        ),
+        FindPrevIntent: FindPrevAction(
+          previous: () => ref.read(findProvider.notifier).previous(),
+        ),
+        ToggleReplaceIntent: ToggleReplaceAction(
+          onToggle: () {
+            // Toggle replace-row via the shared notifier (FR-21 / §5.3).
+            // Works regardless of whether the search bar is currently mounted.
+            _replaceRowNotifier.value = !_replaceRowNotifier.value;
+          },
+        ),
+        CloseFindIntent: CloseFindAction(
+          close: () => ref.read(findProvider.notifier).close(),
+        ),
+        // M6: Esc precedence chain (FR-M6-22, D7).
+        _EscPrecedenceIntent: _EscPrecedenceAction(
+          isFindActive: () => ref.read(findProvider).active,
+          closeFindIntent: () => ref.read(findProvider.notifier).close(),
+          dismissChrome: () =>
+              ref.read(chromeVisibilityProvider.notifier).reveal(),
+        ),
+        // M6: Paste — reads clipboard and inserts at caret (FR-M6-20).
+        PasteIntent: PasteAction(controller: _controller, apply: _applyResult),
+        // M6: DismissChrome — hides chrome overlay (FR-M6-22).
+        DismissChromeIntent: DismissChromeAction(
+          onDismiss: () =>
+              ref.read(chromeVisibilityProvider.notifier).onTextChanged(),
+        ),
+      },
+      child: _buildEditorField(context, spellCheck, editorStyle),
+    );
+  }
+
+  /// Builds the full-bleed multiline [TextField] (canon §Components §3).
+  ///
+  /// Properties are invariant across all editor states:
+  ///   - [expands]: true — fills available space.
+  ///   - [maxLines]: null — unbounded multiline.
+  ///   - [autofocus]: true — claims focus on mount.
+  ///   - [scrollController]: shared [_scrollController] (FR-19).
+  ///   - [focusNode]: [_editorFocusNode] (FR-22 / spec §5.5).
+  ///   - [style]: height 1.4, fontSize from settings, family+fallback resolved (M7).
+  ///   - [strutStyle]: paired with editorStyle (EC-M7-11 invariant).
+  ///   - [spellCheckConfiguration]: derived from settingsProvider (FR-20/21).
+  ///
+  /// M7 (b): No explicit textScaler — the framework reads
+  /// MediaQuery.textScalerOf(context) automatically (NFR-M7-01/02).
+  TextField _buildEditorField(
+    BuildContext context,
+    SpellCheckConfiguration spellCheck,
+    TextStyle editorStyle,
+  ) {
+    // M7 (a): Extract fontSize from the editorStyle for the paired strutStyle.
+    // EC-M7-11: strutStyle.fontSize must equal editorStyle.fontSize.
+    final double? fontSize = editorStyle.fontSize;
+
+    return TextField(
+      controller: _controller,
+      // (j) M4: Wire editor FocusNode (FR-22 / spec §5.5).
+      focusNode: _editorFocusNode,
+      // (e) Shared external scroll controller — TextField never self-scrolls (FR-19).
+      scrollController: _scrollController,
+      // Full-bleed multiline text area — canon §Components §3.
+      maxLines: null,
+      expands: true,
+      autofocus: true,
+      // Chrome-free: no border, no label, no hint.
+      decoration: const InputDecoration.collapsed(hintText: null),
+      // (f)/(M7a) Editor style: height 1.4, fontSize + family from settings.
+      style: editorStyle,
+      // (f)/(M7a) Matching StrutStyle — paired invariant EC-M7-11.
+      // Not const because fontSize is dynamic (resolved from settings at build time).
+      strutStyle: StrutStyle(
+        fontSize: fontSize,
+        height: 1.4,
+        forceStrutHeight: true,
+      ),
+      // Soft-wrap word/char — canon §Components §3.
+      textAlignVertical: TextAlignVertical.top,
+      // (g) Reactive spell-check from settings (FR-20, FR-21).
+      spellCheckConfiguration: spellCheck,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// M4: Custom action combining OpenFindAction + Ctrl+F-while-active refocus
+// ---------------------------------------------------------------------------
+
+/// Handles [OpenFindIntent] with two modes (spec §5.3):
+///
+/// - When find is **not** active: calls [startSearch] with the editor caret
+///   offset (same as [OpenFindAction]).
+/// - When find **is** active: refocuses the search field + selects all (no
+///   fresh [startSearch] — the match list and currentMatchIndex are preserved).
+///
+/// This keeps the Ctrl+F→refocus path co-located with the Ctrl+F→startSearch
+/// path (FR-21 single-path) rather than adding a separate shortcut binding.
+class _OpenFindOrRefocusAction extends Action<OpenFindIntent> {
+  _OpenFindOrRefocusAction({
+    required this.controller,
+    required this.startSearch,
+    required this.isActive,
+    required this.refocusSearch,
+  });
+
+  final EditorController controller;
+  final void Function({required int entryOffset}) startSearch;
+  final bool Function() isActive;
+  final VoidCallback refocusSearch;
+
+  @override
+  void invoke(OpenFindIntent intent) {
+    if (isActive()) {
+      // Already active — refocus search field without a fresh startSearch.
+      refocusSearch();
+    } else {
+      // Open search with caret offset as entry offset (FR-06).
+      startSearch(entryOffset: controller.selection.baseOffset);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// M6: Esc precedence chain (FR-M6-22, D7)
+// ---------------------------------------------------------------------------
+
+/// Internal intent for the Esc key precedence chain (FR-M6-22, D7).
+///
+/// Fired by the [Shortcuts] binding on [LogicalKeyboardKey.escape].
+/// Resolved by [_EscPrecedenceAction] into the correct child action:
+///   1. find active → close find (highest precedence)
+///   2. else → hide/dismiss chrome
+///
+/// Using a dedicated intent (rather than directly binding [CloseFindIntent]
+/// to Esc) allows the precedence logic to live in one place (the Action)
+/// rather than spread across multiple Shortcut bindings.
+@immutable
+class _EscPrecedenceIntent extends Intent {
+  const _EscPrecedenceIntent();
+}
+
+/// Resolves [_EscPrecedenceIntent] into the correct action (FR-M6-22, D7).
+///
+/// Precedence (fixed if/else chain, D7):
+///   1. find active → calls [closeFindIntent] (same effect as [CloseFindAction])
+///   2. else → calls [dismissChrome]
+///
+/// The chrome-dismiss branch calls [dismissChrome] which reveals the chrome
+/// (so Esc while chrome is hidden shows it, matching the M6 spec §4.3 Esc
+/// semantics: "reveal chrome" when no other action applies).
+class _EscPrecedenceAction extends Action<_EscPrecedenceIntent> {
+  _EscPrecedenceAction({
+    required this.isFindActive,
+    required this.closeFindIntent,
+    required this.dismissChrome,
+  });
+
+  final bool Function() isFindActive;
+  final VoidCallback closeFindIntent;
+  final VoidCallback dismissChrome;
+
+  @override
+  void invoke(_EscPrecedenceIntent intent) {
+    if (isFindActive()) {
+      // Precedence 1: find is open → close find.
+      closeFindIntent();
+    } else {
+      // Precedence 2: reveal chrome (Esc when find closed toggles chrome).
+      dismissChrome();
+    }
   }
 }

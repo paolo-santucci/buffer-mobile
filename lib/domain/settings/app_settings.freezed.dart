@@ -22,6 +22,9 @@ mixin _$AppSettings {
   bool get spellingEnabled => throw _privateConstructorUsedError;
   bool get emergencyRecoveryEnabled => throw _privateConstructorUsedError;
   bool get lineLengthEnabled => throw _privateConstructorUsedError;
+  AppColorScheme get colorScheme =>
+      throw _privateConstructorUsedError; // FR-M7-01: default index 8 → 14pt (slotList[8] == 14).
+  int get fontSizeIndex => throw _privateConstructorUsedError;
 
   /// Create a copy of AppSettings
   /// with the given fields replaced by the non-null parameter values.
@@ -43,6 +46,8 @@ abstract class $AppSettingsCopyWith<$Res> {
     bool spellingEnabled,
     bool emergencyRecoveryEnabled,
     bool lineLengthEnabled,
+    AppColorScheme colorScheme,
+    int fontSizeIndex,
   });
 }
 
@@ -66,6 +71,8 @@ class _$AppSettingsCopyWithImpl<$Res, $Val extends AppSettings>
     Object? spellingEnabled = null,
     Object? emergencyRecoveryEnabled = null,
     Object? lineLengthEnabled = null,
+    Object? colorScheme = null,
+    Object? fontSizeIndex = null,
   }) {
     return _then(
       _value.copyWith(
@@ -89,6 +96,14 @@ class _$AppSettingsCopyWithImpl<$Res, $Val extends AppSettings>
                 ? _value.lineLengthEnabled
                 : lineLengthEnabled // ignore: cast_nullable_to_non_nullable
                       as bool,
+            colorScheme: null == colorScheme
+                ? _value.colorScheme
+                : colorScheme // ignore: cast_nullable_to_non_nullable
+                      as AppColorScheme,
+            fontSizeIndex: null == fontSizeIndex
+                ? _value.fontSizeIndex
+                : fontSizeIndex // ignore: cast_nullable_to_non_nullable
+                      as int,
           )
           as $Val,
     );
@@ -110,6 +125,8 @@ abstract class _$$AppSettingsImplCopyWith<$Res>
     bool spellingEnabled,
     bool emergencyRecoveryEnabled,
     bool lineLengthEnabled,
+    AppColorScheme colorScheme,
+    int fontSizeIndex,
   });
 }
 
@@ -132,6 +149,8 @@ class __$$AppSettingsImplCopyWithImpl<$Res>
     Object? spellingEnabled = null,
     Object? emergencyRecoveryEnabled = null,
     Object? lineLengthEnabled = null,
+    Object? colorScheme = null,
+    Object? fontSizeIndex = null,
   }) {
     return _then(
       _$AppSettingsImpl(
@@ -155,6 +174,14 @@ class __$$AppSettingsImplCopyWithImpl<$Res>
             ? _value.lineLengthEnabled
             : lineLengthEnabled // ignore: cast_nullable_to_non_nullable
                   as bool,
+        colorScheme: null == colorScheme
+            ? _value.colorScheme
+            : colorScheme // ignore: cast_nullable_to_non_nullable
+                  as AppColorScheme,
+        fontSizeIndex: null == fontSizeIndex
+            ? _value.fontSizeIndex
+            : fontSizeIndex // ignore: cast_nullable_to_non_nullable
+                  as int,
       ),
     );
   }
@@ -169,6 +196,8 @@ class _$AppSettingsImpl extends _AppSettings {
     this.spellingEnabled = true,
     this.emergencyRecoveryEnabled = true,
     this.lineLengthEnabled = true,
+    this.colorScheme = AppColorScheme.follow,
+    this.fontSizeIndex = 8,
   }) : super._();
 
   @override
@@ -186,10 +215,17 @@ class _$AppSettingsImpl extends _AppSettings {
   @override
   @JsonKey()
   final bool lineLengthEnabled;
+  @override
+  @JsonKey()
+  final AppColorScheme colorScheme;
+  // FR-M7-01: default index 8 → 14pt (slotList[8] == 14).
+  @override
+  @JsonKey()
+  final int fontSizeIndex;
 
   @override
   String toString() {
-    return 'AppSettings(useMonospaceFont: $useMonospaceFont, showLineNumbers: $showLineNumbers, spellingEnabled: $spellingEnabled, emergencyRecoveryEnabled: $emergencyRecoveryEnabled, lineLengthEnabled: $lineLengthEnabled)';
+    return 'AppSettings(useMonospaceFont: $useMonospaceFont, showLineNumbers: $showLineNumbers, spellingEnabled: $spellingEnabled, emergencyRecoveryEnabled: $emergencyRecoveryEnabled, lineLengthEnabled: $lineLengthEnabled, colorScheme: $colorScheme, fontSizeIndex: $fontSizeIndex)';
   }
 
   @override
@@ -209,7 +245,11 @@ class _$AppSettingsImpl extends _AppSettings {
                 ) ||
                 other.emergencyRecoveryEnabled == emergencyRecoveryEnabled) &&
             (identical(other.lineLengthEnabled, lineLengthEnabled) ||
-                other.lineLengthEnabled == lineLengthEnabled));
+                other.lineLengthEnabled == lineLengthEnabled) &&
+            (identical(other.colorScheme, colorScheme) ||
+                other.colorScheme == colorScheme) &&
+            (identical(other.fontSizeIndex, fontSizeIndex) ||
+                other.fontSizeIndex == fontSizeIndex));
   }
 
   @override
@@ -220,6 +260,8 @@ class _$AppSettingsImpl extends _AppSettings {
     spellingEnabled,
     emergencyRecoveryEnabled,
     lineLengthEnabled,
+    colorScheme,
+    fontSizeIndex,
   );
 
   /// Create a copy of AppSettings
@@ -238,6 +280,8 @@ abstract class _AppSettings extends AppSettings {
     final bool spellingEnabled,
     final bool emergencyRecoveryEnabled,
     final bool lineLengthEnabled,
+    final AppColorScheme colorScheme,
+    final int fontSizeIndex,
   }) = _$AppSettingsImpl;
   const _AppSettings._() : super._();
 
@@ -251,6 +295,10 @@ abstract class _AppSettings extends AppSettings {
   bool get emergencyRecoveryEnabled;
   @override
   bool get lineLengthEnabled;
+  @override
+  AppColorScheme get colorScheme; // FR-M7-01: default index 8 → 14pt (slotList[8] == 14).
+  @override
+  int get fontSizeIndex;
 
   /// Create a copy of AppSettings
   /// with the given fields replaced by the non-null parameter values.

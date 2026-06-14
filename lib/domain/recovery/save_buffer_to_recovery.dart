@@ -30,8 +30,15 @@ class SaveBufferToRecovery {
 
   /// Saves [text] to the recovery store, or returns `null` if [text] is
   /// empty/whitespace-only.
+  ///
+  /// On a successful save, `trim(10)` is called to ensure the recovery
+  /// directory never retains more than 10 files (FR-M5-03, §5.1.4).
+  /// If [RecoveryRepository.save] throws, the exception propagates before
+  /// `trim` runs — no catch, lifecycle host is responsible (EC-M2-08).
   Future<File?> call(String text) async {
     if (text.trim().isEmpty) return null;
-    return _repository.save(text);
+    final file = await _repository.save(text);
+    await _repository.trim(10);
+    return file;
   }
 }

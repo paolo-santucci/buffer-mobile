@@ -31,7 +31,7 @@
 // Resolved OQ-B1 persistence contract (authoritative)
 // ---------------------------------------------------------------------------
 //
-// save() writes EXACTLY six upstream gschema keys:
+// save() writes EXACTLY eight upstream gschema keys:
 //
 //   setBool("use-monospace-font",   s.useMonospaceFont)          // bool
 //   setBool("show-line-numbers",    s.showLineNumbers)            // bool
@@ -39,9 +39,10 @@
 //   setBool("save-emergency-files", s.emergencyRecoveryEnabled)   // bool
 //   setInt("emergency-recovery-files", s.emergencyRecoveryFiles)  // 0 or 10
 //   setInt("line-length",           s.lineLength)                 // 800 or 100000
+//   setString("color-scheme",       s.colorScheme.name)          // follow|light|dark
+//   setInt("font-size",             s.fontSizeIndex)              // 0–20
 //
 // There is NO "line-length-enabled" key.
-// There is NO "font-size" key.
 //
 // load() derives lineLengthEnabled from the stored int "line-length":
 //   enabled iff (storedLineLength ?? 800) <= 800
@@ -50,8 +51,11 @@
 // load() derives emergencyRecoveryEnabled directly from the bool key
 //   "save-emergency-files".
 //
+// load() reads fontSizeIndex from int "font-size":
+//   absent/corrupt → 8 (default); stored value → clamped to [0, 20].
+//
 // ---------------------------------------------------------------------------
-// Spec refs: FR-13, EC-04, FR-12, OQ-B1
+// Spec refs: FR-13, EC-04, FR-12, OQ-B1, FR-M7-03, NFR-M7-04
 // ---------------------------------------------------------------------------
 
 // ignore_for_file: prefer_const_constructors
@@ -256,7 +260,7 @@ void main() {
 
   group('SharedPreferencesSettingsRepository.save — key-string fidelity (OQ-B1)', () {
     test(
-      'given_default_settings_when_save_called_then_prefs_contains_exactly_six_verbatim_upstream_keys',
+      'given_default_settings_when_save_called_then_prefs_contains_exactly_eight_verbatim_upstream_keys',
       () async {
         SharedPreferences.setMockInitialValues({});
         final prefs = await SharedPreferences.getInstance();
@@ -266,7 +270,7 @@ void main() {
 
         final keys = prefs.getKeys();
 
-        // The six required upstream gschema keys must be present.
+        // The eight required upstream gschema keys must be present.
         expect(
           keys,
           containsAll(<String>{
@@ -276,15 +280,19 @@ void main() {
             AppSettings.kEmergencyRecoveryEnabled,
             AppSettings.kEmergencyRecoveryFiles,
             AppSettings.kLineLength,
+            AppSettings.kColorScheme,
+            AppSettings.kFontSize,
           }),
-          reason: 'OQ-B1: all six upstream gschema keys must be written',
+          reason:
+              'OQ-B1: all eight upstream gschema keys must be written (7 M6 keys + font-size)',
         );
 
-        // Exactly six keys — no extras.
+        // Exactly eight keys — no extras.
         expect(
           keys,
-          hasLength(6),
-          reason: 'OQ-B1: save() must write exactly six keys, no more, no less',
+          hasLength(8),
+          reason:
+              'OQ-B1: save() must write exactly eight keys after M7 font-size addition',
         );
 
         // Forbidden keys — must not appear.
@@ -293,12 +301,6 @@ void main() {
           isNot(contains('line-length-enabled')),
           reason:
               "OQ-B1: 'line-length-enabled' is not an upstream gschema key and must never be written",
-        );
-        expect(
-          keys,
-          isNot(contains('font-size')),
-          reason:
-              "OQ-B1: 'font-size' is deferred to a later milestone and must not be written here",
         );
       },
     );
@@ -376,6 +378,269 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
+  // TASK-03 / FR-M6-01 / EC-01 — load() with stored 'color-scheme' strings.
+  //
+  // Tests that known values parse to the correct enum case, absent key falls
+  // back to follow (no throw), and a garbage value falls back to follow (no
+  // throw). Safe switch-fallback — never unguarded AppColorScheme.values.byName.
+  // -------------------------------------------------------------------------
+
+  group(
+    'SharedPreferencesSettingsRepository.load — color-scheme happy paths (FR-M6-01)',
+    () {
+      test(
+        'given_color_scheme_key_holds_dark_when_load_called_then_colorScheme_is_dark',
+        () async {
+          SharedPreferences.setMockInitialValues({
+            AppSettings.kColorScheme: 'dark',
+          });
+          final prefs = await SharedPreferences.getInstance();
+          final repo = SharedPreferencesSettingsRepository(prefs);
+
+          final settings = await repo.load();
+
+          expect(
+            settings.colorScheme,
+            AppColorScheme.dark,
+            reason: "FR-M6-01: 'dark' string must parse to AppColorScheme.dark",
+          );
+        },
+      );
+
+      test(
+        'given_color_scheme_key_holds_light_when_load_called_then_colorScheme_is_light',
+        () async {
+          SharedPreferences.setMockInitialValues({
+            AppSettings.kColorScheme: 'light',
+          });
+          final prefs = await SharedPreferences.getInstance();
+          final repo = SharedPreferencesSettingsRepository(prefs);
+
+          final settings = await repo.load();
+
+          expect(
+            settings.colorScheme,
+            AppColorScheme.light,
+            reason:
+                "FR-M6-01: 'light' string must parse to AppColorScheme.light",
+          );
+        },
+      );
+
+      test(
+        'given_color_scheme_key_holds_follow_when_load_called_then_colorScheme_is_follow',
+        () async {
+          SharedPreferences.setMockInitialValues({
+            AppSettings.kColorScheme: 'follow',
+          });
+          final prefs = await SharedPreferences.getInstance();
+          final repo = SharedPreferencesSettingsRepository(prefs);
+
+          final settings = await repo.load();
+
+          expect(
+            settings.colorScheme,
+            AppColorScheme.follow,
+            reason:
+                "FR-M6-01: 'follow' string must parse to AppColorScheme.follow",
+          );
+        },
+      );
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // TASK-03 / EC-01 — safe fallback on absent/garbage color-scheme.
+  //
+  // Absent key → follow (default). Garbage value ('foo') → follow (no throw).
+  // The parse MUST use a safe switch/map fallback, NOT byName (which throws on
+  // unknown values).
+  // -------------------------------------------------------------------------
+
+  group('SharedPreferencesSettingsRepository.load — color-scheme EC-01 fallback', () {
+    test(
+      'given_color_scheme_key_absent_when_load_called_then_colorScheme_defaults_to_follow',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final repo = SharedPreferencesSettingsRepository(prefs);
+
+        final settings = await repo.load();
+
+        expect(
+          settings.colorScheme,
+          AppColorScheme.follow,
+          reason:
+              'EC-01: absent color-scheme key must yield follow (default), not throw',
+        );
+      },
+    );
+
+    test(
+      'given_color_scheme_key_holds_garbage_when_load_called_then_colorScheme_defaults_to_follow_and_does_not_throw',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          AppSettings.kColorScheme: 'foo',
+        });
+        final prefs = await SharedPreferences.getInstance();
+        final repo = SharedPreferencesSettingsRepository(prefs);
+
+        final AppSettings settings;
+        try {
+          settings = await repo.load();
+        } catch (_) {
+          fail(
+            'EC-01: load() must not throw on garbage color-scheme value — '
+            'safe switch/map fallback required, NOT unguarded byName',
+          );
+        }
+
+        expect(
+          settings.colorScheme,
+          AppColorScheme.follow,
+          reason:
+              "EC-01: garbage value 'foo' must fall back to follow, not throw",
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // TASK-03 / FR-M6-12 — save() writes 'color-scheme' string key.
+  //
+  // After save(AppSettings(colorScheme: dark)), the raw prefs store must hold
+  // 'dark' under 'color-scheme'. Existing six keys are also written atomically
+  // in the same call. Total key count is now 7 (6 original + color-scheme).
+  // -------------------------------------------------------------------------
+
+  group('SharedPreferencesSettingsRepository.save — color-scheme (FR-M6-12)', () {
+    test(
+      'given_settings_with_colorScheme_dark_when_save_called_then_color_scheme_key_holds_dark',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final repo = SharedPreferencesSettingsRepository(prefs);
+
+        await repo.save(AppSettings(colorScheme: AppColorScheme.dark));
+
+        expect(
+          prefs.getString(AppSettings.kColorScheme),
+          equals('dark'),
+          reason:
+              "FR-M6-12: colorScheme=dark must write 'dark' under 'color-scheme' key",
+        );
+      },
+    );
+
+    test(
+      'given_settings_with_colorScheme_dark_when_save_called_then_all_eight_keys_are_written_atomically',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final repo = SharedPreferencesSettingsRepository(prefs);
+
+        await repo.save(AppSettings(colorScheme: AppColorScheme.dark));
+
+        final keys = prefs.getKeys();
+
+        // All seven pre-existing keys plus the new font-size key.
+        expect(
+          keys,
+          containsAll(<String>{
+            AppSettings.kUseMonospaceFont,
+            AppSettings.kShowLineNumbers,
+            AppSettings.kSpellingEnabled,
+            AppSettings.kEmergencyRecoveryEnabled,
+            AppSettings.kEmergencyRecoveryFiles,
+            AppSettings.kLineLength,
+            AppSettings.kColorScheme,
+            AppSettings.kFontSize,
+          }),
+          reason:
+              'FR-M6-12/§5.2/FR-M7-03: all eight keys must be written in the same save() call',
+        );
+
+        // Exactly eight keys — no extras.
+        expect(
+          keys,
+          hasLength(8),
+          reason:
+              'save() must write exactly eight keys after adding font-size (M7)',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // TASK-03 / EC-02 — save() propagates setString failure; repo does not
+  // mutate in-memory state.
+  //
+  // SharedPreferences mock does not support simulating setString failure
+  // directly. This test verifies the structural guarantee: the repository
+  // holds no mutable in-memory state (all state lives in the injected prefs
+  // and the domain AppSettings value passed to save()). The next load() will
+  // read the state from prefs — which is exactly what the caller controls.
+  // Structural regression guard: save() must not swallow exceptions.
+  // -------------------------------------------------------------------------
+  //
+  // NOTE: The mock SharedPreferences cannot simulate a disk-full throw from
+  // setString in the current test harness. The EC-02 structural invariant is
+  // instead verified through the implementation review (save() has no try/catch
+  // swallowing exceptions — it lets platform exceptions propagate). This is
+  // documented as a known limitation of the mock-based test approach.
+  //
+  // The absence of in-memory state mutation is structural: the repository has
+  // no fields other than `_prefs` (the injected SharedPreferences instance);
+  // there is no `_cachedSettings` or similar field to corrupt.
+
+  // -------------------------------------------------------------------------
+  // TASK-03 / FR-M6-13 / D8 — line-length round-trips; no new setter exposed.
+  //
+  // The line-length key is vestigial: load() reads it for lineLengthEnabled
+  // derivation; save() writes it as derived int. No new public method for it.
+  // Verified by the existing round-trip tests above, plus this regression guard.
+  // -------------------------------------------------------------------------
+
+  group(
+    'SharedPreferencesSettingsRepository — line-length vestigial round-trip (FR-M6-13/D8)',
+    () {
+      test(
+        'given_line_length_100000_in_prefs_when_save_then_load_then_round_trips_without_color_scheme_interference',
+        () async {
+          SharedPreferences.setMockInitialValues({
+            AppSettings.kLineLength: 100000,
+          });
+          final prefs = await SharedPreferences.getInstance();
+          final repo = SharedPreferencesSettingsRepository(prefs);
+
+          // Save with a non-default colorScheme to confirm the two fields
+          // are independent and do not interfere with each other.
+          await repo.save(
+            AppSettings(
+              lineLengthEnabled: false,
+              colorScheme: AppColorScheme.dark,
+            ),
+          );
+          final loaded = await repo.load();
+
+          expect(
+            loaded.lineLengthEnabled,
+            isFalse,
+            reason:
+                'FR-M6-13: line-length round-trip must not be broken by color-scheme addition',
+          );
+          expect(
+            loaded.colorScheme,
+            AppColorScheme.dark,
+            reason:
+                'FR-M6-12: color-scheme must round-trip independently of line-length',
+          );
+        },
+      );
+    },
+  );
+
+  // -------------------------------------------------------------------------
   // line-length derivation — load() derives lineLengthEnabled from stored int.
   //
   // Seeding the mock prefs directly (bypassing save()) exercises the load()
@@ -434,6 +699,187 @@ void main() {
           isTrue,
           reason:
               'Absent line-length key → null ?? 800 = 800 <= 800 → lineLengthEnabled must default to true',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // TASK-02 / FR-M7-03 / NFR-M7-04 — font-size key: persist, load, clamp.
+  //
+  // save() writes 'font-size' as the 8th key (setInt).
+  // load() reads it: absent/corrupt → 8 (default); stored → clamped [0, 20].
+  // -------------------------------------------------------------------------
+
+  group('SharedPreferencesSettingsRepository — font-size round-trip (FR-M7-03)', () {
+    test(
+      'given_fontSizeIndex_5_when_save_then_load_then_fontSizeIndex_is_5_and_key_count_is_8',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final repo = SharedPreferencesSettingsRepository(prefs);
+
+        await repo.save(AppSettings(fontSizeIndex: 5));
+        final loaded = await repo.load();
+
+        expect(
+          loaded.fontSizeIndex,
+          equals(5),
+          reason:
+              'FR-M7-03: fontSizeIndex must round-trip through save/load unchanged',
+        );
+
+        final keys = prefs.getKeys();
+        expect(
+          keys,
+          hasLength(8),
+          reason:
+              'FR-M7-03: save() must write exactly 8 keys (7 prior + font-size)',
+        );
+        expect(
+          keys,
+          contains(AppSettings.kFontSize),
+          reason: "FR-M7-03: 'font-size' key must be present in the store",
+        );
+      },
+    );
+
+    test(
+      'given_fontSizeIndex_0_boundary_when_save_then_load_then_fontSizeIndex_is_0',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final repo = SharedPreferencesSettingsRepository(prefs);
+
+        await repo.save(AppSettings(fontSizeIndex: 0));
+        final loaded = await repo.load();
+
+        expect(
+          loaded.fontSizeIndex,
+          equals(0),
+          reason: 'FR-M7-03: boundary 0 must round-trip as 0',
+        );
+      },
+    );
+
+    test(
+      'given_fontSizeIndex_20_boundary_when_save_then_load_then_fontSizeIndex_is_20',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final repo = SharedPreferencesSettingsRepository(prefs);
+
+        await repo.save(AppSettings(fontSizeIndex: 20));
+        final loaded = await repo.load();
+
+        expect(
+          loaded.fontSizeIndex,
+          equals(20),
+          reason: 'FR-M7-03: boundary 20 must round-trip as 20',
+        );
+      },
+    );
+  });
+
+  group(
+    'SharedPreferencesSettingsRepository.load — font-size absent/corrupt (NFR-M7-04)',
+    () {
+      test(
+        'given_font_size_key_absent_when_load_called_then_fontSizeIndex_defaults_to_8',
+        () async {
+          SharedPreferences.setMockInitialValues({});
+          final prefs = await SharedPreferences.getInstance();
+          final repo = SharedPreferencesSettingsRepository(prefs);
+
+          final settings = await repo.load();
+
+          expect(
+            settings.fontSizeIndex,
+            equals(8),
+            reason:
+                'NFR-M7-04: absent font-size key must yield default index 8',
+          );
+        },
+      );
+
+      test(
+        'given_font_size_key_holds_corrupt_string_when_load_called_then_fontSizeIndex_defaults_to_8_and_does_not_throw',
+        () async {
+          SharedPreferences.setMockInitialValues({
+            AppSettings.kFontSize: 'not-an-int',
+          });
+          final prefs = await SharedPreferences.getInstance();
+          final repo = SharedPreferencesSettingsRepository(prefs);
+
+          final AppSettings settings;
+          try {
+            settings = await repo.load();
+          } catch (_) {
+            fail(
+              'NFR-M7-04: load() must not throw when font-size key holds a corrupt (non-int) value',
+            );
+          }
+
+          expect(
+            settings.fontSizeIndex,
+            equals(8),
+            reason:
+                'NFR-M7-04: corrupt font-size value must yield default index 8',
+          );
+        },
+      );
+    },
+  );
+
+  group('SharedPreferencesSettingsRepository.load — font-size clamp (NFR-M7-04)', () {
+    test(
+      'given_font_size_key_holds_minus1_when_load_called_then_fontSizeIndex_is_clamped_to_0',
+      () async {
+        SharedPreferences.setMockInitialValues({AppSettings.kFontSize: -1});
+        final prefs = await SharedPreferences.getInstance();
+        final repo = SharedPreferencesSettingsRepository(prefs);
+
+        final settings = await repo.load();
+
+        expect(
+          settings.fontSizeIndex,
+          equals(0),
+          reason: 'NFR-M7-04: out-of-range low (-1) must clamp to 0',
+        );
+      },
+    );
+
+    test(
+      'given_font_size_key_holds_99_when_load_called_then_fontSizeIndex_is_clamped_to_20',
+      () async {
+        SharedPreferences.setMockInitialValues({AppSettings.kFontSize: 99});
+        final prefs = await SharedPreferences.getInstance();
+        final repo = SharedPreferencesSettingsRepository(prefs);
+
+        final settings = await repo.load();
+
+        expect(
+          settings.fontSizeIndex,
+          equals(20),
+          reason:
+              'NFR-M7-04: out-of-range high (99) must clamp to 20 (slotList.length-1)',
+        );
+      },
+    );
+
+    test(
+      'given_font_size_key_holds_21_when_load_called_then_fontSizeIndex_is_clamped_to_20',
+      () async {
+        SharedPreferences.setMockInitialValues({AppSettings.kFontSize: 21});
+        final prefs = await SharedPreferences.getInstance();
+        final repo = SharedPreferencesSettingsRepository(prefs);
+
+        final settings = await repo.load();
+
+        expect(
+          settings.fontSizeIndex,
+          equals(20),
+          reason: 'NFR-M7-04: index 21 (one past max) must clamp to 20',
         );
       },
     );

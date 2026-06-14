@@ -11,8 +11,9 @@
 // sub-groups within each top-level group.
 //
 // Test targets:
-//   1. height:1.4 in editor TextStyle AND no hardcoded fontSize/fontFamily on
-//      that style in buffer_screen.dart (FR-03).
+//   1. height:1.4 in editor TextStyle AND fontSize/fontFamily DERIVE FROM
+//      SETTINGS STATE (not hardcoded) in buffer_screen.dart (FR-03, M7 REVISED
+//      — fontSize references fontSizePt ≥ twice; fontFamily not a literal).
 //   2. No onSubmitted: wiring on the editor TextField in buffer_screen.dart —
 //      the \n-in-change-path is the sole soft continuation entry point (FR-08).
 //   3. Find-replace seams untouched — highlightRanges, currentMatchIndex, and
@@ -78,120 +79,187 @@ void main() {
   });
 
   // ────────────────────────────────────────────────────────────────────────────
-  // 1. height:1.4 in editor TextStyle AND no fontSize/fontFamily on that style
-  //    (FR-03)
+  // 1. height:1.4 in editor TextStyle AND fontSize/fontFamily DERIVE FROM
+  //    SETTINGS STATE (FR-03, M7 REVISED)
   //
-  // The editor TextStyle must carry `height: 1.4`. The same style definition
-  // must NOT set a hardcoded fontSize or fontFamily (M7 owns those).
+  // The editor TextStyle must carry `height: 1.4`. After M7, the same style
+  // definition MUST set fontSize (from fontSizePt, 21-slot) and fontFamily
+  // (from useMonospaceFont resolution) — both must derive from settings state,
+  // not from hardcoded literals. fontSize: must appear on at least 2 surfaces
+  // (editorStyle AND strutStyle, EC-M7-11 paired invariant).
+  // Gate REVISED for M7 TASK-13 (spec §6.1 gate-revision table).
   // ────────────────────────────────────────────────────────────────────────────
 
-  group('editor TextStyle has height:1.4 and no fontSize/fontFamily (FR-03)', () {
-    // ── red fixture: TextStyle without height, with a fontSize ───────────────
-    group('fixture — broken TextStyle with fontSize and no height', () {
-      const brokenSource = 'TextStyle(fontSize: 16, color: textColor)';
+  // ── REVISED for M7 ──────────────────────────────────────────────────────────
+  // M7 Typography & Layout wires fontSize and fontFamily onto the editor
+  // TextStyle for the first time (spec §5.1.5, FR-M7-01, FR-M7-08, FR-M7-09).
+  // The gate contract flips from "absence" to "presence + derives from settings
+  // state" (TASK-13, spec §6.1 gate-revision table).
+  //
+  // New contract:
+  //   • `fontSize:` PRESENT on non-comment lines — at least 2 occurrences
+  //     (editorStyle AND strutStyle, EC-M7-11 paired invariant).
+  //   • Every `fontSize:` assignment references `fontSizePt` (not a numeric
+  //     literal) — guards against hardcoding that would break 21-slot scaling.
+  //   • `fontFamily:` PRESENT on at least 1 non-comment line — M7 has wired it.
+  //   • No `fontFamily:` value is a hardcoded string literal in the assignment;
+  //     the value resolves from a variable derived from `useMonospaceFont`.
+  // ─────────────────────────────────────────────────────────────────────────────
+  group('editor TextStyle has height:1.4, fontSize derives from settings, '
+      'fontFamily derives from settings (M7 REVISED — FR-03, FR-M7-01, '
+      'FR-M7-08, FR-M7-09)', () {
+    // ── red fixture: fontSize is a numeric literal (wrong — M7 must derive) ──
+    group('fixture — broken TextStyle with hardcoded numeric fontSize', () {
+      const brokenSource =
+          '  fontSize: 16.0,  // hardcoded — NOT derived from fontSizePt';
 
-      test('should_FAIL_to_find_height_1_4_in_broken_fixture', () {
+      test('should_FAIL_derivation_scan_on_hardcoded_literal_fixture', () {
+        // A `fontSize:` line whose value is a plain numeric literal fails the
+        // derivation check: it must reference `fontSizePt`, not a raw number.
+        final isLiteral = RegExp(
+          r'\bfontSize\s*:\s*\d+(\.\d+)?\b',
+        ).hasMatch(brokenSource);
         expect(
-          brokenSource.contains('height: 1.4'),
-          isFalse,
-          reason: 'Broken fixture must NOT contain "height: 1.4".',
-        );
-      });
-
-      test('should_FAIL_fontSize_scan_on_broken_fixture', () {
-        // The fixture explicitly sets fontSize — the scan must detect it.
-        expect(
-          RegExp(r'\bfontSize\b').hasMatch(brokenSource),
+          isLiteral,
           isTrue,
-          reason: 'Broken fixture must trigger the fontSize scan.',
+          reason:
+              'Broken fixture must contain a numeric fontSize literal to prove '
+              'the derivation scan would fire when the slot is not referenced.',
         );
       });
     });
 
-    // ── red fixture: TextStyle with fontFamily ────────────────────────────────
-    group('fixture — broken TextStyle with fontFamily', () {
-      const brokenSource = "TextStyle(height: 1.4, fontFamily: 'monospace')";
+    // ── red fixture: fontFamily is a hardcoded string literal (wrong) ─────────
+    group("fixture — broken TextStyle with hardcoded fontFamily: 'Courier'", () {
+      const brokenSource = "  fontFamily: 'Courier',  // hardcoded literal";
 
-      test('should_FAIL_fontFamily_scan_on_broken_fixture', () {
+      test('should_FAIL_derivation_scan_on_hardcoded_fontFamily_fixture', () {
+        // A fontFamily: whose value is a quoted string literal fails derivation.
+        final isLiteral = RegExp(
+          r"""\bfontFamily\s*:\s*['"][^'"]+['"]""",
+        ).hasMatch(brokenSource);
         expect(
-          RegExp(r'\bfontFamily\b').hasMatch(brokenSource),
+          isLiteral,
           isTrue,
-          reason: 'Broken fixture must trigger the fontFamily scan.',
+          reason:
+              'Broken fixture must contain a string-literal fontFamily to prove '
+              'the derivation scan would fire when the family is hardcoded.',
         );
       });
     });
 
     // ── green: real buffer_screen.dart ───────────────────────────────────────
-    group(
-      'real buffer_screen.dart — height:1.4 present, no fontSize/fontFamily',
-      () {
-        late String screenContent;
+    group('real buffer_screen.dart — height:1.4 present, fontSize+fontFamily '
+        'derive from settings state (M7)', () {
+      late String screenContent;
+      late List<String> codeLines; // non-comment lines only
 
-        setUpAll(() {
-          final file = File(bufferScreenPath);
-          expect(
-            file.existsSync(),
-            isTrue,
-            reason: 'lib/presentation/editor/buffer_screen.dart must exist',
-          );
-          screenContent = file.readAsStringSync();
-        });
+      setUpAll(() {
+        final file = File(bufferScreenPath);
+        expect(
+          file.existsSync(),
+          isTrue,
+          reason: 'lib/presentation/editor/buffer_screen.dart must exist',
+        );
+        screenContent = file.readAsStringSync();
+        codeLines = screenContent.split('\n').where((l) {
+          final t = l.trimLeft();
+          return !t.startsWith('//') && !t.startsWith('*');
+        }).toList();
+      });
 
-        test('should_contain_height_1_4_in_editor_style', () {
+      test('should_contain_height_1_4_in_editor_style', () {
+        expect(
+          screenContent.contains('height: 1.4'),
+          isTrue,
+          reason:
+              'buffer_screen.dart must set "height: 1.4" in the editor '
+              'TextStyle (FR-03).',
+        );
+      });
+
+      // M7 REVISED: fontSize: MUST be present and reference fontSizePt.
+      test('should_set_fontSize_derived_from_fontSizePt_on_both_surfaces', () {
+        // Collect non-comment lines that set fontSize:.
+        final fontSizeLines = codeLines
+            .where((l) => RegExp(r'\bfontSize\s*:').hasMatch(l))
+            .toList();
+
+        // Must be present on at least 2 lines (editorStyle + strutStyle,
+        // EC-M7-11 paired invariant).
+        expect(
+          fontSizeLines.length,
+          greaterThanOrEqualTo(2),
+          reason:
+              'buffer_screen.dart must set fontSize: on at least 2 surfaces '
+              '(editorStyle AND strutStyle — EC-M7-11 paired invariant). '
+              'Found on ${fontSizeLines.length} line(s): '
+              '${fontSizeLines.map((l) => l.trim()).join('; ')}',
+        );
+
+        // Every fontSize: assignment must reference fontSizePt (not a raw
+        // numeric literal). This guards the 21-slot derivation contract.
+        for (final line in fontSizeLines) {
+          final isLiteral = RegExp(
+            r'\bfontSize\s*:\s*\d+(\.\d+)?\b',
+          ).hasMatch(line);
           expect(
-            screenContent.contains('height: 1.4'),
-            isTrue,
+            isLiteral,
+            isFalse,
             reason:
-                'buffer_screen.dart must set "height: 1.4" in the editor '
-                'TextStyle (FR-03).',
+                'fontSize: must derive from fontSizePt (the settings slot), '
+                'not a hardcoded numeric literal (FR-M7-01, 21-slot scaling). '
+                'Offending line: ${line.trim()}',
           );
-        });
+        }
 
-        test('should_NOT_set_fontSize_in_editor_style', () {
-          // Scan non-comment lines in the editor TextStyle block.
-          // The style is defined as a local variable; the file must not contain
-          // a non-comment `fontSize:` assignment outside of a comment.
-          final hits = <String>[];
-          final lines = screenContent.split('\n');
-          for (var i = 0; i < lines.length; i++) {
-            final trimmed = lines[i].trimLeft();
-            if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
-            // Match `fontSize:` as a property assignment (not a comment mention).
-            if (RegExp(r'\bfontSize\s*:').hasMatch(lines[i])) {
-              hits.add('${i + 1}: ${lines[i].trim()}');
-            }
-          }
-          expect(
-            hits,
-            isEmpty,
-            reason:
-                'buffer_screen.dart must NOT set fontSize on the editor '
-                'TextStyle — M7 owns font size (FR-03, NFR-02).\n'
-                'Offenders:\n${hits.join('\n')}',
-          );
-        });
+        // At least one fontSize: line must reference fontSizePt explicitly.
+        final hasFontSizePtRef = fontSizeLines.any(
+          (l) => l.contains('fontSizePt'),
+        );
+        expect(
+          hasFontSizePtRef,
+          isTrue,
+          reason:
+              'At least one fontSize: assignment must explicitly reference '
+              'fontSizePt (editorStyle surface — FR-M7-01, spec §5.1.5).',
+        );
+      });
 
-        test('should_NOT_set_fontFamily_in_editor_style', () {
-          final hits = <String>[];
-          final lines = screenContent.split('\n');
-          for (var i = 0; i < lines.length; i++) {
-            final trimmed = lines[i].trimLeft();
-            if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
-            if (RegExp(r'\bfontFamily\s*:').hasMatch(lines[i])) {
-              hits.add('${i + 1}: ${lines[i].trim()}');
-            }
-          }
+      // M7 REVISED: fontFamily: MUST be present and derive from settings.
+      test('should_set_fontFamily_derived_from_settings_useMonospaceFont', () {
+        // Collect non-comment lines that set fontFamily:.
+        final fontFamilyLines = codeLines
+            .where((l) => RegExp(r'\bfontFamily\s*:').hasMatch(l))
+            .toList();
+
+        // Must be present — M7 has wired the mono/document resolution.
+        expect(
+          fontFamilyLines,
+          isNotEmpty,
+          reason:
+              'buffer_screen.dart must set fontFamily: (M7 wired mono/document '
+              'font family resolution — FR-M7-08, FR-M7-09).',
+        );
+
+        // No fontFamily: line may have a hardcoded string-literal value.
+        // The value must resolve from a local variable derived from
+        // useMonospaceFont (not `fontFamily: 'Courier'` style).
+        for (final line in fontFamilyLines) {
+          final isLiteral = RegExp(
+            r"""\bfontFamily\s*:\s*['"][^'"]+['"]""",
+          ).hasMatch(line);
           expect(
-            hits,
-            isEmpty,
+            isLiteral,
+            isFalse,
             reason:
-                'buffer_screen.dart must NOT set fontFamily on the editor '
-                'TextStyle — M7 owns font family (FR-03, NFR-02 / CANON GAP '
-                'monospace).\nOffenders:\n${hits.join('\n')}',
+                'fontFamily: must reference a variable that derives from '
+                'useMonospaceFont, not a hardcoded string literal '
+                '(FR-M7-08, FR-M7-09). Offending line: ${line.trim()}',
           );
-        });
-      },
-    );
+        }
+      });
+    });
   });
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -243,21 +311,33 @@ void main() {
   });
 
   // ────────────────────────────────────────────────────────────────────────────
-  // 3. Find-replace seams untouched (EC-26)
+  // 3. Find-replace seams present + M4 buildTextSpan painting (EC-26 — REVISED)
   //
-  // highlightRanges, currentMatchIndex, and buildTextSpan must still be present
-  // in editor_controller.dart and buildTextSpan must still delegate to super.
+  // REVISED for M4: the gate no longer asserts "delegates to super unchanged"
+  // (M1/M3 baseline). It now asserts:
+  //   (a) the three seam members are still present (highlightRanges,
+  //       currentMatchIndex, buildTextSpan), and
+  //   (b) buildTextSpan CALLS super for base style/composing decoration
+  //       (super.buildTextSpan is present in the override body), AND
+  //   (c) highlight backgrounds are LAYERED on match runs — verified by scanning
+  //       for primaryContainer and secondaryContainer token references
+  //       (no colour literals; CANON GAP OQ-06 resolved theme-driven).
+  //
+  // The old "delegates to super UNCHANGED" wording is intentionally absent —
+  // searching for it would now be a FALSE assertion (M4 adds layering).
+  // NFR-04: gate REVISED, not removed/bypassed.
   // ────────────────────────────────────────────────────────────────────────────
 
-  group('find-replace seams untouched in editor_controller.dart (EC-26)', () {
-    // ── red fixture: controller source with buildTextSpan body replaced ───────
-    group('fixture — broken controller with missing highlightRanges', () {
+  group('find-replace seams + M4 buildTextSpan painting in editor_controller.dart '
+      '(EC-26 — REVISED)', () {
+    // ── red fixture: controller source with buildTextSpan body replaced ─────
+    group('fixture — broken controller missing highlightRanges and super call', () {
       const brokenSource = '''
 class EditorController extends TextEditingController {
   int? _currentMatchIndex;
   TextSpan buildTextSpan({required BuildContext context,
       TextStyle? style, required bool withComposing}) {
-    // custom implementation — super not called
+    // custom implementation — super not called, no background layering
     return const TextSpan();
   }
 }
@@ -273,24 +353,35 @@ class EditorController extends TextEditingController {
         );
       });
 
-      test(
-        'should_FAIL_super_buildTextSpan_delegation_scan_on_broken_fixture',
-        () {
-          // The real controller must call super.buildTextSpan; the broken fixture
-          // does not. Verify the scan detects its absence.
-          expect(
-            brokenSource.contains('super.buildTextSpan'),
-            isFalse,
-            reason:
-                'Broken fixture must NOT contain "super.buildTextSpan" to prove '
-                'the delegation scan would fire.',
-          );
-        },
-      );
+      test('should_FAIL_super_buildTextSpan_call_scan_on_broken_fixture', () {
+        // M4: buildTextSpan must still call super.buildTextSpan for base
+        // style / composing decoration. The broken fixture skips the super
+        // call — scan must detect its absence.
+        expect(
+          brokenSource.contains('super.buildTextSpan'),
+          isFalse,
+          reason:
+              'Broken fixture must NOT contain "super.buildTextSpan" to prove '
+              'the super-call scan would fire when it is absent.',
+        );
+      });
+
+      test('should_FAIL_primaryContainer_scan_on_broken_fixture', () {
+        // M4: the override must reference primaryContainer (current-match
+        // background). The broken fixture does not.
+        expect(
+          brokenSource.contains('primaryContainer'),
+          isFalse,
+          reason:
+              'Broken fixture must NOT contain "primaryContainer" to prove '
+              'the highlight-background scan would fire when layering is absent.',
+        );
+      });
     });
 
-    // ── green: real editor_controller.dart ────────────────────────────────────
-    group('real editor_controller.dart — all three seams intact', () {
+    // ── green: real editor_controller.dart ──────────────────────────────────
+    group('real editor_controller.dart — seams intact, super called, '
+        'backgrounds layered (M4)', () {
       late String controllerContent;
 
       setUpAll(() {
@@ -309,7 +400,7 @@ class EditorController extends TextEditingController {
           isTrue,
           reason:
               'editor_controller.dart must retain the highlightRanges member '
-              '(M4 seam, EC-26). M3 must not remove it.',
+              '(M4 seam, EC-26).',
         );
       });
 
@@ -319,7 +410,7 @@ class EditorController extends TextEditingController {
           isTrue,
           reason:
               'editor_controller.dart must retain the currentMatchIndex member '
-              '(M4 seam, EC-26). M3 must not remove it.',
+              '(M4 seam, EC-26).',
         );
       });
 
@@ -329,19 +420,80 @@ class EditorController extends TextEditingController {
           isTrue,
           reason:
               'editor_controller.dart must retain the buildTextSpan override '
-              '(M4 seam, EC-26). M3 must not remove it.',
+              '(M4 seam, EC-26).',
         );
       });
 
-      test('should_have_buildTextSpan_delegate_to_super', () {
+      // REVISED: asserts super is CALLED (not "unchanged delegation") — M4
+      // calls super for base style/composing, then overlays backgrounds.
+      test('should_call_super_buildTextSpan_for_base_style_and_composing', () {
         expect(
           controllerContent.contains('super.buildTextSpan'),
           isTrue,
           reason:
-              'editor_controller.dart buildTextSpan must delegate to super '
-              '(M1/M3 baseline — M4 will paint highlights here, EC-26).',
+              'editor_controller.dart buildTextSpan MUST call '
+              'super.buildTextSpan to preserve base TextStyle and composing '
+              'decoration (M4 layers backgrounds on top — EC-26 revised).',
         );
       });
+
+      // NEW (M4): verifies highlight backgrounds are layered — theme-derived,
+      // no colour literals (CANON GAP OQ-06 resolved theme-driven).
+      test(
+        'should_reference_primaryContainer_for_current_match_background',
+        () {
+          expect(
+            controllerContent.contains('primaryContainer'),
+            isTrue,
+            reason:
+                'editor_controller.dart buildTextSpan must reference '
+                'primaryContainer for the current-match background (M4, '
+                'OQ-06 CANON GAP resolved theme-driven; no colour literal).',
+          );
+        },
+      );
+
+      test(
+        'should_reference_secondaryContainer_for_non_current_match_background',
+        () {
+          expect(
+            controllerContent.contains('secondaryContainer'),
+            isTrue,
+            reason:
+                'editor_controller.dart buildTextSpan must reference '
+                'secondaryContainer for non-current match backgrounds (M4, '
+                'OQ-06 CANON GAP resolved theme-driven; no colour literal).',
+          );
+        },
+      );
+
+      // NEGATIVE: old "delegates to super unchanged" wording must NOT appear
+      // as a code comment implying pure delegation (M4 revises the contract).
+      // Note: the COMMENT text in the M1/M3 source saying "M4 will paint
+      // highlights here" can still exist; we only ban the phrase that would
+      // imply the method body is a pure passthrough after M4 landed.
+      test(
+        'should_NOT_have_buildTextSpan_described_as_delegation_only_stub',
+        () {
+          // The M1 stub had a doc comment "delegates verbatim to super" or
+          // "no highlight painting yet". After M4 these must be gone.
+          final delegatesVerbatim =
+              controllerContent.contains('delegates verbatim to super') ||
+              controllerContent.contains(
+                'delegates to [super.buildTextSpan] verbatim',
+              ) ||
+              controllerContent.contains('no highlight painting yet');
+          expect(
+            delegatesVerbatim,
+            isFalse,
+            reason:
+                'After M4, buildTextSpan must not be described as a '
+                'verbatim-delegation stub. The M1 stub comment must be '
+                'replaced with the M4 implementation description (NFR-04, '
+                'gate REVISED not bypassed).',
+          );
+        },
+      );
     });
   });
 

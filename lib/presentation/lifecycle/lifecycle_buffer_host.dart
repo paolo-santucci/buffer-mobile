@@ -19,7 +19,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:buffer/domain/buffer/buffer_provider.dart';
+import 'package:buffer/domain/settings/app_settings.dart';
 import 'package:buffer/presentation/editor/share_providers.dart';
+import 'package:buffer/presentation/settings/settings_provider.dart';
 
 /// A non-visual host widget that:
 ///
@@ -105,6 +107,12 @@ class LifecycleBufferHostState extends ConsumerState<LifecycleBufferHost>
     final text = ref.read(bufferProvider).text;
     if (text.trim().isEmpty) return; // EC-M2-02 trim gate.
 
+    // FR-M5-16 / NFR-M5-03 / EC-08: read settings defensively — no requireValue.
+    // const AppSettings() defaults emergencyRecoveryEnabled=true, so the
+    // no-crash fallback during AsyncLoading still permits the save (default-ON).
+    final settings = ref.read(settingsProvider).value ?? const AppSettings();
+    if (!settings.emergencyRecoveryEnabled) return;
+
     _savedSinceLastResume = true;
     _save(text);
   }
@@ -124,6 +132,11 @@ class LifecycleBufferHostState extends ConsumerState<LifecycleBufferHost>
 
     final text = ref.read(bufferProvider).text;
     if (text.trim().isEmpty) return;
+
+    // FR-M5-16 / NFR-M5-03 / EC-08: same defensive settings read as _onPaused.
+    // No requireValue — const AppSettings() defaults emergencyRecoveryEnabled=true.
+    final settings = ref.read(settingsProvider).value ?? const AppSettings();
+    if (!settings.emergencyRecoveryEnabled) return;
 
     _savedSinceLastResume = true;
     _save(text);

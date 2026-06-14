@@ -29,6 +29,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:buffer/domain/recovery/recovery_note.dart';
 import 'package:buffer/domain/recovery/recovery_repository.dart';
 import 'package:buffer/domain/settings/app_settings.dart';
 import 'package:buffer/domain/settings/settings_repository.dart';
@@ -59,6 +60,18 @@ class _FakeRecoveryRepository implements RecoveryRepository {
   @override
   Future<File> save(String text) async =>
       File('/tmp/fake-${DateTime.now().microsecondsSinceEpoch}.txt');
+
+  // M5 stubs — not exercised by these boot tests.
+  @override
+  Future<List<RecoveryNote>> list() async => const [];
+  @override
+  Future<String> read(RecoveryNote note) async => '';
+  @override
+  Future<void> delete(RecoveryNote note) async {}
+  @override
+  Future<void> deleteAll() async {}
+  @override
+  Future<void> trim(int keep) async {}
 }
 
 /// Null-stream [ShareIntentService] — required because BufferScreen subscribes
