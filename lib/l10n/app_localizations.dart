@@ -120,7 +120,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Previous Match'**
-  String get findPreviousTooltip;
+  String get findPreviousTooltip:;
 
   /// Tooltip for the next match button in the search bar.
   ///
@@ -350,12 +350,18 @@ abstract class AppLocalizations {
   /// **'About Buffer'**
   String get aboutTitle;
 
-  /// Developer name displayed in the About screen.
+  /// Original developer name displayed in the About screen.
   ///
   /// In en, this message translates to:
   /// **'Chris Heywood'**
-  String get aboutDeveloper;
+  String get aboutOriginalDeveloper;
 
+  /// Developer name displayed in the About screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Paolo Santucci'**
+  String get aboutDeveloper;
+  
   /// Label prefix for the app version row in the About screen. The actual version number is appended at runtime.
   ///
   /// In en, this message translates to:

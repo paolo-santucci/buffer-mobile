@@ -141,7 +141,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutTitle => 'About Buffer';
 
   @override
-  String get aboutDeveloper => 'Chris Heywood';
+  String get aboutOriginalDeveloper => 'Chris Heywood';
+
+  @override
+  String get aboutDeveloper => 'Paolo Santucci';
 
   @override
   String get aboutVersion => 'Version';

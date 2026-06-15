@@ -178,7 +178,11 @@
   "@aboutTitle": {
     "description": "Title displayed in the About screen app bar."
   },
-  "aboutDeveloper": "Chris Heywood",
+  "aboutOriginalDeveloper": "Chris Heywood",
+  "@aboutOriginalDeveloper": {
+    "description": "Original developer name displayed in the About screen."
+  },
+  "aboutDeveloper": "Paolo Santucci",
   "@aboutDeveloper": {
     "description": "Developer name displayed in the About screen."
   },

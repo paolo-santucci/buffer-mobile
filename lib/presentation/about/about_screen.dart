@@ -85,8 +85,8 @@ class RealUrlLauncherSeam implements UrlLauncherSeam {
 // Source: canon/spec/appearance-and-shell.md §51 (application.rs:show_about)
 // ---------------------------------------------------------------------------
 
-const _kIssueUrl = 'https://gitlab.gnome.org/cheywood/buffer/-/issues';
-const _kWebsiteUrl = 'https://gitlab.gnome.org/cheywood/buffer/';
+const _kIssueUrl = 'https://buffer.paolosantucci.com/bug/';
+const _kWebsiteUrl = 'https://buffer.paolosantucci.com/';
 
 // ---------------------------------------------------------------------------
 // Widget
@@ -161,7 +161,11 @@ class _AboutBody extends StatelessWidget {
         ListTile(title: Text(l10n.appTitle)),
         const Divider(height: 1),
 
-        // Developer — "Chris Heywood" from ARB `aboutDeveloper`.
+        // Original Developer — "Chris Heywood" from ARB `aboutOriginalDeveloper`.
+        ListTile(title: Text(l10n.aboutOriginalDeveloper)),
+        const Divider(height: 1),
+
+        // Developer — "Paolo Santucci" from ARB `aboutDeveloper`.
         ListTile(title: Text(l10n.aboutDeveloper)),
         const Divider(height: 1),
 
