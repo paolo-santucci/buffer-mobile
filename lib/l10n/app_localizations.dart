@@ -101,7 +101,7 @@ abstract class AppLocalizations {
   /// The title of the application displayed in the window title bar and as the app name.
   ///
   /// In en, this message translates to:
-  /// **'Buffer'**
+  /// **'Buffer Mobile'**
   String get appTitle;
 
   /// Placeholder text shown in the search field.

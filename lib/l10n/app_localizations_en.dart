@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Buffer';
+  String get appTitle => 'Buffer Mobile';
 
   @override
   String get findHintText => 'Search';
