@@ -356,12 +356,6 @@ abstract class AppLocalizations {
   /// **'About Buffer'**
   String get aboutTitle;
 
-  /// Original developer name displayed in the About screen.
-  ///
-  /// In en, this message translates to:
-  /// **'Chris Heywood'**
-  String get aboutOriginalDeveloper;
-
   /// Developer name displayed in the About screen.
   ///
   /// In en, this message translates to:

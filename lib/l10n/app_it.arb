@@ -182,10 +182,6 @@
   "@aboutTitle": {
     "description": "Titolo visualizzato nella barra dell'app della schermata informazioni."
   },
-  "aboutOriginalDeveloper": "Chris Heywood",
-  "@aboutOriginalDeveloper": {
-    "description": "Nome dello sviluppatore originale visualizzato nella schermata informazioni."
-  },
   "aboutDeveloper": "Paolo Santucci",
   "@aboutDeveloper": {
     "description": "Nome dello sviluppatore visualizzato nella schermata informazioni."
