@@ -64,4 +64,19 @@ abstract interface class RecoveryRepository {
   /// AFTER a successful save. Propagates FileSystemException UNCHANGED like
   /// save (background path — lifecycle host catches/logs).
   Future<void> trim(int keep);
+
+  // --- NEW (additive, Defect B, C-04) ---
+
+  /// Persists [text] to the recovery store SYNCHRONOUSLY and returns the
+  /// written [File]. Used on the `paused`/`detached` lifecycle path where the
+  /// OS may freeze the isolate before any async I/O flushes. Implementations
+  /// MUST complete the directory-create + write + collision-resolution + the
+  /// trim-to-keep step before returning (no awaits, no queued microtasks).
+  ///
+  /// Precondition: `text.trim().isNotEmpty` — enforced by the caller.
+  /// On [FileSystemException]: propagates to the caller UNCHANGED (the
+  /// lifecycle host catches and logs; never crashes — EC-M2-08).
+  /// Retention: trims to the newest [keep] files (default 10) by LEXICOGRAPHIC
+  /// filename AFTER the write succeeds, NEVER mtime (NFR-M5-01).
+  File saveSync(String text, {int keep = 10});
 }

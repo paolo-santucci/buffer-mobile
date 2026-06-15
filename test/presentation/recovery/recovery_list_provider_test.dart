@@ -74,6 +74,11 @@ class _FakeRecoveryRepository implements RecoveryRepository {
   Future<void> trim(int keep) async {
     // not exercised in this test file
   }
+
+  // Defect-B sync stub — not exercised by list-provider tests.
+  @override
+  File saveSync(String text, {int keep = 10}) =>
+      throw UnimplementedError('saveSync not needed in list tests');
 }
 
 // ---------------------------------------------------------------------------

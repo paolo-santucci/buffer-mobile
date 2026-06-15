@@ -150,6 +150,10 @@
   "@menuRecovery": {
     "description": "Label for the Recovery entry in the main menu sheet, navigating to the Recovery screen."
   },
+  "menuFind": "Find / Replace",
+  "@menuFind": {
+    "description": "Label for the Find / Replace entry in the main menu sheet, opening the find-and-replace bar. SP-20260615 FR-17."
+  },
   "settingsTitle": "Preferences",
   "@settingsTitle": {
     "description": "Title displayed in the Settings screen app bar."
@@ -227,6 +231,10 @@
   "settingsMonospaceFont": "Monospace font",
   "@settingsMonospaceFont": {
     "description": "Label for the monospace font toggle in the Settings screen Appearance section."
+  },
+  "settingsLineNumbers": "Show line numbers",
+  "@settingsLineNumbers": {
+    "description": "Label for the show-line-numbers toggle in the Settings screen Appearance section. SP-20260615 FR-18."
   },
   "a11yZoomIn": "Increase font size",
   "@a11yZoomIn": {

@@ -61,6 +61,14 @@ const double _kCheckedRingWidth = 2.0;
 /// Inter-swatch spacing: 12 px (canon §6; theme_selector.blp:16).
 const double _kSwatchSpacing = 12.0;
 
+/// Diameter of the accent-filled "checked" badge pinned to the swatch's
+/// bottom-right corner. Sized so the check reads clearly while the badge stays
+/// inside the swatch bounds (≈ 40% of the 44dp swatch).
+const double _kCheckBadgeSize = 18.0;
+
+/// Check glyph size inside the accent badge.
+const double _kCheckGlyphSize = 12.0;
+
 // ---------------------------------------------------------------------------
 // ThemeSelector
 // ---------------------------------------------------------------------------
@@ -191,19 +199,37 @@ class ThemeSwatch extends StatelessWidget {
               ringColor: ringColor,
               ringWidth: ringWidth,
             ),
-            // Check icon is painted inside the swatch via a Stack so it
-            // participates in layout and can be found by find.byIcon.
+            // Selected indicator: an accent-filled circular badge carrying the
+            // check, pinned to the bottom-right of the swatch (matches the
+            // upstream GNOME Buffer selector). A bare centred check is invisible
+            // on the white Light/Follow fills — the accent disc gives it a
+            // guaranteed contrasting backdrop, and the thin surface-coloured
+            // outline separates the badge from the swatch fill behind it.
             child: isSelected
-                ? Center(
-                    child: Icon(
-                      Icons.check,
-                      // Canon §6 "Radio indicator checked" fg → --accent-fg-color.
-                      // <!-- CANON GAP: --accent-fg-color exact hex not in bible;
-                      //     mapped to ColorScheme.onPrimary per AppTheme convention.
-                      //     See .claude/docs/decisions/D-003-border-color-approximation.md -->
-                      color: colorScheme.onPrimary,
-                      // No fontSize on the icon size parameter — use a dp value.
-                      size: 20.0,
+                ? Align(
+                    alignment: Alignment.bottomRight,
+                    child: Container(
+                      width: _kCheckBadgeSize,
+                      height: _kCheckBadgeSize,
+                      decoration: BoxDecoration(
+                        // --accent-bg-color → primary (the "circle in accent").
+                        color: colorScheme.primary,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: colorScheme.surface,
+                          width: 1.5,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.check,
+                        // Canon §6 "Radio indicator checked" fg → --accent-fg-color.
+                        // <!-- CANON GAP: --accent-fg-color exact hex not in bible;
+                        //     mapped to ColorScheme.onPrimary per AppTheme convention.
+                        //     See .claude/docs/decisions/D-003-border-color-approximation.md -->
+                        color: colorScheme.onPrimary,
+                        // No fontSize on the icon size parameter — use a dp value.
+                        size: _kCheckGlyphSize,
+                      ),
                     ),
                   )
                 : null,

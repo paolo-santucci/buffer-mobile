@@ -25,6 +25,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:buffer/l10n/app_localizations.dart';
+import 'package:buffer/presentation/editor/editor_layout.dart'
+    show kChromeMenuZoneHeight;
 import 'package:buffer/presentation/shell/chrome_overlay.dart';
 import 'package:buffer/presentation/shell/chrome_reveal_controller.dart';
 
@@ -412,6 +414,67 @@ void main() {
           reason:
               'ChromeOverlay must place itself via Positioned (FR-M6-05: '
               'never a Column row that resizes the editor)',
+        );
+      },
+    );
+  });
+
+  // =========================================================================
+  // 10. TASK-02 coupling: kChromeMenuZoneHeight == 48.0 and
+  //     chrome_overlay.dart references it instead of _kMinTapTarget (C2b).
+  // =========================================================================
+  // Canon ref: ui-design-bible.md §Components.2 "Auto-hiding overlay chrome"
+  //   "Promote targets to ≥48dp" — the shared constant is the single source of
+  //   truth for the 48dp tap-target minimum so the reserved top inset and the
+  //   chrome button box can never drift apart.
+  //
+  // <!-- CANON GAP: ui-design-bible §Components.2 documents the ≥48dp rule
+  //   but does not prescribe the constant-sharing mechanism between
+  //   editor_layout.dart and chrome_overlay.dart — this coupling is a
+  //   mobile-port implementation detail not covered by the canon. -->
+  group('ChromeOverlay — kChromeMenuZoneHeight coupling (TASK-02, C2b)', () {
+    test(
+      'given_sharedConstant_when_read_then_kChromeMenuZoneHeight_equals_48',
+      () {
+        // Validates the shared constant value — the single source of truth
+        // for the chrome menu button zone height (C2b).
+        expect(kChromeMenuZoneHeight, equals(48.0));
+      },
+    );
+
+    test(
+      'given_chrome_overlay_source_when_read_then_references_kChromeMenuZoneHeight',
+      () {
+        // Source-scan: chrome_overlay.dart must import and reference the shared
+        // constant — proving the SizedBox dimensions come from the coupled source.
+        const path = 'lib/presentation/shell/chrome_overlay.dart';
+        final source = File(path).readAsStringSync();
+
+        expect(
+          source,
+          contains('kChromeMenuZoneHeight'),
+          reason:
+              'chrome_overlay.dart must reference kChromeMenuZoneHeight from '
+              'editor_layout.dart (C2b: single source of truth for 48dp zone)',
+        );
+      },
+    );
+
+    test(
+      'given_chrome_overlay_source_when_read_then_has_zero_kMinTapTarget_literals',
+      () {
+        // Source-scan: the private _kMinTapTarget literal must be removed —
+        // any residual literal (const or not) would break the coupling invariant.
+        const path = 'lib/presentation/shell/chrome_overlay.dart';
+        final source = File(path).readAsStringSync();
+
+        expect(
+          source,
+          isNot(contains('_kMinTapTarget')),
+          reason:
+              'chrome_overlay.dart must NOT contain _kMinTapTarget after '
+              'TASK-02 repoint — the shared kChromeMenuZoneHeight is the '
+              'single source of truth (C2b)',
         );
       },
     );

@@ -66,6 +66,11 @@ class _FakeRecoveryRepository implements RecoveryRepository {
 
   @override
   Future<void> trim(int keep) async => lastTrimKeep = keep;
+
+  // Defect-B sync stub — not exercised by interface shape tests.
+  @override
+  File saveSync(String text, {int keep = 10}) =>
+      lastSaved = File('fake_sync_$text.txt');
 }
 
 // ---------------------------------------------------------------------------

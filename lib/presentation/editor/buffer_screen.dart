@@ -105,6 +105,7 @@ import 'package:buffer/domain/settings/app_settings.dart';
 import 'package:buffer/presentation/editor/editor_actions.dart';
 import 'package:buffer/presentation/editor/editor_controller.dart';
 import 'package:buffer/presentation/editor/editor_layout.dart';
+import 'package:buffer/presentation/editor/line_number_gutter.dart';
 import 'package:buffer/presentation/editor/share_providers.dart';
 import 'package:buffer/presentation/find/find_provider.dart';
 import 'package:buffer/presentation/find/find_search_bar.dart';
@@ -563,7 +564,12 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     }
 
     // (a) Cache prior value at the end of every _onControllerChanged call.
-    _priorValue = newValue;
+    // BUG-003: use _controller.value (not newValue) to stay consistent with the
+    // continuation branch (:550), which also caches _controller.value after any
+    // atomic rewrite. For the non-continuation path these are identical because
+    // no rewrite has occurred; the symmetry prevents diff-detection errors if
+    // the two branches are ever merged or reordered.
+    _priorValue = _controller.value;
 
     // (e) Schedule on-change margin scroll (FR-17).
     _scheduleMarginScroll();
@@ -583,14 +589,24 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
   /// M4: this is ALSO the only path for replace mutations (FR-14 / NFR-04).
   /// M6: ALSO the only path for paste mutations (FR-M6-20).
   /// No direct _controller.value = write outside this method on any find/paste path.
+  ///
+  /// BUG-004: mirrors the equality guard in _applyStateToController (which checks
+  /// `_controller.text == next.text` before writing). Without this guard, a
+  /// continuation result that is identical to the current controller value causes
+  /// a spurious _onControllerChanged emission, which in turn reveals the chrome
+  /// unnecessarily and emits a redundant bufferProvider.updateText call.
   void _applyResult(({String text, TextSelection selection}) result) {
+    final target = TextEditingValue(
+      text: result.text,
+      selection: result.selection,
+      composing: TextRange.empty,
+    );
+    // BUG-004 equality guard: skip the write if controller already holds the
+    // same value (mirrors _applyStateToController's guard on line 670).
+    if (_controller.value == target) return;
     _continuing = true;
     try {
-      _controller.value = TextEditingValue(
-        text: result.text,
-        selection: result.selection,
-        composing: TextRange.empty,
-      );
+      _controller.value = target;
     } finally {
       _continuing = false;
     }
@@ -867,6 +883,42 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
   }
 
   // -------------------------------------------------------------------------
+  // SP-20260615 TASK-07: Find affordance wiring (FR-09, FR-10, C3/C4, NFR-04)
+  // -------------------------------------------------------------------------
+
+  /// Injected into [openMenuSheet] as [onFind] so the Find / Replace tile
+  /// in [_MenuSheetContent] can open find without owning a [Ref] or calling
+  /// [startSearch] directly (single-path discipline — NFR-04).
+  ///
+  /// The sheet self-pops via its own `Navigator.pop` before invoking this
+  /// callback (C3 contract). We therefore defer the [OpenFindIntent] dispatch
+  /// one post-frame to ensure the sheet's pop animation has completed and the
+  /// [Actions] ancestor is still in the tree when [maybeInvoke] is called.
+  ///
+  /// A [mounted] guard prevents stale invocations after disposal (C4).
+  ///
+  /// **Single-path invariant (NFR-04):** this method calls NO [startSearch]
+  /// directly. It routes exclusively through the existing
+  /// [OpenFindIntent] → [_OpenFindOrRefocusAction] path, which is the sole
+  /// [startSearch] call site in the codebase.
+  ///
+  /// **Context note:** `Actions.maybeInvoke` searches the InheritedWidget tree
+  /// UPWARD from the given context; the [Actions] widget is a descendant of
+  /// `_BufferScreenState`, so we must dispatch from a context INSIDE [Actions].
+  /// We use [_editorFocusNode.context] (the [TextField]'s element, which sits
+  /// below [Actions]) when available; when the editor is unfocused the context
+  /// is still valid because [FocusNode] retains its context until disposal.
+  void _openFindFromMenu() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Prefer the editor focus node's context (inside the Actions widget),
+      // falling back to the state context (may not reach Actions).
+      final innerContext = _editorFocusNode.context ?? context;
+      Actions.maybeInvoke(innerContext, const OpenFindIntent());
+    });
+  }
+
+  // -------------------------------------------------------------------------
   // Warm-start subscriber (FR-M2-16, FR-M2-17, EC-M2-12)
   // -------------------------------------------------------------------------
 
@@ -953,6 +1005,9 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     ref.listen<AsyncValue<AppSettings>>(settingsProvider, (previous, next) {
       if (next.value == null) return;
       final prevIndex = previous?.value?.fontSizeIndex;
+      // Suppress the toast on the initial load (loading→loaded), where there
+      // is no prior value to compare against — only fire on a real change.
+      if (prevIndex == null) return;
       final nextIndex = next.value!.fontSizeIndex;
       if (prevIndex == nextIndex) return;
       ref
@@ -995,6 +1050,13 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     // MediaQuery.textScalerOf(context) automatically (NFR-M7-01/02).
     // Never pre-multiply fontSize by the textScaler.
     final double fontSizePt = settings.fontSizePt;
+
+    // SP-20260615 TASK-07 (FR-06a/FR-06b/NFR-10): Capture the system top
+    // safe-area inset from this build context, which is ABOVE the SafeArea
+    // child — SafeArea strips padding.top for its descendants, so reading
+    // it here gives the raw platform inset (notch / status-bar / Dynamic Island).
+    // Used by editorTopInset(width, safeAreaTop) inside the LayoutBuilder.
+    final double safeAreaTop = MediaQuery.of(context).padding.top;
 
     // (f) Single editor TextStyle: height 1.4, fontSize from settings, family+fallback resolved.
     final editorStyle = TextStyle(
@@ -1094,43 +1156,141 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
               // becomes a Column sibling of the overlays.
               // ---------------------------------------------------------------
               Positioned.fill(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final vMargin = verticalMargin(constraints.maxWidth);
-                    return Padding(
-                      padding: EdgeInsets.symmetric(vertical: vMargin),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 720.0),
-                          child: editorField,
-                        ),
+                // The find header (when active) is a Column sibling ABOVE the
+                // editor so it PUSHES the text down instead of overlaying it
+                // (upstream behaviour: the text shifts down when the search /
+                // replace bar opens). Chrome + toast remain Positioned overlays.
+                child: Column(
+                  children: [
+                    if (findState.active)
+                      FindSearchBar(
+                        onReplace: _onSearchBarReplace,
+                        focusNode: _searchFocusNode,
+                        replaceRowNotifier: _replaceRowNotifier,
                       ),
-                    );
-                  },
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          // SP-20260615 TASK-07 (FR-04..FR-07, FR-06a, FR-06b,
+                          // NFR-08, NFR-10): Per-side EdgeInsets replacing the M7
+                          // vertical-only padding. The four sides are:
+                          //   left  = editorHorizontalMargin(fontSizePt) — ~2 char
+                          //   top   = editorTopInset(maxWidth, safeAreaTop)
+                          //            = max(kChromeMenuZoneHeight + safeAreaTop,
+                          //                  verticalMargin(maxWidth))
+                          //           Clears chrome + system inset; >= M7 vMargin.
+                          //   right = editorHorizontalMargin(fontSizePt) — symmetric
+                          //   bottom = verticalMargin(maxWidth) — M7 unchanged
+                          //
+                          // MUST stay on the OUTER Padding (outside RenderEditable)
+                          // so _scrollToMatch / after-Enter geometry stay valid (FR-05).
+                          //
+                          // <!-- CANON GAP: ui-design-bible.md §Components.3 editor
+                          //      text view does not specify exact horizontal margin
+                          //      values or a top chrome-clearance formula; the
+                          //      editorHorizontalMargin + editorTopInset derivation
+                          //      is a mobile-specific addition (OQ-14). -->
+                          final maxWidth = constraints.maxWidth;
+                          final vMargin = verticalMargin(maxWidth);
+                          final hMargin = editorHorizontalMargin(fontSizePt);
+                          // When find is active the search header occupies the top of
+                          // the screen (and the chrome menu is hidden), so the editor
+                          // only needs the small responsive vertical margin above it —
+                          // the header itself provides the top clearance and pushes
+                          // the text down. When find is inactive, reserve the chrome
+                          // menu zone so the first row clears the hamburger.
+                          final topInset = findState.active
+                              ? vMargin
+                              : editorTopInset(maxWidth, safeAreaTop);
+                          // SP-20260615 TASK-08 (FR-14, FR-15, FR-16, NFR-06,
+                          // NFR-09, C7): Conditional LineNumberGutter mount.
+                          //
+                          // The gutter is a Row-sibling on the LEADING edge of the
+                          // text column, INSIDE the outer Padding so its top origin
+                          // equals editorTopInset (FR-06a coupling, spec §5.2 step 5).
+                          // Net layout: [hMargin][gutter][text column][hMargin].
+                          //
+                          // Mounted only when showLineNumbers == true (FR-14).
+                          // Holds NO text, NO persistence (NFR-09 ephemerality).
+                          // textStyle + strutStyle are passed so font/strut changes
+                          // (M7 pinch) rebuild the gutter and re-query RenderEditable
+                          // boxes (FR-16 M7 sync, EC-M7-11 paired invariant).
+                          //
+                          // The gutter is OUTSIDE RenderEditable so _scrollToMatch
+                          // / after-Enter geometry remain valid (NFR-08).
+                          final strutStyle = StrutStyle(
+                            fontSize: fontSizePt,
+                            height: 1.4,
+                            forceStrutHeight: true,
+                          );
+                          final editorColumn = settings.showLineNumbers
+                              ? Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    LineNumberGutter(
+                                      scrollController: _scrollController,
+                                      editorContext: context,
+                                      textStyle: editorStyle,
+                                      strutStyle: strutStyle,
+                                      // Read-only text source so the gutter recomputes
+                                      // on every keystroke, not just on scroll (FR-16).
+                                      // Typed Listenable → cannot mutate (NFR-09).
+                                      textListenable: _controller,
+                                    ),
+                                    Expanded(
+                                      child: ConstrainedBox(
+                                        constraints: const BoxConstraints(
+                                          maxWidth: 720.0,
+                                        ),
+                                        child: editorField,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : Center(
+                                  child: ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 720.0,
+                                    ),
+                                    child: editorField,
+                                  ),
+                                );
+                          return Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              hMargin,
+                              topInset,
+                              hMargin,
+                              vMargin,
+                            ),
+                            child: editorColumn,
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
-
-              // ---------------------------------------------------------------
-              // Find search bar: Positioned at top when active (EC-04).
-              // Not a Column sibling — never resizes the editor.
-              // ---------------------------------------------------------------
-              if (findState.active)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: FindSearchBar(
-                    onReplace: _onSearchBarReplace,
-                    focusNode: _searchFocusNode,
-                    replaceRowNotifier: _replaceRowNotifier,
-                  ),
-                ),
 
               // ---------------------------------------------------------------
               // ChromeOverlay: Positioned top-end (canon §Components §2).
               // Wires onMenuTap → openMenuSheet(context) (FR-M6-23).
               // ---------------------------------------------------------------
-              ChromeOverlay(onMenuTap: () => openMenuSheet(context)),
+              // SP-20260615 TASK-07 (FR-09/FR-10, C3/C4, NFR-04): inject
+              // _openFindFromMenu so the Find / Replace tile in the menu sheet
+              // reaches find via the existing OpenFindIntent single path.
+              //
+              // Hidden while find is active: the FindSearchBar (Positioned
+              // top:0, full width) places its rightmost control — the Replace
+              // toggle — under this top-end menu zone. With the chrome painted
+              // on top and hit-testable, taps on "Replace" were intercepted by
+              // the hamburger (the search bar already owns the top; Esc / the
+              // bar's own back button close find). Mounting the chrome only when
+              // find is inactive removes the collision entirely.
+              if (!findState.active)
+                ChromeOverlay(
+                  onMenuTap: () =>
+                      openMenuSheet(context, onFind: _openFindFromMenu),
+                ),
 
               // ---------------------------------------------------------------
               // ToastOverlay: Positioned top-centre (canon §Components §8).
@@ -1361,8 +1521,13 @@ class _OpenFindOrRefocusAction extends Action<OpenFindIntent> {
       // Already active — refocus search field without a fresh startSearch.
       refocusSearch();
     } else {
-      // Open search with caret offset as entry offset (FR-06).
-      startSearch(entryOffset: controller.selection.baseOffset);
+      // SP-20260615 TASK-07 (FR-11, C5, EC-02): clamp baseOffset to >= 0.
+      // When the editor is unfocused (e.g. opened from the menu sheet while
+      // no text cursor is placed), selection.baseOffset == -1.  Passing -1
+      // to startSearch would trigger a RangeError inside the find engine.
+      // math.max(0, baseOffset) covers both the Ctrl+F caller and the new
+      // menu-sheet caller without adding a second startSearch call site.
+      startSearch(entryOffset: math.max(0, controller.selection.baseOffset));
     }
   }
 }

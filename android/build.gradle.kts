@@ -23,15 +23,26 @@ subprojects {
 // that compileXxxJavaWithJavac and compileXxxKotlin always agree on the same target.
 // Without this, plugins that pin Java 11 in their own build.gradle clash with the
 // Kotlin Gradle Plugin 2.x default of jvmTarget=17.
+// Uses LibraryExtension (AGP 9.0.x non-parameterized library DSL; CommonExtension<*> and
+// BaseExtension are both ERROR-level deprecated in AGP 9.x) and
+// compilerOptions DSL (KGP 2.x; kotlinOptions.jvmTarget is DeprecationLevel.ERROR).
+// NOTE: afterEvaluate CANNOT be used here because evaluationDependsOn(":app") in the
+// block above forces :app to evaluate eagerly; afterEvaluate on an already-evaluated
+// project throws InvalidUserCodeException in Gradle 9. Use plugins.withId() instead,
+// which fires at the correct lifecycle point (when the plugin is applied, before
+// evaluation completes). KotlinJvmCompile uses configureEach (already lazy) and does
+// not need any evaluation wrapper.
 subprojects {
-    afterEvaluate {
-        extensions.findByType<com.android.build.gradle.BaseExtension>()?.compileOptions {
-            sourceCompatibility = JavaVersion.VERSION_17
-            targetCompatibility = JavaVersion.VERSION_17
-        }
-        tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-            @Suppress("DEPRECATION")
-            kotlinOptions.jvmTarget = "17"
+    plugins.withId("com.android.library") {
+        extensions.findByType<com.android.build.api.dsl.LibraryExtension>()
+            ?.compileOptions {
+                sourceCompatibility = JavaVersion.VERSION_17
+                targetCompatibility = JavaVersion.VERSION_17
+            }
+    }
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEach {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
         }
     }
 }

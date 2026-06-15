@@ -68,6 +68,10 @@ class _FakeRecoveryRepository implements RecoveryRepository {
 
   @override
   Future<void> deleteAll() async {}
+
+  // Defect-B sync stub — not exercised by use-case unit tests.
+  @override
+  File saveSync(String text, {int keep = 10}) => sentinel;
 }
 
 // ---------------------------------------------------------------------------

@@ -59,6 +59,11 @@ class _FakeRecoveryRepository implements RecoveryRepository {
   Future<void> deleteAll() async {}
   @override
   Future<void> trim(int keep) async {}
+
+  // Defect-B sync stub — not exercised by app_test.
+  @override
+  File saveSync(String text, {int keep = 10}) =>
+      File('/tmp/fake-sync-${DateTime.now().microsecondsSinceEpoch}.txt');
 }
 
 class _FakeShareIntentService implements ShareIntentService {

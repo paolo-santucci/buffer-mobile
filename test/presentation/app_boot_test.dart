@@ -72,6 +72,11 @@ class _FakeRecoveryRepository implements RecoveryRepository {
   Future<void> deleteAll() async {}
   @override
   Future<void> trim(int keep) async {}
+
+  // Defect-B sync stub — not exercised by boot tests.
+  @override
+  File saveSync(String text, {int keep = 10}) =>
+      File('/tmp/fake-sync-${DateTime.now().microsecondsSinceEpoch}.txt');
 }
 
 /// Null-stream [ShareIntentService] — required because BufferScreen subscribes

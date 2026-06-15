@@ -77,6 +77,26 @@ class SettingsNotifier extends AsyncNotifier<AppSettings> {
     await ref.read(settingsRepositoryProvider).save(next);
   }
 
+  // FR-13 / NFR-05 / EC-07 / EC-08
+  //
+  // Single mutation path for the show-line-numbers setting. Modelled verbatim
+  // on [setSpellingEnabled]: reads [state.value] with a
+  // `?? const AppSettings()` fallback (never requireValue — EC-08),
+  // equal-value calls are no-ops (EC-07), and the optimistic [AsyncData]
+  // update is applied BEFORE the [save] await.
+  //
+  // NOTE: The data layer (AppSettings.showLineNumbers, kShowLineNumbers, repo
+  // read/write) already existed before this task (NFR-05) — only this notifier
+  // verb is new.
+  Future<void> setShowLineNumbers(bool enabled) async {
+    final current = state.value ?? const AppSettings();
+    if (current.showLineNumbers == enabled) return;
+
+    final next = current.copyWith(showLineNumbers: enabled);
+    state = AsyncData(next);
+    await ref.read(settingsRepositoryProvider).save(next);
+  }
+
   // FR-M6-02 / FR-M6-03 / EC-08 / EC-09 / NFR-M6-07
   //
   // Single mutation path for the color-scheme setting. Modelled verbatim on

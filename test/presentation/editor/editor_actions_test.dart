@@ -265,7 +265,12 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // ContinueListIntent → Action — null path (plain \n, apply NOT called)
+  // ContinueListIntent → Action — null path (non-list line → literal \n)
+  //
+  // T-01 fix: when continueListOnNewline returns null (non-list line),
+  // the action explicitly inserts a literal '\n' at the caret via [apply]
+  // and consumes the key. This is device-reliable — EditableText's default
+  // '\n' insertion is not available in the widget-test key-event path (C-06).
   // -------------------------------------------------------------------------
   group('ContinueListAction — null continuation', () {
     late _FakeController controller;
@@ -276,7 +281,7 @@ void main() {
       controller = _FakeController(text: 'plain text');
       controller.selection = const TextSelection.collapsed(offset: 10);
 
-      // continueListOnNewline returns null (plain \n stays)
+      // continueListOnNewline returns null (non-list line)
       controller.continueResult = null;
 
       capture = _ApplyCapture();
@@ -286,21 +291,47 @@ void main() {
       );
     });
 
-    test('apply callback is NOT called when result is null', () {
-      action.invoke(const ContinueListIntent());
-      expect(capture.captured, isNull);
-    });
+    test(
+      'apply IS called with literal \\n insertion when result is null (T-01 fix)',
+      () {
+        action.invoke(const ContinueListIntent());
+        expect(
+          capture.captured,
+          isNotNull,
+          reason:
+              'Non-list Enter must insert \\n via apply; '
+              'apply must be called (T-01 defect fix).',
+        );
+        expect(
+          capture.captured!.text,
+          'plain text\n',
+          reason: 'Inserted \\n appended at end of text.',
+        );
+        expect(
+          capture.captured!.selection.baseOffset,
+          11,
+          reason: 'Caret must land immediately after the inserted \\n.',
+        );
+      },
+    );
 
     test('continueListOnNewline IS called even when result is null', () {
       action.invoke(const ContinueListIntent());
       expect(controller.continueCallCount, 1);
     });
 
-    test('apply is never called regardless of how many times invoke fires', () {
-      action.invoke(const ContinueListIntent());
-      action.invoke(const ContinueListIntent());
-      expect(capture.captured, isNull);
-    });
+    test(
+      'apply IS called each time invoke fires on non-list line (T-01 fix)',
+      () {
+        action.invoke(const ContinueListIntent());
+        action.invoke(const ContinueListIntent());
+        expect(
+          capture.captured,
+          isNotNull,
+          reason: 'apply must be called on every non-list Enter (T-01 fix).',
+        );
+      },
+    );
   });
 
   // -------------------------------------------------------------------------

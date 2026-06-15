@@ -4,6 +4,13 @@
 // Spec refs: FR-M2-05, FR-M2-06, FR-M2-07, FR-M2-08, EC-M2-02, EC-M2-06,
 //            EC-M2-08, EC-M2-13, EC-M2-14, §4.1, §4.2
 //
+// T-03 fix: _onPaused and _onDetached now call the SYNCHRONOUS use-case path
+// (SaveBufferToRecovery.callSync) so bytes hit disk before
+// didChangeAppLifecycleState returns. On Android (and iOS), the OS may freeze
+// the isolate immediately after the callback returns; async I/O scheduled via
+// Futures/microtasks is silently dropped in that window. The sync path
+// eliminates the race entirely.
+//
 // UI Design Canon: This widget renders ONLY its [child] — it adds zero chrome
 // (no colour, spacing, decoration, or layout of its own). The ui-design-bible
 // §Design ethos "chrome-free at rest" rule is trivially satisfied because the
@@ -32,16 +39,24 @@ import 'package:buffer/presentation/settings/settings_provider.dart';
 ///
 /// ## Lifecycle contract (LP §5.3 — inviolable ephemerality):
 ///
-/// - **paused**: primary save trigger. If [bufferProvider] state has non-empty
-///   text and `_savedSinceLastResume` is false, invokes
-///   [saveBufferToRecoveryProvider] and sets the guard. Any
-///   [FileSystemException] is caught and logged (EC-M2-08) — a backgrounding
-///   app must never crash.
+/// - **paused**: primary save trigger. Calls [SaveBufferToRecovery.callSync]
+///   so the write completes before the OS has a chance to freeze the isolate.
+///   Any [FileSystemException] (or other error) is caught and logged
+///   (EC-M2-08) — a backgrounding app must never crash.
 /// - **resumed**: calls [bufferProvider.notifier.reset()] and clears
 ///   `_savedSinceLastResume`.
 /// - **detached**: secondary / best-effort path. Saves only if the guard is
 ///   false. `paused` is inviolable; `detached` must never be the sole save
 ///   path.
+///
+/// ## BUG-102 — resumed ordering is safe
+///
+/// With the sync write path, the durable write is guaranteed to complete
+/// BEFORE [didChangeAppLifecycleState] returns for the [paused] event. By
+/// the time [resumed] fires and calls [reset()], the file is already
+/// on disk. There is no unflushed retry source that [reset()] could destroy.
+/// The ordering is explicit: write-on-pause (sync, durable) → reset-on-resume
+/// (safe because the write already happened).
 ///
 /// ## Mounting
 ///
@@ -101,6 +116,12 @@ class LifecycleBufferHostState extends ConsumerState<LifecycleBufferHost>
   }
 
   /// Primary recovery-save trigger (FR-M2-06, FR-M2-07, FR-M2-08, LP §5.3).
+  ///
+  /// Uses the SYNCHRONOUS use-case path ([SaveBufferToRecovery.callSync])
+  /// so the write completes before this method returns. The OS may freeze the
+  /// Dart isolate immediately after [didChangeAppLifecycleState] returns;
+  /// any async I/O queued after this point is silently dropped on a real
+  /// device. The sync path eliminates the race (T-03 / BUG-105).
   void _onPaused() {
     if (_savedSinceLastResume) return; // R-07 burst guard.
 
@@ -113,16 +134,17 @@ class LifecycleBufferHostState extends ConsumerState<LifecycleBufferHost>
     final settings = ref.read(settingsProvider).value ?? const AppSettings();
     if (!settings.emergencyRecoveryEnabled) return;
 
-    // BUG-001 fix: do NOT set _savedSinceLastResume here.  The guard is set
-    // only inside _save()'s .then() callback, after the write succeeds.
-    // This keeps the guard false while the async write is in-flight so that
-    // _onDetached() can fire its own compensating save if the OS kills the
-    // process before the paused write flushes to disk.
-    _save(text);
+    _saveSync(text);
   }
 
   /// Resets buffer to empty and clears the burst guard (FR-M2-05).
+  ///
+  /// BUG-102: reset is safe here because the durable write is guaranteed to
+  /// have completed synchronously on the preceding [paused] event (see class
+  /// doc). There is no unflushed retry source that reset() could destroy.
   void _onResumed() {
+    // The durable write is already on disk (sync write on paused completed
+    // before didChangeAppLifecycleState returned). Reset is therefore safe.
     ref.read(bufferProvider.notifier).reset();
     _savedSinceLastResume = false;
   }
@@ -132,12 +154,8 @@ class LifecycleBufferHostState extends ConsumerState<LifecycleBufferHost>
   /// Per LP §5.3: [_onPaused] is the inviolable primary trigger;
   /// [_onDetached] must never be the only save path.
   ///
-  /// BUG-001 fix: _savedSinceLastResume is NOT set here synchronously.
-  /// The guard flips only inside _save()'s .then() on success.  This means
-  /// that if _onPaused fired but its write has not yet flushed, _onDetached
-  /// (guard still false) correctly triggers a second best-effort save.  A
-  /// duplicate recovery file is harmless: FileRecoveryRepository uses
-  /// ms-timestamp filenames and trim-to-10 prevents unbounded growth.
+  /// Also uses the SYNCHRONOUS save path for the same reason as [_onPaused]:
+  /// the isolate may be frozen immediately after this callback returns.
   void _onDetached() {
     if (_savedSinceLastResume) return;
 
@@ -149,48 +167,47 @@ class LifecycleBufferHostState extends ConsumerState<LifecycleBufferHost>
     final settings = ref.read(settingsProvider).value ?? const AppSettings();
     if (!settings.emergencyRecoveryEnabled) return;
 
-    _save(text);
+    _saveSync(text);
   }
 
-  /// Invokes the [saveBufferToRecoveryProvider] use case.
+  /// Invokes [SaveBufferToRecovery.callSync] synchronously.
   ///
-  /// Sets [_savedSinceLastResume] to `true` ONLY on a successful write
-  /// (BUG-001 fix).  This keeps the guard false during the async in-flight
-  /// window so that [_onDetached] can fire a compensating save if needed.
-  ///
-  /// On failure the guard stays false, allowing [_onDetached] to retry.
-  ///
-  /// Any [FileSystemException] is caught and logged — a backgrounding app must
-  /// NEVER crash (EC-M2-08). Uses [dart:developer log()] — NEVER print().
-  void _save(String text) {
+  /// Sets [_savedSinceLastResume] to `true` on a confirmed non-null write
+  /// (BUG-104 success log). Any [FileSystemException] or unexpected error is
+  /// caught and logged via [dart:developer log()] — a backgrounding app must
+  /// NEVER crash (EC-M2-08). Errors are NEVER rethrown.
+  void _saveSync(String text) {
     final useCase = ref.read(saveBufferToRecoveryProvider);
-    useCase(text)
-        .then((_) {
-          // BUG-001 fix: flip the guard only after a confirmed successful write.
-          _savedSinceLastResume = true;
-        })
-        .catchError((Object error, StackTrace stack) {
-          if (error is FileSystemException) {
-            // EC-M2-08: log but never rethrow — the backgrounding path is silent.
-            dev.log(
-              'LifecycleBufferHost: recovery save failed on background transition.',
-              name: 'buffer.lifecycle',
-              error: error,
-              stackTrace: stack,
-              level:
-                  900, // Level.SEVERE — visible in dart:developer log streams.
-            );
-          } else {
-            // Unexpected error: log and do not swallow silently.
-            dev.log(
-              'LifecycleBufferHost: unexpected error during recovery save.',
-              name: 'buffer.lifecycle',
-              error: error,
-              stackTrace: stack,
-              level: 1000, // Level.SHOUT.
-            );
-          }
-        });
+    try {
+      final file = useCase.callSync(text);
+      if (file != null) {
+        // BUG-104: one success log line per confirmed write.
+        dev.log(
+          'LifecycleBufferHost: recovery saved synchronously to ${file.path}',
+          name: 'buffer.lifecycle',
+          level: 800, // Level.INFO
+        );
+        _savedSinceLastResume = true;
+      }
+    } on FileSystemException catch (error, stack) {
+      // EC-M2-08: log but never rethrow — the backgrounding path is silent.
+      dev.log(
+        'LifecycleBufferHost: sync recovery save failed on background transition.',
+        name: 'buffer.lifecycle',
+        error: error,
+        stackTrace: stack,
+        level: 900, // Level.SEVERE
+      );
+    } catch (error, stack) {
+      // Unexpected error: log and do not swallow silently.
+      dev.log(
+        'LifecycleBufferHost: unexpected error during sync recovery save.',
+        name: 'buffer.lifecycle',
+        error: error,
+        stackTrace: stack,
+        level: 1000, // Level.SHOUT
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------

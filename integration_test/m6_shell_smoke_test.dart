@@ -91,6 +91,10 @@ class _FakeRecoveryRepository implements RecoveryRepository {
 
   @override
   Future<void> trim(int keep) async {}
+
+  // Defect-B sync stub — not exercised by shell smoke test.
+  @override
+  File saveSync(String text, {int keep = 10}) => File('/dev/null');
 }
 
 // ──────────────────────────────────────────────────────────────────────────────

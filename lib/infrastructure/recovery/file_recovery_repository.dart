@@ -15,6 +15,15 @@ typedef NowUtcProvider = DateTime Function();
 /// a [Directory] subclass that throws on [create] to verify error propagation.
 typedef DirectoryFactory = Directory Function(String path);
 
+/// Resolves the recovery [Directory] synchronously. Injectable for [saveSync]
+/// tests and for the production lifecycle host (which obtains the base dir
+/// at startup via `path_provider` and stores it before the first pause event).
+///
+/// Required when [FileRecoveryRepository.saveSync] is called. The production
+/// caller (T-03 lifecycle host) provides this after an awaited
+/// `getApplicationSupportDirectory()` at app startup.
+typedef SyncRecoveryDirResolver = Directory Function();
+
 /// Concrete [RecoveryRepository] that persists recovery files as flat `.txt`
 /// files under `<applicationSupportDirectory>/recovery/`.
 ///
@@ -33,12 +42,16 @@ typedef DirectoryFactory = Directory Function(String path);
 ///
 /// ## Concurrency contract (BUG-004)
 ///
-/// All writes are serialised on a private [_writeChain] future. Each [save]
-/// enqueues its resolve+write on the tail of the chain before returning, so
-/// concurrent callers never interleave the [_resolveFile]+[writeAsString]
-/// sequence.  A failing save does NOT poison the chain: the internal chain
-/// tail swallows the error via [catchError] while the future returned to the
-/// caller still propagates it normally (EC-M2-09 is preserved).
+/// All async writes are serialised on a private [_writeChain] future. Each
+/// [save] enqueues its resolve+write on the tail of the chain before
+/// returning, so concurrent callers never interleave the
+/// [_resolveFile]+[writeAsString] sequence.  A failing save does NOT poison
+/// the chain: the internal chain tail swallows the error via [catchError]
+/// while the future returned to the caller still propagates it normally
+/// (EC-M2-09 is preserved).
+///
+/// [saveSync] does NOT participate in [_writeChain] — it is self-contained
+/// and runs synchronously to completion before returning.
 ///
 /// ## Error contract
 ///
@@ -49,12 +62,13 @@ typedef DirectoryFactory = Directory Function(String path);
 /// ## Precondition
 ///
 /// The use case ([SaveBufferToRecovery]) guarantees `text.trim().isNotEmpty`
-/// before calling [save]. This class does not re-validate.
+/// before calling [save] or [saveSync]. This class does not re-validate.
 class FileRecoveryRepository implements RecoveryRepository {
   FileRecoveryRepository({
     required this._pathProvider,
     NowUtcProvider? nowUtc,
     DirectoryFactory? directoryFactory,
+    this._syncRecoveryDir,
   }) : _nowUtc = nowUtc ?? _defaultNow,
        _directoryFactory = directoryFactory ?? _defaultDirectoryFactory;
 
@@ -62,8 +76,15 @@ class FileRecoveryRepository implements RecoveryRepository {
   final NowUtcProvider _nowUtc;
   final DirectoryFactory _directoryFactory;
 
-  /// Serialises concurrent saves so that [_resolveFile]+[writeAsString] is
-  /// never interleaved across two callers (BUG-004 / EC-M2-07).
+  /// Synchronous recovery-directory resolver for [saveSync].
+  ///
+  /// Must be provided when [saveSync] will be called. The production T-03
+  /// lifecycle host supplies this after an awaited `getApplicationSupportDirectory`
+  /// at startup. Tests inject it directly as a closure over their temp dir.
+  final SyncRecoveryDirResolver? _syncRecoveryDir;
+
+  /// Serialises concurrent async saves so that [_resolveFile]+[writeAsString]
+  /// is never interleaved across two callers (BUG-004 / EC-M2-07).
   ///
   /// The chain tail only swallows errors to avoid poisoning subsequent saves;
   /// the future returned to each individual caller still surfaces its own error.
@@ -169,6 +190,59 @@ class FileRecoveryRepository implements RecoveryRepository {
     final toDelete = files.sublist(0, files.length - keep);
     for (final file in toDelete) {
       await file.delete();
+    }
+  }
+
+  // --- NEW synchronous save path (Defect B, C-04) --------------------------
+
+  /// Persists [text] to the recovery store SYNCHRONOUSLY before returning.
+  ///
+  /// Reuses [_buildStem] and [_resolveFile] so the filename format is
+  /// byte-identical to the async [save] path (C-05, NFR-M5-01). Does NOT
+  /// participate in [_writeChain] — synchronous execution is inherently atomic
+  /// with respect to other callers on the same isolate thread.
+  ///
+  /// [FileSystemException] propagates unchanged to the caller (EC-M2-08).
+  ///
+  /// Requires [syncRecoveryDir] to have been provided at construction time;
+  /// throws [StateError] if it was not.
+  @override
+  File saveSync(String text, {int keep = 10}) {
+    if (_syncRecoveryDir == null) {
+      throw StateError(
+        'FileRecoveryRepository.saveSync requires syncRecoveryDir to be '
+        'provided at construction time.',
+      );
+    }
+
+    final dir = _directoryFactory(_syncRecoveryDir().path);
+    dir.createSync(recursive: true);
+
+    final stem = _buildStem(_nowUtc());
+    final file = _resolveFile(dir, stem);
+
+    file.writeAsStringSync(text, encoding: utf8);
+
+    _trimSync(dir, keep);
+
+    return file;
+  }
+
+  /// Retains the newest [keep] `.txt` files by LEXICOGRAPHIC filename
+  /// (NFR-M5-01 — NEVER mtime). No-op when file count <= [keep].
+  void _trimSync(Directory dir, int keep) {
+    final files = dir
+        .listSync()
+        .whereType<File>()
+        .where((f) => p.extension(f.path) == '.txt')
+        .toList();
+    if (files.length <= keep) return;
+
+    files.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+
+    final toDelete = files.sublist(0, files.length - keep);
+    for (final file in toDelete) {
+      file.deleteSync();
     }
   }
 

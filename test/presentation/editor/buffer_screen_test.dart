@@ -65,6 +65,8 @@ import 'package:buffer/domain/settings/app_settings.dart';
 import 'package:buffer/infrastructure/share/share_intent_service.dart';
 import 'package:buffer/l10n/app_localizations.dart';
 import 'package:buffer/presentation/editor/buffer_screen.dart';
+import 'package:buffer/presentation/editor/editor_actions.dart';
+import 'package:buffer/presentation/editor/line_number_gutter.dart';
 import 'package:buffer/presentation/editor/share_providers.dart';
 import 'package:buffer/presentation/find/find_provider.dart';
 import 'package:buffer/presentation/find/find_search_bar.dart';
@@ -109,6 +111,10 @@ class _FakeRecoveryRepository implements RecoveryRepository {
   Future<void> deleteAll() async {}
   @override
   Future<void> trim(int keep) async {}
+
+  // Defect-B sync path stub — not exercised by these buffer-screen tests.
+  @override
+  File saveSync(String text, {int keep = 10}) => File('/tmp/sentinel-sync.txt');
 }
 
 /// Fake [ShareIntentService] with a controllable warm-start stream.
@@ -1429,6 +1435,42 @@ void main() {
         expect(editorTf.controller?.text, equals('hello world'));
       },
     );
+
+    testWidgets(
+      'ChromeOverlay is removed while find is active so the Replace toggle is '
+      'not occluded by the top-end menu zone (on-device replace fix)',
+      (tester) async {
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        // At rest: chrome present (menu affordance).
+        expect(find.byType(ChromeOverlay), findsOneWidget);
+
+        final element = tester.element(find.byType(TextField).first);
+        final container = ProviderScope.containerOf(element);
+
+        // Activate find — the FindSearchBar (full-width, top:0) now owns the
+        // top, including the top-end corner where its Replace toggle sits.
+        container.read(findProvider.notifier).startSearch(entryOffset: 0);
+        await tester.pump();
+
+        expect(find.byType(FindSearchBar), findsOneWidget);
+        // The chrome hamburger must NOT be mounted over the Replace toggle —
+        // otherwise its on-top, hit-testable IconButton swallows the tap and
+        // the user "can only search, not replace".
+        expect(
+          find.byType(ChromeOverlay),
+          findsNothing,
+          reason:
+              'ChromeOverlay must be hidden while find is active so the '
+              'rightmost Replace toggle is tappable.',
+        );
+
+        // Closing find restores the chrome.
+        container.read(findProvider.notifier).close();
+        await tester.pump();
+        expect(find.byType(ChromeOverlay), findsOneWidget);
+      },
+    );
   });
 
   // -----------------------------------------------------------------------
@@ -1538,6 +1580,16 @@ void main() {
     testWidgets(
       'updateText fires exactly once per replace (EC-14 / echo-loop guard)',
       (tester) async {
+        // Taller viewport: FindSearchBar has Toggle Replace button near y=24
+        // which is inside the ChromeOverlay zone (top 48dp). Accidental hits on
+        // ChromeOverlay open the menu sheet; the sheet now includes the Find tile
+        // (TASK-07 SP-20260615) making it taller. Use 1200dp height to avoid
+        // RenderFlex overflow in the modal sheet if that path is hit.
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
         final spy = _SpyBufferNotifier();
         await _pumpBufferScreen(tester, spyNotifier: spy);
 
@@ -2579,6 +2631,14 @@ void main() {
     testWidgets(
       'tap chrome menu affordance → ModalBottomSheet (MenuSheet) in tree (FR-M6-23)',
       (tester) async {
+        // TASK-07 SP-20260615: menu sheet now includes a Find / Replace tile,
+        // making the sheet taller; use 800×1200 viewport to prevent overflow
+        // (same fix applied in menu_sheet_test.dart TASK-05 tests).
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
         final fakeShare = _FakeShareIntentService();
         final fakeRepo = _FakeRecoveryRepository();
 
@@ -3112,6 +3172,58 @@ void main() {
     );
 
     // -----------------------------------------------------------------------
+    // 28.7b  Toast NOT shown on initial load (loading→loaded) — startup
+    //        suppression. The font-size toast must fire only on a real change,
+    //        never on the first settings emission at app boot.
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'boot (loading→loaded) → font-size toast NOT shown on startup',
+      (tester) async {
+        final spy = _ToastSpy();
+        final settingsCtrl = StreamController<AppSettings>.broadcast();
+        final settingsNotifier = _ReactiveSettingsNotifier(settingsCtrl.stream);
+
+        final fakeShare = _FakeShareIntentService();
+        final fakeRepo = _FakeRecoveryRepository();
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              initialSharedTextProvider.overrideWithValue(null),
+              shareIntentServiceProvider.overrideWithValue(fakeShare),
+              recoveryRepositoryProvider.overrideWithValue(fakeRepo),
+              settingsProvider.overrideWith(() => settingsNotifier),
+              toastProvider.overrideWith(() => spy),
+            ],
+            child: MediaQuery(
+              data: const MediaQueryData(),
+              child: MaterialApp(
+                theme: AppTheme.light(),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: const BufferScreen(),
+              ),
+            ),
+          ),
+        );
+
+        // First (and only) emission: loading → loaded. No prior value exists,
+        // so the toast must be suppressed. Do NOT clear showCalls here.
+        settingsCtrl.add(const AppSettings(fontSizeIndex: 8));
+        await tester.pump();
+        await tester.pump();
+
+        expect(
+          spy.showCalls,
+          isEmpty,
+          reason: 'Font-size toast must NOT fire on the initial settings load',
+        );
+
+        settingsCtrl.close();
+      },
+    );
+
+    // -----------------------------------------------------------------------
     // 28.8  Responsive margin via LayoutBuilder (FR-M7-11 / spec §5.1.5e)
     //
     // Wraps the screen in a constrained SizedBox at specific widths and verifies
@@ -3259,6 +3371,514 @@ void main() {
       },
     );
   });
+
+  // -----------------------------------------------------------------------
+  // Group 29 — TASK-07 SP-20260615: margin/top-inset + find affordance + clamp
+  // Spec refs: FR-04..FR-07, FR-06a, FR-06b, FR-09..FR-11, NFR-04, NFR-08, NFR-10
+  // Contracts: C2/C2b/C3/C4/C5 (spec §4.3/§5.1)
+  // -----------------------------------------------------------------------
+  group('TASK-07 SP-20260615 — margin/top-inset/find/clamp', () {
+    // -----------------------------------------------------------------------
+    // 29.1  Horizontal inset > 0 and symmetric (FR-04)
+    // -----------------------------------------------------------------------
+    testWidgets('outer Padding has left > 0 and left == right (FR-04)', (
+      tester,
+    ) async {
+      await _pumpBufferScreenM7(tester, settings: const AppSettings());
+      _assertOuterPaddingHasHorizontalMargin(tester);
+    });
+
+    // -----------------------------------------------------------------------
+    // 29.2  Coexistence: outer Padding has non-zero top AND left/right (FR-06)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'outer Padding top > 0 and left > 0 — vertical+horizontal coexist (FR-06)',
+      (tester) async {
+        await _pumpBufferScreenM7(tester, settings: const AppSettings());
+        _assertOuterPaddingCoexistence(tester);
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 29.3  Margin tracks font size (FR-07)
+    //        Small font → small hMargin; large font → larger hMargin.
+    // -----------------------------------------------------------------------
+    testWidgets('horizontal margin grows with fontSizePt (FR-07)', (
+      tester,
+    ) async {
+      // Smallest slot: fontSizePt ≈ 8.
+      final smallSettings = const AppSettings().copyWith(fontSizeIndex: 0);
+      await _pumpBufferScreenM7(tester, settings: smallSettings);
+      final smallLeft = _outerPaddingLeft(tester);
+
+      // Largest slot: fontSizePt ≈ 38.
+      final largeSettings = const AppSettings().copyWith(
+        fontSizeIndex: AppSettings.slotList.length - 1,
+      );
+      await _pumpBufferScreenM7(tester, settings: largeSettings);
+      final largeLeft = _outerPaddingLeft(tester);
+
+      expect(
+        largeLeft,
+        greaterThanOrEqualTo(smallLeft),
+        reason:
+            'Horizontal margin must grow (or stay equal at clamp) with fontSizePt (FR-07)',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // 29.4  First-row clears chrome (FR-06a / NFR-10):
+    //        padding.top=24 → outer Padding top >= 72.0  (48+24)
+    // -----------------------------------------------------------------------
+    testWidgets('padding.top=24 → outer Padding top >= 72.0 (FR-06a/NFR-10)', (
+      tester,
+    ) async {
+      // FakeViewPadding values are in physical pixels; DPR must be 1.0 so
+      // that logical-pixel conversion gives the intended value.
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.padding = const FakeViewPadding(top: 24.0);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPadding);
+      await _pumpBufferScreenM7(tester, settings: const AppSettings());
+      final topInset = _outerPaddingTop(tester);
+      expect(
+        topInset,
+        greaterThanOrEqualTo(72.0),
+        reason:
+            'top inset must be >= kChromeMenuZoneHeight(48) + safeAreaTop(24) = 72 (FR-06a/NFR-10)',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // 29.5  Zero safe-area boundary: padding.top=0 → outer Padding top >= 48.0
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'padding.top=0 → outer Padding top >= 48.0 (chrome zone reserved)',
+      (tester) async {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = const FakeViewPadding(top: 0.0);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+        await _pumpBufferScreenM7(tester, settings: const AppSettings());
+        final topInset = _outerPaddingTop(tester);
+        expect(
+          topInset,
+          greaterThanOrEqualTo(48.0),
+          reason:
+              'top inset must be >= kChromeMenuZoneHeight(48) even when safe-area is 0 (NFR-10)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 29.6  NO first-row jump on chrome toggle (EC-15):
+    //        toggling chromeVisibility leaves outer Padding top unchanged.
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'outer Padding top unchanged when chrome visibility toggles (EC-15)',
+      (tester) async {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = const FakeViewPadding(top: 24.0);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+        await _pumpBufferScreenM7(tester, settings: const AppSettings());
+
+        final topBefore = _outerPaddingTop(tester);
+
+        // Toggle chrome visibility (hide → show → hide).
+        final element = tester.element(find.byType(BufferScreen));
+        final container = ProviderScope.containerOf(element);
+        container
+            .read(chromeVisibilityProvider.notifier)
+            .onTextChanged(); // hide
+        await tester.pump();
+        container.read(chromeVisibilityProvider.notifier).reveal(); // show
+        await tester.pump();
+
+        final topAfter = _outerPaddingTop(tester);
+        expect(
+          topAfter,
+          closeTo(topBefore, 0.1),
+          reason:
+              'Outer Padding top must not change when chrome hides/reveals (EC-15 — stable top inset)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 29.7  Tiny screen (EC-13): 320x480, padding.top=44 → top >= 92.0
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'tiny screen 320×480 padding.top=44 → outer top >= 92.0 and TextField non-zero height (EC-13)',
+      (tester) async {
+        tester.view.physicalSize = const Size(320.0, 480.0);
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = const FakeViewPadding(top: 44.0);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+
+        await _pumpBufferScreenM7(tester, settings: const AppSettings());
+
+        final topInset = _outerPaddingTop(tester);
+        expect(
+          topInset,
+          greaterThanOrEqualTo(92.0),
+          reason:
+              'tiny screen: top >= kChromeMenuZoneHeight(48) + safeAreaTop(44) = 92 (EC-13)',
+        );
+
+        // TextField must still be present and have a positive height.
+        expect(
+          find.byWidgetPredicate((w) => w is TextField && w.expands == true),
+          findsOneWidget,
+          reason: 'Editor TextField must be present on tiny screen',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 29.8  Rotation (EC-14):
+    //        portrait padding.top=30 → landscape padding.top=0,
+    //        topInset shrinks, both >= 48.
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'rotation: portrait top=30 >= 48; landscape top=0 >= 48, and landscape < portrait (EC-14)',
+      (tester) async {
+        // Portrait.
+        tester.view.physicalSize = const Size(400.0, 800.0);
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = const FakeViewPadding(top: 30.0);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+
+        await _pumpBufferScreenM7(tester, settings: const AppSettings());
+        final topPortrait = _outerPaddingTop(tester);
+        expect(
+          topPortrait,
+          greaterThanOrEqualTo(48.0),
+          reason: 'portrait must reserve at least 48dp',
+        );
+
+        // Landscape.
+        tester.view.physicalSize = const Size(800.0, 400.0);
+        tester.view.padding = const FakeViewPadding(top: 0.0);
+        await tester.pump();
+
+        final topLandscape = _outerPaddingTop(tester);
+        expect(
+          topLandscape,
+          greaterThanOrEqualTo(48.0),
+          reason: 'landscape must still reserve kChromeMenuZoneHeight=48dp',
+        );
+        expect(
+          topLandscape,
+          lessThanOrEqualTo(topPortrait),
+          reason:
+              'landscape top must be <= portrait top (safeArea smaller/zero)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 29.9  Find tile flow (FR-10):
+    //        Tap chrome menu → tap Find / Replace tile → FindSearchBar visible.
+    // -----------------------------------------------------------------------
+    testWidgets('tap chrome menu → tap Find tile → FindSearchBar visible (FR-10)', (
+      tester,
+    ) async {
+      // Taller viewport: sheet has ThemeSelector + stepper + Find tile
+      // + Divider + 3 nav tiles; needs 800×1200 to avoid overflow (same
+      // reasoning as menu_sheet_test.dart TASK-05 tests).
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await _pumpBufferScreenM7(tester, settings: const AppSettings());
+
+      // Tap the chrome menu affordance (ChromeOverlay's GestureDetector/InkWell).
+      final chromeOverlay = find.byType(ChromeOverlay);
+      expect(
+        chromeOverlay,
+        findsOneWidget,
+        reason: 'ChromeOverlay must be in the tree',
+      );
+      await tester.tap(chromeOverlay);
+      await tester.pumpAndSettle();
+
+      // The bottom sheet should now be open with a "Find / Replace" tile.
+      expect(
+        find.text('Find / Replace'),
+        findsOneWidget,
+        reason: 'Menu sheet must contain the Find / Replace tile (FR-10)',
+      );
+
+      // Tap the Find / Replace tile.
+      await tester.tap(find.text('Find / Replace'));
+      await tester.pumpAndSettle();
+
+      // FindSearchBar must now be visible.
+      expect(
+        find.byType(FindSearchBar),
+        findsOneWidget,
+        reason:
+            'FindSearchBar must be visible after tapping Find / Replace tile (FR-10)',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // 29.10  Unfocused clamp (EC-02 / FR-11):
+    //         When editor is unfocused (baseOffset == -1), entryOffset == 0
+    //         → no RangeError.
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'unfocused editor: OpenFindIntent with baseOffset==-1 → no RangeError, entryOffset==0 (EC-02/FR-11)',
+      (tester) async {
+        await _pumpBufferScreenM7(tester, settings: const AppSettings());
+
+        // Unfocus the editor so baseOffset == -1.
+        FocusManager.instance.primaryFocus?.unfocus();
+        await tester.pump();
+
+        // Use the Actions ancestor from within the Shortcuts tree
+        // (find via the editor TextField, which is inside Actions).
+        final actionsContext = tester.element(find.byType(TextField).first);
+
+        // Invoke OpenFindIntent directly — must not throw.
+        expect(
+          () {
+            Actions.maybeInvoke(actionsContext, const OpenFindIntent());
+          },
+          returnsNormally,
+          reason:
+              'OpenFindIntent with unfocused editor (baseOffset -1) must not throw RangeError (EC-02/FR-11)',
+        );
+        await tester.pump();
+
+        // Find must now be active (startSearch was called with clamped offset 0).
+        final element = tester.element(find.byType(BufferScreen));
+        final container = ProviderScope.containerOf(element);
+        expect(
+          container.read(findProvider).active,
+          isTrue,
+          reason: 'findProvider must be active after OpenFindIntent (EC-02)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 29.11  Find already active (EC-03):
+    //         Second OpenFindIntent → refocus branch, match list unchanged.
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'second OpenFindIntent while active → refocus, no fresh startSearch (EC-03)',
+      (tester) async {
+        await _pumpBufferScreenM7(tester, settings: const AppSettings());
+
+        // Type a term and open find.
+        await tester.enterText(find.byType(TextField).first, 'hello');
+        await tester.pump();
+
+        // Use the Actions ancestor from within the editor TextField's tree.
+        final actionsContext = tester.element(find.byType(TextField).first);
+
+        // First OpenFindIntent → starts search.
+        Actions.maybeInvoke(actionsContext, const OpenFindIntent());
+        await tester.pump();
+
+        final element = tester.element(find.byType(BufferScreen));
+        final container = ProviderScope.containerOf(element);
+        expect(
+          container.read(findProvider).active,
+          isTrue,
+          reason: 'findProvider must be active after first OpenFindIntent',
+        );
+
+        // Enter a query to populate matchList.
+        // (FindSearchBar is mounted; enter text in it)
+        final findFields = find.byType(TextField);
+        // The search field is the second TextField (editor is first).
+        if (findFields.evaluate().length >= 2) {
+          await tester.enterText(findFields.at(1), 'hello');
+          await tester.pump();
+        }
+
+        final matchCountBefore = container.read(findProvider).matches.length;
+
+        // Second OpenFindIntent while active → refocus branch (no startSearch).
+        Actions.maybeInvoke(actionsContext, const OpenFindIntent());
+        await tester.pump();
+
+        final matchCountAfter = container.read(findProvider).matches.length;
+        expect(
+          matchCountAfter,
+          equals(matchCountBefore),
+          reason:
+              'Second OpenFindIntent must not restart search — match list unchanged (EC-03)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 29.12  Single-path (NFR-04):
+    //         Only ONE file in lib/ calls notifier.startSearch directly.
+    //         _openFindFromMenu must NOT contain a startSearch( call.
+    // -----------------------------------------------------------------------
+    test(
+      '_openFindFromMenu in buffer_screen.dart must not call startSearch( directly (NFR-04 single-path)',
+      () {
+        // Read buffer_screen.dart and verify _openFindFromMenu does not call
+        // startSearch( — it must dispatch via OpenFindIntent instead.
+        final bufferScreenFile = File(
+          '${Directory.current.path}/../lib/presentation/editor/buffer_screen.dart',
+        );
+        // Fallback if run from test/ subdir cwd.
+        final effectiveFile = bufferScreenFile.existsSync()
+            ? bufferScreenFile
+            : File('lib/presentation/editor/buffer_screen.dart');
+
+        final content = effectiveFile.readAsStringSync();
+
+        // Extract the _openFindFromMenu method body.
+        // Heuristic: find from the method signature to the next blank-line + }
+        // and check the extracted body has no startSearch call.
+        final methodStart = content.indexOf('void _openFindFromMenu()');
+        expect(
+          methodStart,
+          greaterThan(0),
+          reason: '_openFindFromMenu() method must exist in buffer_screen.dart',
+        );
+
+        // Find the end of the method: next occurrence of '  }' after start.
+        final methodEnd = content.indexOf('\n  }\n', methodStart);
+        final methodBody = methodEnd > 0
+            ? content.substring(methodStart, methodEnd)
+            : content.substring(methodStart, methodStart + 500);
+
+        expect(
+          methodBody,
+          isNot(contains('startSearch(')),
+          reason:
+              '_openFindFromMenu must NOT call startSearch( directly (NFR-04 single-path). '
+              'It must dispatch via OpenFindIntent.',
+        );
+
+        expect(
+          methodBody,
+          contains('OpenFindIntent'),
+          reason:
+              '_openFindFromMenu must dispatch via OpenFindIntent (not startSearch directly).',
+        );
+      },
+    );
+  });
+
+  // =========================================================================
+  // Group 30 — TASK-08 SP-20260615: LineNumberGutter visibility assertions
+  //
+  // Spec refs: FR-14 (gutter present/absent on toggle)
+  // Contract: C7 (spec §5.1), spec §5.2
+  //
+  // Additive only — does NOT modify TASK-07 tests.
+  // The LineNumberGutter widget is imported at the top of this file via
+  // `package:buffer/presentation/editor/line_number_gutter.dart`.
+  // =========================================================================
+  group('TASK-08 SP-20260615 — LineNumberGutter mount visibility', () {
+    // -----------------------------------------------------------------------
+    // 30.1  Gutter absent when showLineNumbers == false (FR-14)
+    // -----------------------------------------------------------------------
+    testWidgets('gutter absent when showLineNumbers == false (FR-14)', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800.0, 1200.0);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await _pumpBufferScreenM7(
+        tester,
+        settings: const AppSettings(showLineNumbers: false),
+      );
+      expect(find.byType(LineNumberGutter), findsNothing);
+    });
+
+    // -----------------------------------------------------------------------
+    // 30.2  Gutter present when showLineNumbers == true (FR-14)
+    // -----------------------------------------------------------------------
+    testWidgets('gutter present when showLineNumbers == true (FR-14)', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800.0, 1200.0);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await _pumpBufferScreenM7(
+        tester,
+        settings: const AppSettings(showLineNumbers: true),
+      );
+      expect(find.byType(LineNumberGutter), findsOneWidget);
+    });
+
+    // -----------------------------------------------------------------------
+    // 30.3  Gutter top aligns with TextField top within 2px (FR-06a coupling)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'gutter top == TextField top within 2px — FR-06a coupling (padding.top=24)',
+      (tester) async {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = const FakeViewPadding(top: 24.0);
+        tester.view.physicalSize = const Size(800.0, 1200.0);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+        addTearDown(tester.view.resetPhysicalSize);
+
+        await _pumpBufferScreenM7(
+          tester,
+          settings: const AppSettings(showLineNumbers: true),
+        );
+
+        expect(find.byType(LineNumberGutter), findsOneWidget);
+
+        final gutterRect = tester.getRect(find.byType(LineNumberGutter));
+        final editorTf = find.byWidgetPredicate(
+          (w) => w is TextField && w.expands == true,
+        );
+        if (tester.any(editorTf)) {
+          final tfRect = tester.getRect(editorTf.first);
+          expect(
+            (gutterRect.top - tfRect.top).abs(),
+            lessThanOrEqualTo(2.0),
+            reason:
+                'Gutter top must align with TextField top within 2px (FR-06a, spec §5.2 step 5)',
+          );
+        }
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.4  Existing TASK-07 tests unaffected — horizontal margin still present
+    //        when gutter is ON (no-regression guard for TASK-07 margin wiring).
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'outer Padding still has horizontal margin when gutter ON (TASK-07 no-regression)',
+      (tester) async {
+        tester.view.physicalSize = const Size(800.0, 1200.0);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await _pumpBufferScreenM7(
+          tester,
+          settings: const AppSettings(showLineNumbers: true),
+        );
+        // TASK-07's outer Padding must still have left > 0.
+        _assertOuterPaddingHasHorizontalMargin(tester);
+      },
+    );
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -3386,17 +4006,23 @@ void _assertEditorVerticalPadding(
   WidgetTester tester,
   double expectedVertical,
 ) {
-  // Find all Padding widgets in the tree that have symmetric vertical insets
-  // matching our expected value (within float tolerance).
+  // After TASK-07 SP-20260615 the outer editor Padding is no longer symmetric:
+  //   top  = editorTopInset(width, safeAreaTop)  (>= kChromeMenuZoneHeight)
+  //   bottom = verticalMargin(width)             (== expectedVertical)
+  //   left  = right = editorHorizontalMargin(fontSizePt) (> 0)
+  //
+  // We identify the outer editor Padding by requiring left > 0 (horizontal
+  // margin is present — no other Padding in the tree has this combination)
+  // and check that bottom == expectedVertical (FR-M7-11 margin contract).
   bool found = false;
   tester.allWidgets.whereType<Padding>().forEach((p) {
     final e = p.padding;
     if (e is EdgeInsets &&
-        (e.top - expectedVertical).abs() < 0.1 &&
+        e.left > 0.0 &&
         (e.bottom - expectedVertical).abs() < 0.1) {
       found = true;
     } else if (e is EdgeInsetsDirectional &&
-        (e.top - expectedVertical).abs() < 0.1 &&
+        e.start > 0.0 &&
         (e.bottom - expectedVertical).abs() < 0.1) {
       found = true;
     }
@@ -3405,8 +4031,8 @@ void _assertEditorVerticalPadding(
     found,
     isTrue,
     reason:
-        'Expected a Padding with vertical inset $expectedVertical in the tree '
-        '(responsive margin, FR-M7-11)',
+        'Expected the outer editor Padding with bottom == $expectedVertical '
+        'and left > 0 in the tree (responsive margin FR-M7-11, TASK-07 SP-20260615)',
   );
 }
 
@@ -3446,4 +4072,84 @@ class _ToastSpy extends ToastController {
 
 // scaleToSlotDelta is exported from buffer_screen.dart as a
 // @visibleForTesting top-level function (OQ-M7-09 testability seam).
+
+// ---------------------------------------------------------------------------
+// TASK-07 SP-20260615 helpers — outer-padding geometry inspection
+// ---------------------------------------------------------------------------
+
+/// Returns all [Padding] widgets in the tree that have left > 0 and
+/// left == right (i.e. the outer editor Padding with horizontal margin).
+Iterable<Padding> _outerPaddingsWithHMargin(WidgetTester tester) {
+  return tester.allWidgets.whereType<Padding>().where((p) {
+    final e = p.padding;
+    if (e is EdgeInsets) {
+      return e.left > 0.0 && (e.left - e.right).abs() < 0.1;
+    }
+    return false;
+  });
+}
+
+/// Returns the left inset of the OUTER editor Padding (the one with
+/// horizontal margin from [editorHorizontalMargin]).
+///
+/// Throws if no such Padding is found (test fails).
+double _outerPaddingLeft(WidgetTester tester) {
+  final candidates = _outerPaddingsWithHMargin(tester);
+  expect(
+    candidates,
+    isNotEmpty,
+    reason:
+        'Expected a Padding with left > 0 and left == right in the tree '
+        '(outer editor padding with horizontal margin, FR-04)',
+  );
+  return (candidates.first.padding as EdgeInsets).left;
+}
+
+/// Asserts that the outer editor Padding has left > 0 and left == right.
+void _assertOuterPaddingHasHorizontalMargin(WidgetTester tester) {
+  _outerPaddingLeft(tester); // throws and fails if not found
+}
+
+/// Asserts that the outer editor Padding has both top > 0 and left > 0
+/// (vertical + horizontal insets coexist, FR-06).
+void _assertOuterPaddingCoexistence(WidgetTester tester) {
+  bool found = false;
+  tester.allWidgets.whereType<Padding>().forEach((p) {
+    final e = p.padding;
+    if (e is EdgeInsets && e.top > 0.0 && e.left > 0.0) {
+      found = true;
+    }
+  });
+  expect(
+    found,
+    isTrue,
+    reason:
+        'Expected a Padding with both top > 0 AND left > 0 (FR-06 coexistence)',
+  );
+}
+
+/// Returns the top inset of the OUTER editor Padding.
+///
+/// Scans for a Padding that has both top > 0 and left > 0 (the TASK-07
+/// outer Padding is the only one in the tree that satisfies both).
+double _outerPaddingTop(WidgetTester tester) {
+  for (final p in tester.allWidgets.whereType<Padding>()) {
+    final e = p.padding;
+    if (e is EdgeInsets && e.top > 0.0 && e.left > 0.0) {
+      return e.top;
+    }
+  }
+  // Fallback: also accept a Padding with only top > 0 (pre-impl: no left yet).
+  for (final p in tester.allWidgets.whereType<Padding>()) {
+    final e = p.padding;
+    if (e is EdgeInsets && e.top > 0.0) {
+      return e.top;
+    }
+  }
+  fail(
+    'No Padding with top > 0 found in the tree '
+    '(outer editor padding with top-inset, FR-06a)',
+  );
+}
+
 // No local stub needed — the import at the top of this file resolves it.

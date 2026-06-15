@@ -96,7 +96,7 @@ class _StubRecovery extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Host screen: renders a button that calls openMenuSheet.
+// Host screen: renders a button that calls openMenuSheet (no onFind).
 // ---------------------------------------------------------------------------
 
 class _HostScreen extends StatelessWidget {
@@ -108,6 +108,28 @@ class _HostScreen extends StatelessWidget {
       body: Center(
         child: ElevatedButton(
           onPressed: () => openMenuSheet(context),
+          child: const Text('Open Menu'),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Host screen with onFind injection (TASK-05).
+// ---------------------------------------------------------------------------
+
+class _HostScreenWithFind extends StatelessWidget {
+  const _HostScreenWithFind({required this.onFind});
+
+  final VoidCallback onFind;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: ElevatedButton(
+          onPressed: () => openMenuSheet(context, onFind: onFind),
           child: const Text('Open Menu'),
         ),
       ),
@@ -147,6 +169,30 @@ Widget _buildApp({
 Future<void> _openSheet(WidgetTester tester) async {
   await tester.tap(find.text('Open Menu'));
   await tester.pumpAndSettle();
+}
+
+// ---------------------------------------------------------------------------
+// Harness builder with onFind injection (TASK-05).
+// ---------------------------------------------------------------------------
+
+Widget _buildAppWithFind({
+  required VoidCallback onFind,
+  Locale locale = const Locale('en'),
+}) {
+  return ProviderScope(
+    overrides: [settingsProvider.overrideWith(() => _FakeSettingsNotifier())],
+    child: MaterialApp(
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      routes: {
+        '/': (_) => _HostScreenWithFind(onFind: onFind),
+        '/settings': (_) => const _StubSettings(),
+        '/about': (_) => const _StubAbout(),
+        '/recovery': (_) => const _StubRecovery(),
+      },
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -477,6 +523,220 @@ void main() {
           reason:
               'After tapping Icons.remove at index 20, label must update to "34pt" '
               '(index 19, slotList[19] == 34)',
+        );
+      },
+    );
+  });
+
+  // =========================================================================
+  // 9. Find / Replace tile — TASK-05 (SP-20260615, FR-08, FR-17, NFR-02,
+  //    NFR-04, contract C3)
+  //
+  //    The tile is rendered ONLY when onFind != null (callback-gated).
+  //    MenuSheet stays a StatelessWidget with no ref; the tile only pops the
+  //    sheet and invokes the injected callback.
+  //
+  //    Placement: after the Divider, before the Preferences tile (C3).
+  //    Icon: Icons.search (edit-find-symbolic → Icons.search per bible §Iconography).
+  //    Touch target: ListTile default >= 48dp (NFR-02).
+  //
+  // <!-- CANON GAP: ui-design-bible.md §Components.2 documents the chrome menu
+  //      tile pattern but does not name a specific icon for the Find entry.
+  //      Icons.search is the canonical Material mapping for edit-find-symbolic
+  //      (GNOME icon → Material equivalent per spec §Iconography). Using
+  //      Icons.search until the bible is updated with an explicit mapping. -->
+  //
+  //  Note: tests in this group that open the sheet with onFind != null set a
+  //  taller test-surface height (1200 logical px) to avoid Column overflow in
+  //  the 5-tile layout. The production widget is unchanged; this is a test
+  //  harness concern only (overflow fires at <= ~338 px available height).
+  // =========================================================================
+  group('MenuSheet — Find tile (TASK-05, FR-08, FR-17, NFR-02, NFR-04)', () {
+    testWidgets(
+      'given_onFind_nonnull_when_sheet_opened_then_Find_tile_with_search_icon_present',
+      (tester) async {
+        // Taller viewport: sheet now has 5 tiles + ThemeSelector + stepper.
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        // FR-08, contract C3 — tile rendered when onFind != null
+        await tester.pumpWidget(_buildAppWithFind(onFind: () {}));
+        await _openSheet(tester);
+
+        expect(
+          find.text('Find / Replace'),
+          findsOneWidget,
+          reason:
+              'menuFind ARB key must resolve to "Find / Replace" in en locale '
+              'when onFind != null (FR-17)',
+        );
+
+        // The tile must have leading Icons.search
+        expect(
+          find.byIcon(Icons.search),
+          findsOneWidget,
+          reason:
+              'Find tile must have leading Icons.search '
+              '(edit-find-symbolic mapping, canon §Iconography)',
+        );
+
+        // The text must be inside a ListTile
+        expect(
+          find.ancestor(
+            of: find.text('Find / Replace'),
+            matching: find.byType(ListTile),
+          ),
+          findsOneWidget,
+          reason: 'menuFind text must be inside a ListTile',
+        );
+      },
+    );
+
+    testWidgets('given_onFind_null_when_sheet_opened_then_Find_tile_absent', (
+      tester,
+    ) async {
+      // Callback-gated: tile must NOT appear when openMenuSheet(context) is
+      // called without onFind (additive/backward-compat, NFR-04).
+      await tester.pumpWidget(_buildApp());
+      await _openSheet(tester);
+
+      expect(
+        find.text('Find / Replace'),
+        findsNothing,
+        reason:
+            'Find tile must be absent when onFind == null (NFR-04 backward-compat)',
+      );
+      expect(
+        find.byIcon(Icons.search),
+        findsNothing,
+        reason:
+            'Icons.search must be absent when onFind == null '
+            '(tile is gated on the callback)',
+      );
+    });
+
+    testWidgets(
+      'given_onFind_nonnull_when_tile_tapped_then_callback_called_exactly_once_and_sheet_dismissed',
+      (tester) async {
+        // Taller viewport: sheet now has 5 tiles + ThemeSelector + stepper.
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        // Tap fires injected callback and pops the sheet (FR-10 ordering:
+        // sheet dismissed, then onFind invoked).
+        int callCount = 0;
+        await tester.pumpWidget(_buildAppWithFind(onFind: () => callCount++));
+        await _openSheet(tester);
+
+        // Sheet is open — ThemeSelector visible
+        expect(find.byType(ThemeSelector), findsOneWidget);
+
+        await tester.tap(find.text('Find / Replace'));
+        await tester.pumpAndSettle();
+
+        expect(
+          callCount,
+          equals(1),
+          reason: 'onFind must be called exactly once after tapping the tile',
+        );
+
+        // Sheet must be dismissed (ThemeSelector gone)
+        expect(
+          find.byType(ThemeSelector),
+          findsNothing,
+          reason: 'Sheet must be dismissed after tapping Find tile',
+        );
+      },
+    );
+
+    testWidgets(
+      'given_onFind_nonnull_when_sheet_opened_then_Find_tile_touch_target_meets_48dp_minimum',
+      (tester) async {
+        // Taller viewport: sheet now has 5 tiles + ThemeSelector + stepper.
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        // NFR-02: touch target height >= 48dp.
+        await tester.pumpWidget(_buildAppWithFind(onFind: () {}));
+        await _openSheet(tester);
+
+        final tileFinder = find.ancestor(
+          of: find.text('Find / Replace'),
+          matching: find.byType(ListTile),
+        );
+        expect(tileFinder, findsOneWidget);
+
+        final rect = tester.getRect(tileFinder);
+        expect(
+          rect.height,
+          greaterThanOrEqualTo(48.0),
+          reason: 'ListTile tap-target height must be >= 48dp (NFR-02)',
+        );
+        expect(
+          rect.width,
+          greaterThan(0),
+          reason: 'ListTile must have positive width',
+        );
+      },
+    );
+
+    testWidgets(
+      'given_additive_signature_when_openMenuSheet_called_without_onFind_then_compiles_and_opens',
+      (tester) async {
+        // NFR-04 backward-compat: existing call sites compile and still open
+        // the sheet normally; no Find tile rendered.
+        await tester.pumpWidget(_buildApp());
+        await _openSheet(tester);
+
+        // Sheet opened normally
+        expect(
+          find.byType(ThemeSelector),
+          findsOneWidget,
+          reason:
+              'openMenuSheet(context) without onFind must still open normally '
+              '(additive signature, NFR-04)',
+        );
+        expect(
+          find.text('Find / Replace'),
+          findsNothing,
+          reason: 'No Find tile when onFind not provided',
+        );
+      },
+    );
+
+    testWidgets(
+      'given_it_locale_and_onFind_nonnull_when_sheet_opened_then_Find_tile_label_is_italian',
+      (tester) async {
+        // Taller viewport: sheet now has 5 tiles + ThemeSelector + stepper.
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        // FR-17: IT locale tile title matches app_it.arb menuFind value
+        // "Trova / Sostituisci".
+        await tester.pumpWidget(
+          _buildAppWithFind(onFind: () {}, locale: const Locale('it')),
+        );
+        await _openSheet(tester);
+
+        expect(
+          find.text('Trova / Sostituisci'),
+          findsOneWidget,
+          reason:
+              'menuFind ARB key must resolve to "Trova / Sostituisci" in it locale '
+              '(FR-17)',
+        );
+        expect(
+          find.text('Find / Replace'),
+          findsNothing,
+          reason: 'English label must not appear in it locale',
         );
       },
     );

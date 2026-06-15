@@ -120,6 +120,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get menuRecovery => 'Recovery';
 
   @override
+  String get menuFind => 'Find / Replace';
+
+  @override
   String get settingsTitle => 'Preferences';
 
   @override
@@ -174,6 +177,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsMonospaceFont => 'Monospace font';
+
+  @override
+  String get settingsLineNumbers => 'Show line numbers';
 
   @override
   String get a11yZoomIn => 'Increase font size';

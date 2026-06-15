@@ -150,6 +150,10 @@
   "@menuRecovery": {
     "description": "Etichetta per la voce Recupero nel foglio del menu principale, che naviga alla schermata di recupero."
   },
+  "menuFind": "Trova / Sostituisci",
+  "@menuFind": {
+    "description": "Etichetta per la voce Trova / Sostituisci nel foglio del menu principale, che apre la barra trova-e-sostituisci. SP-20260615 FR-17."
+  },
   "settingsTitle": "Preferenze",
   "@settingsTitle": {
     "description": "Titolo visualizzato nella barra dell'app della schermata delle impostazioni."
@@ -185,7 +189,7 @@
   "aboutDeveloper": "Paolo Santucci",
   "@aboutDeveloper": {
     "description": "Nome dello sviluppatore visualizzato nella schermata informazioni."
-  }
+  },
   "aboutVersion": "Versione",
   "@aboutVersion": {
     "description": "Prefisso dell'etichetta per la riga della versione nella schermata informazioni. Il numero di versione viene aggiunto a runtime."
@@ -227,6 +231,10 @@
   "settingsMonospaceFont": "Carattere monospazio",
   "@settingsMonospaceFont": {
     "description": "Etichetta per l'interruttore del carattere monospazio nella sezione Aspetto della schermata delle impostazioni."
+  },
+  "settingsLineNumbers": "Mostra i numeri di riga",
+  "@settingsLineNumbers": {
+    "description": "Etichetta per l'interruttore mostra-numeri-di-riga nella sezione Aspetto della schermata delle impostazioni. SP-20260615 FR-18."
   },
   "a11yZoomIn": "Aumenta dimensione carattere",
   "@a11yZoomIn": {

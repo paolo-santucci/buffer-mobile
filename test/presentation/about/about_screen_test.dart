@@ -158,7 +158,7 @@ void main() {
         expect(launcher.launched, hasLength(1));
         expect(
           launcher.launched.first.toString(),
-          equals('https://gitlab.gnome.org/cheywood/buffer/'),
+          equals('https://buffer.paolosantucci.com/'),
         );
       },
     );

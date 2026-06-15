@@ -4,13 +4,15 @@
 // Canon ref: .claude/docs/canon/ui-design-bible.md Component 4
 //            "Search header bar" mobile adaptation.
 //
-// Anatomy (Component 4 mobile):
-//   Row 1: [close] [search TextField + count label (opacity 0.58)] [prev] [next] [replace toggle]
+// Anatomy (Component 4 mobile — upstream GNOME Buffer search bar):
+//   A surface-coloured HEADER BAND (hairline bottom divider) wrapping:
+//   Row 1: [back] [filled rounded search pill + leading glyph] [count 0.58]
+//          [prev] [next] [replace toggle]
 //   Row 2 (AnimatedCrossFade, hidden by default):
-//            [replace TextField] [Replace ElevatedButton]
+//          [aligned filled rounded replace pill] [accent-filled Replace button]
 //
-// Inter-control spacing: 12 dp (bible §Spacing "Search header inter-control spacing").
-// Replace-row spacing:    6 dp (bible §Spacing "Search replace-row spacing").
+// The band sits ABOVE the editor (a Column sibling in buffer_screen.dart), so
+// opening search / replace shifts the editor text DOWN rather than hiding it.
 //
 // All user-facing strings via AppLocalizations — no literal Text('...') in this file.
 // <!-- CANON GAP: OQ-06 — search-highlight colour (primaryContainer/secondaryContainer)
@@ -209,6 +211,57 @@ class _FindSearchBarState extends ConsumerState<FindSearchBar> {
     return l10n.findCountLabel(position, count);
   }
 
+  /// Pill border radius for the search / replace entry fields and the Replace
+  /// button (upstream GNOME Buffer uses fully-rounded search entries).
+  static const double _kPillRadius = 22.0;
+
+  /// Square size of each icon-only control (back / prev / next / toggle).
+  static const double _kIconBtnSize = 48.0;
+
+  /// Width of the trailing control cluster on each row: three icon buttons on
+  /// the search row, and the Replace button (boxed to the same width) on the
+  /// replace row. Reserving the SAME trailing width on both rows — together
+  /// with the matching leading column — makes the two pills exactly equal width.
+  static const double _kTrailingClusterWidth = _kIconBtnSize * 3;
+
+  /// Filled, fully-rounded "pill" decoration for the search / replace entries.
+  ///
+  /// Mirrors the upstream search bar: a soft grey rounded field with a leading
+  /// glyph and no hard border, gaining a 1.5 px accent ring on focus.
+  /// An optional [suffixIcon] hosts the in-field match-count label so it does
+  /// not eat into the search pill's width.
+  InputDecoration _pillDecoration(
+    ThemeData theme, {
+    required String hint,
+    required IconData icon,
+    Widget? suffixIcon,
+  }) {
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(_kPillRadius),
+      borderSide: BorderSide.none,
+    );
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon, size: 20.0),
+      prefixIconConstraints: const BoxConstraints(minWidth: 40.0, minHeight: 0),
+      suffixIcon: suffixIcon,
+      suffixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+      filled: true,
+      fillColor: theme.colorScheme.surfaceContainerHighest,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(
+        vertical: 10.0,
+        horizontal: 8.0,
+      ),
+      border: border,
+      enabledBorder: border,
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(_kPillRadius),
+        borderSide: BorderSide(color: theme.colorScheme.primary, width: 1.5),
+      ),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Build
   // ---------------------------------------------------------------------------
@@ -226,7 +279,21 @@ class _FindSearchBarState extends ConsumerState<FindSearchBar> {
     );
     final duration = _crossfadeDuration(context);
 
-    // ── Row 1: close | search field + count | prev | next | replace toggle ──
+    // The match-count label lives INSIDE the search pill (as a suffix) so it
+    // never eats into the pill's width — that keeps the search and replace pills
+    // exactly equal width. Always rendered (empty string when count == 0) so the
+    // layout and the widget tests stay stable.
+    final countLabel = Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: Opacity(
+        opacity: 0.58,
+        child: Text(countText, style: theme.textTheme.bodySmall),
+      ),
+    );
+
+    // ── Row 1: back | search pill (+ count) | prev | next | replace toggle ──
+    // Leading column = back button (48) + 4dp gap. Trailing cluster = three
+    // 48dp icon buttons. The replace row mirrors both widths exactly.
     final searchRow = Row(
       children: [
         // Close / back affordance (FR-20).
@@ -235,119 +302,158 @@ class _FindSearchBarState extends ConsumerState<FindSearchBar> {
           tooltip: l10n.findCloseTooltip,
           onPressed: _onClose,
         ),
-        const SizedBox(width: 12.0),
+        const SizedBox(width: 4.0),
 
-        // Search TextField + count label, filling available space.
+        // Search pill, filling available space (filled rounded entry).
         Expanded(
+          child: TextField(
+            controller: _searchController,
+            // Optional FocusNode wired by buffer_screen.dart (FR-22, TASK-07)
+            // so the screen can control search-field focus (Ctrl+F re-press
+            // refocus + select-all, OQ-05).
+            focusNode: widget.focusNode,
+            onChanged: _onSearchChanged,
+            // TextInputAction.search maps the mobile soft-keyboard "Search"
+            // key onSubmitted → findProvider.next() (OQ-05, spec §5.5).
+            textInputAction: TextInputAction.search,
+            onSubmitted: (_) => ref.read(findProvider.notifier).next(),
+            decoration: _pillDecoration(
+              theme,
+              hint: l10n.findHintText,
+              icon: Icons.search,
+              suffixIcon: countLabel,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4.0),
+
+        // Trailing cluster: prev | next | replace toggle (3 × 48dp).
+        SizedBox(
+          width: _kTrailingClusterWidth,
           child: Row(
             children: [
-              Expanded(
-                child: TextField(
-                  controller: _searchController,
-                  // Optional FocusNode wired by buffer_screen.dart (FR-22,
-                  // TASK-07) so the screen can control search-field focus
-                  // (Ctrl+F re-press refocus + select-all, OQ-05).
-                  focusNode: widget.focusNode,
-                  onChanged: _onSearchChanged,
-                  // TextInputAction.search maps to findProvider.next() (OQ-05,
-                  // spec §5.5). Wired here; the screen sets onSubmitted via the
-                  // focusNode path — or the widget can be extended. For the
-                  // mobile soft-keyboard "Search" key, textInputAction is set
-                  // to TextInputAction.search by convention; the onSubmitted
-                  // callback routes to next().
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (_) => ref.read(findProvider.notifier).next(),
-                  decoration: InputDecoration(
-                    hintText: l10n.findHintText,
-                    border: InputBorder.none,
-                    isDense: true,
-                  ),
-                ),
+              // Previous match (FR-11 / bible up-large-symbolic).
+              _iconBtn(
+                icon: Icons.keyboard_arrow_up,
+                tooltip: l10n.findPreviousTooltip,
+                onPressed: _onPrevious,
               ),
-              // Dim count label at opacity 0.58 (bible §style.css:32-36).
-              Opacity(
-                opacity: 0.58,
-                child: Text(countText, style: theme.textTheme.bodySmall),
+              // Next match (FR-10 / bible down-large-symbolic).
+              _iconBtn(
+                icon: Icons.keyboard_arrow_down,
+                tooltip: l10n.findNextTooltip,
+                onPressed: _onNext,
+              ),
+              // Replace toggle (bible edit-find-replace-symbolic).
+              _iconBtn(
+                icon: Icons.find_replace,
+                tooltip: l10n.findReplaceToggleTooltip,
+                onPressed: _onToggleReplace,
               ),
             ],
           ),
         ),
-        const SizedBox(width: 12.0),
-
-        // Previous match (FR-11 / bible up-large-symbolic → keyboard_arrow_up).
-        _iconBtn(
-          icon: Icons.keyboard_arrow_up,
-          tooltip: l10n.findPreviousTooltip,
-          onPressed: _onPrevious,
-        ),
-        const SizedBox(width: 12.0),
-
-        // Next match (FR-10 / bible down-large-symbolic → keyboard_arrow_down).
-        _iconBtn(
-          icon: Icons.keyboard_arrow_down,
-          tooltip: l10n.findNextTooltip,
-          onPressed: _onNext,
-        ),
-        const SizedBox(width: 12.0),
-
-        // Replace toggle (bible edit-find-replace-symbolic → find_replace).
-        _iconBtn(
-          icon: Icons.find_replace,
-          tooltip: l10n.findReplaceToggleTooltip,
-          onPressed: _onToggleReplace,
-        ),
       ],
     );
 
-    // ── Row 2: replace field + Replace button (revealed via crossfade) ──
+    // ── Row 2: replace pill + Replace button (revealed via crossfade) ──
+    // Mirrors the search row's leading column (48dp spacer + 4dp gap) and
+    // trailing cluster width so the replace pill is exactly as wide as the
+    // search pill. The Replace button is boxed to the trailing-cluster width.
     final replaceRow = Padding(
-      padding: const EdgeInsets.only(top: 6.0),
+      padding: const EdgeInsets.only(top: 8.0),
       child: Row(
         children: [
-          // Spacer to align with the search field (skip the back-button column).
-          const SizedBox(width: 48.0 + 12.0),
+          // Spacer matching the back-button column on the search row.
+          const SizedBox(width: _kIconBtnSize),
+          const SizedBox(width: 4.0),
 
-          // Replace field.
+          // Replace pill — same width as the search pill (equal leading +
+          // trailing on both rows).
           Expanded(
             child: TextField(
               controller: _replaceController,
               onChanged: _onReplaceTermChanged,
-              decoration: InputDecoration(
-                hintText: l10n.findReplaceHintText,
-                border: InputBorder.none,
-                isDense: true,
+              decoration: _pillDecoration(
+                theme,
+                hint: l10n.findReplaceHintText,
+                icon: Icons.find_replace,
               ),
             ),
           ),
-          const SizedBox(width: 6.0),
+          const SizedBox(width: 4.0),
 
-          // Replace button — enabled only when a current match exists (FR-15).
-          ElevatedButton(
-            onPressed: findState.hasCurrent ? _onReplace : null,
-            child: Text(l10n.findReplaceButton),
+          // Replace button — accent-filled, enabled only when a current match
+          // exists (FR-15). Boxed to the trailing-cluster width so it occupies
+          // the same column as the search row's prev/next/toggle icons. Kept an
+          // ElevatedButton (styled filled accent) to match the upstream blue
+          // "Replace" action and the existing widget tests.
+          SizedBox(
+            width: _kTrailingClusterWidth,
+            child: ElevatedButton(
+              onPressed: findState.hasCurrent ? _onReplace : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.primary,
+                foregroundColor: theme.colorScheme.onPrimary,
+                // Stay in the accent colour when disabled (no current match) —
+                // just dimmed — rather than going grey, matching the upstream
+                // blue "suggested-action" Replace button.
+                disabledBackgroundColor: theme.colorScheme.primary.withValues(
+                  alpha: 0.5,
+                ),
+                disabledForegroundColor: theme.colorScheme.onPrimary.withValues(
+                  alpha: 0.7,
+                ),
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(_kPillRadius),
+                ),
+              ),
+              child: Text(
+                l10n.findReplaceButton,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ),
         ],
       ),
     );
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        searchRow,
-
-        // AnimatedCrossFade reveals / hides the replace row (FR-18 / bible Motion).
-        // crossfadeState: firstChild = empty, secondChild = replaceRow.
-        // Reduce-motion → duration == Duration.zero → instant switch.
-        AnimatedCrossFade(
-          firstChild: const SizedBox.shrink(),
-          secondChild: replaceRow,
-          crossFadeState: _replaceVisible
-              ? CrossFadeState.showSecond
-              : CrossFadeState.showFirst,
-          duration: duration,
+    // Header band: a surface-coloured bar with a hairline bottom divider,
+    // sitting above the editor (the editor is pushed down by this bar's height —
+    // see buffer_screen.dart). Replaces the former transparent overlay so the
+    // text shifts down rather than hiding behind the find controls.
+    return Material(
+      color: theme.colorScheme.surface,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+          ),
         ),
-      ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4.0, 8.0, 8.0, 8.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              searchRow,
+
+              // AnimatedCrossFade reveals / hides the replace row (FR-18 /
+              // bible Motion). firstChild = empty, secondChild = replaceRow.
+              // Reduce-motion → 1ms duration → perceptually instant switch.
+              AnimatedCrossFade(
+                firstChild: const SizedBox.shrink(),
+                secondChild: replaceRow,
+                crossFadeState: _replaceVisible
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: duration,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:buffer/l10n/app_localizations.dart';
+import 'package:buffer/presentation/editor/editor_layout.dart'
+    show kChromeMenuZoneHeight;
 import 'package:buffer/presentation/shell/chrome_reveal_controller.dart';
 
 // ---------------------------------------------------------------------------
@@ -28,8 +30,9 @@ import 'package:buffer/presentation/shell/chrome_reveal_controller.dart';
 /// 200ms is a standard Material fade duration — unobtrusive and platform-natural.
 const Duration _kChromeFadeDuration = Duration(milliseconds: 200);
 
-/// The menu affordance minimum tap target size (NFR-M6-05, canon ≥48dp).
-const double _kMinTapTarget = 48.0;
+// TASK-02 repoint: the private tap-target constant was removed and replaced by
+// the shared kChromeMenuZoneHeight from editor_layout.dart — the single source
+// of truth for the 48dp chrome button box (spec C2b). See SizedBox below.
 
 /// Chrome container background opacity — canon §2:
 /// `color-mix(in srgb, var(--view-bg-color) 90%, transparent)`.
@@ -93,8 +96,10 @@ class ChromeOverlay extends ConsumerWidget {
                 ),
                 child: SizedBox(
                   // Enforce ≥48dp tap target (NFR-M6-05, canon mobile promotion).
-                  width: _kMinTapTarget,
-                  height: _kMinTapTarget,
+                  // Sized from shared kChromeMenuZoneHeight (TASK-02, C2b) so the
+                  // chrome button box and the editor top reservation never drift.
+                  width: kChromeMenuZoneHeight,
+                  height: kChromeMenuZoneHeight,
                   child: IconButton(
                     onPressed: onMenuTap,
                     icon: const Icon(Icons.menu),

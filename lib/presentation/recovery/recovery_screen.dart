@@ -63,6 +63,24 @@ class RecoveryScreen extends ConsumerStatefulWidget {
 
 class _RecoveryScreenState extends ConsumerState<RecoveryScreen> {
   // ---------------------------------------------------------------------------
+  // Lifecycle
+  // ---------------------------------------------------------------------------
+
+  @override
+  void initState() {
+    super.initState();
+    // recoveryListProvider is non-auto-disposed (single-provider rule §5.3),
+    // so its build() runs only once per app session. A note saved AFTER that
+    // first build — e.g. the buffer being persisted on backgrounding — would
+    // otherwise be absent when the screen is re-opened. Re-fetch on every mount
+    // so the most recently saved note always appears (FR-M5-01).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(recoveryListProvider.notifier).refresh();
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
 

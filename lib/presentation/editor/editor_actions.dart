@@ -81,10 +81,22 @@ class OutdentIntent extends Intent {
 
 /// Handles [ContinueListIntent].
 ///
-/// Invokes [EditorController.continueListOnNewline] using the controller's
-/// current text and collapsed caret offset, then calls [apply] ONLY when the
-/// result is non-null. When the result is null the plain `\n` already
-/// inserted by the text field is left in place.
+/// On a **list line** (when [EditorController.continueListOnNewline] returns
+/// non-null): applies the continuation atomically via [apply] and consumes the
+/// key event, preventing the default `\n` insertion by `EditableText` (which
+/// would produce a double newline).
+///
+/// On a **non-list line** (null result): explicitly inserts a literal `\n` at
+/// the current caret via [apply] and consumes the key event. Consuming the key
+/// on this branch prevents `EditableText` from also inserting `\n` (avoiding a
+/// double-newline). The insertion is device-reliable: the action owns the write
+/// rather than delegating to `EditableText`'s default behaviour, which is
+/// unavailable in the widget-test key-event path (C-06 compliance).
+///
+/// The soft-keyboard IME path — where a physical `\n` arrives as a controller
+/// delta rather than a key event — is NOT affected. It routes through the
+/// `_onControllerChanged` literal-`\n` change-path in buffer_screen.dart
+/// (§(a)/(b)), which remains intact and reachable (C-02, C-03).
 ///
 /// PURE DELEGATION: this action does NOT mutate the controller. The atomic
 /// [TextEditingValue] assignment is performed by the [apply] callback (owned
@@ -103,16 +115,40 @@ class EditorContinueListAction extends Action<ContinueListIntent> {
   /// The apply callback supplied by [BufferScreen].
   final EditorApplyCallback apply;
 
+  /// Always returns `true`: the action handles the key in every case.
+  ///
+  /// On the **list branch**, consuming the key prevents `EditableText` from
+  /// inserting a duplicate `\n` after the continuation prefix.
+  /// On the **non-list branch**, consuming the key prevents `EditableText`
+  /// from inserting a second `\n` after the action has already written one
+  /// via [apply].
+  @override
+  bool consumesKey(ContinueListIntent intent) => true;
+
   @override
   void invoke(ContinueListIntent intent) {
+    final value = controller.value;
     final result = controller.continueListOnNewline(
-      controller.value.text,
-      controller.value.selection.baseOffset,
+      value.text,
+      value.selection.baseOffset,
     );
     if (result != null) {
+      // List branch: apply the continuation result (e.g. "- item\n- ").
       apply(result);
+      return;
     }
-    // When result is null the plain \n stays; apply is NOT called.
+    // Non-list branch: insert a literal '\n' at the collapsed caret.
+    // The apply callback routes through _applyResult (buffer_screen.dart),
+    // which sets _continuing so _onControllerChanged skips duplicate
+    // detection — no double-newline, no spurious list-continuation attempt.
+    final text = value.text;
+    final offset = value.selection.baseOffset.clamp(0, text.length);
+    final newText = '${text.substring(0, offset)}\n${text.substring(offset)}';
+    final newOffset = offset + 1;
+    apply((
+      text: newText,
+      selection: TextSelection.collapsed(offset: newOffset),
+    ));
   }
 }
 

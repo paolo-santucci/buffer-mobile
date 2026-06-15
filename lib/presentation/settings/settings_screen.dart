@@ -1,7 +1,8 @@
-// SettingsScreen — TASK-10 (M6) + TASK-06 (M7)
+// SettingsScreen — TASK-10 (M6) + TASK-06 (M7) + TASK-06 (SP-20260615)
 //
 // Spec refs (M6): FR-M6-09, FR-M6-13, NFR-M6-01, D8, §Components §7
 // Spec refs (M7): FR-M7-06, FR-M7-08, FR-M7-12, NFR-M7-05, NFR-M7-07
+// Spec refs (SP-20260615): FR-12, FR-13, FR-18, NFR-02, NFR-05
 // Canon ref      : .claude/docs/canon/ui-design-bible.md §7 "Preferences dialog"
 //
 // Layout (canon §7 mobile adaptation):
@@ -11,6 +12,7 @@
 //     ThemeSelector (TASK-07 / M6)
 //     FontSizeStepper with settingsFontSize label header (TASK-06 / M7)
 //     SwitchListTile: settingsMonospaceFont (TASK-06 / M7)
+//     SwitchListTile: settingsLineNumbers (TASK-06 / SP-20260615) — default OFF
 //
 //   Behavior group (settingsBehavior):
 //     SwitchListTile: settingsRecoveryEnabled — reuses emergency-recovery-files
@@ -35,7 +37,8 @@ import 'package:buffer/presentation/typography/font_size_stepper.dart';
 ///
 /// Two grouped sections:
 ///   - **Appearance** — theme-mode selection via [ThemeSelector],
-///     font-size stepper via [FontSizeStepper], and monospace toggle.
+///     font-size stepper via [FontSizeStepper], monospace toggle, and
+///     show-line-numbers toggle (default OFF, SP-20260615 FR-12).
 ///   - **Behavior** — recovery-enabled toggle + spell-check toggle.
 ///
 /// All labels sourced from ARB via [AppLocalizations].
@@ -93,6 +96,25 @@ class SettingsScreen extends ConsumerWidget {
             value: current.useMonospaceFont,
             onChanged: (value) =>
                 ref.read(settingsProvider.notifier).setUseMonospaceFont(value),
+          ),
+
+          // Show line numbers toggle — SP-20260615 FR-12 / FR-13
+          // Default OFF (AppSettings.showLineNumbers @Default(false)).
+          // Wires to the existing setShowLineNumbers notifier (C6 consumer,
+          // NFR-05 — no new persistence key or model field introduced).
+          // Touch target: SwitchListTile material default minVerticalPadding
+          // yields ≥ 56dp height, exceeding the ≥ 48dp NFR-02 floor.
+          //
+          // <!-- CANON GAP: canon §Components.7 documents Appearance SwitchRows
+          //      with on-state thumb using ColorScheme.primary. Flutter
+          //      SwitchListTile inherits activeColor from Theme; the blue
+          //      #3584E4 seed (TASK-03) supplies primary automatically.
+          //      No explicit activeColor override needed — canon intent met. -->
+          SwitchListTile(
+            title: Text(l10n.settingsLineNumbers),
+            value: current.showLineNumbers,
+            onChanged: (value) =>
+                ref.read(settingsProvider.notifier).setShowLineNumbers(value),
           ),
 
           // ----------------------------------------------------------------

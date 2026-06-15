@@ -120,7 +120,7 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'Previous Match'**
-  String get findPreviousTooltip:;
+  String get findPreviousTooltip;
 
   /// Tooltip for the next match button in the search bar.
   ///
@@ -308,6 +308,12 @@ abstract class AppLocalizations {
   /// **'Recovery'**
   String get menuRecovery;
 
+  /// Label for the Find / Replace entry in the main menu sheet, opening the find-and-replace bar. SP-20260615 FR-17.
+  ///
+  /// In en, this message translates to:
+  /// **'Find / Replace'**
+  String get menuFind;
+
   /// Title displayed in the Settings screen app bar.
   ///
   /// In en, this message translates to:
@@ -361,7 +367,7 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Paolo Santucci'**
   String get aboutDeveloper;
-  
+
   /// Label prefix for the app version row in the About screen. The actual version number is appended at runtime.
   ///
   /// In en, this message translates to:
@@ -415,6 +421,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Monospace font'**
   String get settingsMonospaceFont;
+
+  /// Label for the show-line-numbers toggle in the Settings screen Appearance section. SP-20260615 FR-18.
+  ///
+  /// In en, this message translates to:
+  /// **'Show line numbers'**
+  String get settingsLineNumbers;
 
   /// Accessibility label for the increase font size (zoom in) button in the FontSizeStepper.
   ///
