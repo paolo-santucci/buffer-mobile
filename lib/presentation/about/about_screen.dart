@@ -157,12 +157,8 @@ class _AboutBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       children: [
-        // App name — "Buffer" via ARB appTitle (upstream `application_name`).
+        // App name — "Buffer Mobile" via ARB appTitle (upstream `application_name`).
         ListTile(title: Text(l10n.appTitle)),
-        const Divider(height: 1),
-
-        // Original Developer — "Chris Heywood" from ARB `aboutOriginalDeveloper`.
-        ListTile(title: Text(l10n.aboutOriginalDeveloper)),
         const Divider(height: 1),
 
         // Developer — "Paolo Santucci" from ARB `aboutDeveloper`.

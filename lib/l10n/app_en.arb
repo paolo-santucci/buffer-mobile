@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "appTitle": "Buffer",
+  "appTitle": "Buffer Mobile",
   "@appTitle": {
     "description": "The title of the application displayed in the window title bar and as the app name."
   },
@@ -181,10 +181,6 @@
   "aboutTitle": "About Buffer",
   "@aboutTitle": {
     "description": "Title displayed in the About screen app bar."
-  },
-  "aboutOriginalDeveloper": "Chris Heywood",
-  "@aboutOriginalDeveloper": {
-    "description": "Original developer name displayed in the About screen."
   },
   "aboutDeveloper": "Paolo Santucci",
   "@aboutDeveloper": {

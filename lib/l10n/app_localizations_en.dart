@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Buffer';
+  String get appTitle => 'Buffer Mobile';
 
   @override
   String get findHintText => 'Search';
@@ -142,9 +142,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutTitle => 'About Buffer';
-
-  @override
-  String get aboutOriginalDeveloper => 'Chris Heywood';
 
   @override
   String get aboutDeveloper => 'Paolo Santucci';
