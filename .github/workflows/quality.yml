@@ -1,0 +1,70 @@
+name: Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # Pin to the same Flutter version used in local development.
+          # Floating '3.x' causes pubspec.lock drift whenever Flutter stable
+          # bumps the Dart SDK, producing different transitive dep resolutions
+          # between local and CI. Update this pin when upgrading Flutter locally,
+          # then run `flutter pub get` and commit the updated pubspec.lock.
+          flutter-version: '3.44.2'
+          channel: stable
+          cache: 'pub'
+
+      - name: Install dependencies (enforce lock)
+        # --enforce-lockfile fails fast with a clear error if pubspec.lock is
+        # stale (e.g. after a transitive dep update). Fix: run `flutter pub get`
+        # locally and commit the refreshed pubspec.lock.
+        run: flutter pub get --enforce-lockfile
+
+      - name: Generate code (build_runner)
+        # freezed + riverpod_generator outputs are committed; this regenerates
+        # them so the determinism check below catches any drift.
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Check formatting and codegen determinism
+        run: |
+          dart format .
+          # Exclude pubspec.lock: lock-file freshness is enforced by the
+          # "Install dependencies" step above. Only formatting and codegen
+          # changes are checked here.
+          git diff --exit-code -- . ':!pubspec.lock'
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Install lcov
+        run: sudo apt-get update && sudo apt-get install -y lcov
+
+      - name: Run tests with coverage
+        run: flutter test --coverage --no-pub
+
+      - name: Coverage report (informational, non-blocking)
+        # Measure and print line coverage but do not fail the build on a
+        # threshold. Tighten into a hard gate later once the real number is
+        # known (e.g. add an `exit 1` below an agreed minimum).
+        run: |
+          # Strip generated files (freezed .g.dart / .freezed.dart, l10n)
+          # before measuring — they are codegen, not hand-written code.
+          lcov --remove coverage/lcov.info \
+            '*.g.dart' \
+            '*.freezed.dart' \
+            '*/l10n/*' \
+            -o coverage/lcov_filtered.info
+          lcov --summary coverage/lcov_filtered.info 2>&1

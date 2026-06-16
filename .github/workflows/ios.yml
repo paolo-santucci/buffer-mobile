@@ -1,0 +1,307 @@
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build_ios:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.2'
+          channel: stable
+          cache: 'pub'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS (no code sign)
+        run: flutter build ios --no-codesign --build-name=1.0.0
+
+  deploy_testflight:
+    runs-on: macos-15
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.2'
+          channel: stable
+          cache: 'pub'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # -----------------------------------------------------------------------
+      # Decode signing materials from GitHub Secrets onto the ephemeral runner
+      # filesystem. Nothing from this point is committed; CI starts from a
+      # fresh checkout on every run.
+      # -----------------------------------------------------------------------
+
+      - name: Decode signing materials
+        env:
+          IOS_DIST_CERT_P12_BASE64: ${{ secrets.IOS_DIST_CERT_P12_BASE64 }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/signing"
+          echo "$IOS_DIST_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/signing/dist.p12"
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/signing/profile.mobileprovision"
+
+      - name: Create ephemeral keychain and import certificate
+        env:
+          IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+          IOS_DIST_CERT_PASSWORD: ${{ secrets.IOS_DIST_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing/buffer-ci.keychain-db"
+          security create-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          # Add ephemeral keychain to the user search list alongside the login
+          # keychain so codesign can locate the identity on all runner revisions.
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          security unlock-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          # Import distribution certificate (cert + private key)
+          security import "$RUNNER_TEMP/signing/dist.p12" \
+            -k "$KEYCHAIN" \
+            -P "$IOS_DIST_CERT_PASSWORD" \
+            -A -t cert -f pkcs12
+
+          # Allow codesign to read the key without a UI password prompt.
+          # Both -S flags are required; omitting either causes codesign to hang.
+          security set-key-partition-list \
+            -S "apple-tool:,apple:" \
+            -s \
+            -k "$IOS_KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN"
+
+      - name: Install provisioning profile
+        run: |
+          # Extract UUID from the provisioning profile plist payload
+          PROFILE_UUID=$(security cms -D -i "$RUNNER_TEMP/signing/profile.mobileprovision" \
+            | plutil -extract UUID raw -)
+
+          # Mask the UUID so it never appears in plain text in CI logs
+          echo "::add-mask::$PROFILE_UUID"
+
+          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES_DIR"
+          cp "$RUNNER_TEMP/signing/profile.mobileprovision" \
+            "$PROFILES_DIR/$PROFILE_UUID.mobileprovision"
+
+          # Persist UUID for subsequent steps via GITHUB_ENV
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+
+      - name: Decode App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        run: |
+          ASC_KEY_DIR="$HOME/.appstoreconnect/private_keys"
+          mkdir -p "$ASC_KEY_DIR"
+          echo "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode \
+            > "$ASC_KEY_DIR/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          chmod 600 "$ASC_KEY_DIR/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+
+      - name: Materialize ExportOptions.plist
+        env:
+          IOS_DEVELOPMENT_TEAM_ID: ${{ secrets.IOS_DEVELOPMENT_TEAM_ID }}
+        run: |
+          sed \
+            -e "s|__TEAM_ID__|$IOS_DEVELOPMENT_TEAM_ID|g" \
+            -e "s|__PROFILE_UUID__|$PROFILE_UUID|g" \
+            ios/ExportOptions.plist.template \
+            > "$RUNNER_TEMP/ExportOptions.plist"
+
+      # -----------------------------------------------------------------------
+      # Build flow: Flutter compiles the Dart side without signing (which also
+      # runs `pod install`), then a Ruby script patches signing settings into
+      # ONLY the Runner native target, then xcodebuild archives without any
+      # CLI signing overrides. This avoids two pitfalls:
+      #
+      #  1. `flutter build ipa` aborts in pre-flight when the committed pbxproj
+      #     has CODE_SIGN_IDENTITY = "iPhone Developer" (development cert)
+      #     while we're trying to sign with a Distribution cert.
+      #  2. xcodebuild CLI signing args (e.g. PROVISIONING_PROFILE_SPECIFIER)
+      #     apply to every target in the workspace, which makes CocoaPods
+      #     static-library targets fail with "does not support provisioning
+      #     profiles".
+      #
+      # Setting signing in the pbxproj for the Runner target only — using the
+      # xcodeproj Ruby gem (bundled with CocoaPods, pre-installed on the
+      # runner) — keeps Pods unsigned and Runner manually signed.
+      # -----------------------------------------------------------------------
+
+      - name: Build iOS bundle (no signing)
+        run: |
+          flutter build ios \
+            --release \
+            --no-codesign \
+            --build-name=1.0.0 \
+            --build-number="$GITHUB_RUN_NUMBER"
+
+      - name: Configure Runner target signing (workspace only)
+        env:
+          IOS_DEVELOPMENT_TEAM_ID: ${{ secrets.IOS_DEVELOPMENT_TEAM_ID }}
+        run: |
+          ruby <<'RUBY'
+          require 'xcodeproj'
+
+          project = Xcodeproj::Project.open('ios/Runner.xcodeproj')
+          runner = project.targets.find { |t| t.name == 'Runner' }
+          raise 'Runner target not found in ios/Runner.xcodeproj' unless runner
+
+          team    = ENV.fetch('IOS_DEVELOPMENT_TEAM_ID')
+          profile = ENV.fetch('PROFILE_UUID')
+
+          runner.build_configurations.each do |config|
+            settings = config.build_settings
+            settings['CODE_SIGN_STYLE']                   = 'Manual'
+            settings['DEVELOPMENT_TEAM']                  = team
+            settings['PROVISIONING_PROFILE_SPECIFIER']    = profile
+            settings['CODE_SIGN_IDENTITY']                = 'Apple Distribution'
+            settings['CODE_SIGN_IDENTITY[sdk=iphoneos*]'] = 'Apple Distribution'
+            puts "Patched Runner.#{config.name}: manual signing via team #{team}"
+          end
+
+          project.save
+          RUBY
+
+      # -----------------------------------------------------------------------
+      # Wipe only the pre-built Flutter app bundle so that xcodebuild archive
+      # triggers a clean actool + Info.plist compile pass from scratch.
+      #
+      # Why: `flutter build ios --no-codesign` populates build/ios/iphoneos/
+      # Runner.app. When xcodebuild archive subsequently runs the Flutter Run
+      # Script phase (xcode_backend.sh), it finds an existing bundle and may
+      # skip recompiling the asset catalog, producing an archive with a
+      # CFBundleIconName-less Info.plist and no 120x120 icon entry — exactly
+      # the two altool errors reported. Removing the pre-built app forces
+      # actool to recompile from the source asset catalog, producing a
+      # correctly-structured bundle.
+      #
+      # The flutter build step above must remain because it:
+      #   - resolves and installs CocoaPods (`pod install`)
+      #   - writes Generated.xcconfig with FLUTTER_BUILD_NAME / FLUTTER_BUILD_NUMBER
+      # Only the compiled app artifact is removed here, not the derived sources.
+      # -----------------------------------------------------------------------
+
+      - name: Remove pre-built app bundle before archive
+        run: rm -rf build/ios/iphoneos/Runner.app
+
+      - name: Archive with xcodebuild
+        run: |
+          xcodebuild \
+            -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            archive
+
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            -exportPath "$RUNNER_TEMP/ipa" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+
+      # -----------------------------------------------------------------------
+      # Validate IPA bundle contents before upload: confirm that actool
+      # produced AppIcon entries in Assets.car and that Info.plist retains
+      # CFBundleIconName. A missing key here will cause altool to reject the
+      # upload with "Missing required icon file" / "Missing CFBundleIconName".
+      # This step is always informational — it prints and exits 0 so that a
+      # bad build is still caught by altool but the log shows the exact state.
+      # -----------------------------------------------------------------------
+
+      - name: Validate IPA bundle (icon + plist sanity)
+        run: |
+          IPA=$(ls "$RUNNER_TEMP/ipa"/*.ipa)
+          WORK="$RUNNER_TEMP/ipa-inspect"
+          mkdir -p "$WORK"
+          unzip -q "$IPA" -d "$WORK"
+          APP="$WORK/Payload/Runner.app"
+          FAIL=0
+
+          echo "===== AppIcon / Assets.car presence ====="
+          find "$APP" -maxdepth 2 \( -name 'AppIcon*' -o -name 'Assets.car' \) \
+            -print -exec ls -lh {} \;
+
+          echo "===== CFBundleIconName ====="
+          plutil -extract CFBundleIconName raw -o - "$APP/Info.plist" \
+            || { echo "ERROR: CFBundleIconName is MISSING from bundle Info.plist"; FAIL=1; }
+
+          echo "===== assetutil icon inventory ====="
+          ICON_NAMES=$(xcrun --sdk iphoneos assetutil --info "$APP/Assets.car" 2>&1 \
+            | grep '"Name"' | grep -i appicon || true)
+          if [ -z "$ICON_NAMES" ]; then
+            echo "ERROR: No AppIcon entries found in Assets.car — actool did not compile the icon set"
+            xcrun --sdk iphoneos assetutil --info "$APP/Assets.car" 2>&1 \
+              | grep -E '"Name"|"PixelWidth"|"PixelHeight"' | head -30
+            FAIL=1
+          else
+            xcrun --sdk iphoneos assetutil --info "$APP/Assets.car" 2>&1 \
+              | grep -E '"Name"|"PixelWidth"|"PixelHeight"' | head -60
+          fi
+
+          exit $FAIL
+
+      - name: Validate app (server-side, diagnostic only)
+        continue-on-error: true
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          xcrun altool \
+            --validate-app \
+            --type ios \
+            --file "$RUNNER_TEMP/ipa"/*.ipa \
+            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID"
+
+      - name: Upload to TestFlight
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          xcrun altool \
+            --upload-app \
+            --type ios \
+            --file "$RUNNER_TEMP/ipa"/*.ipa \
+            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_API_ISSUER_ID"
+
+      # -----------------------------------------------------------------------
+      # Cleanup: always runs, even on failure, so signing material does not
+      # linger on the runner filesystem between steps or in job artifacts.
+      # -----------------------------------------------------------------------
+
+      - name: Cleanup signing material
+        if: always()
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing/buffer-ci.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/signing/dist.p12"
+          rm -f "$RUNNER_TEMP/signing/profile.mobileprovision"
+          rm -f "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          if [ -n "$PROFILE_UUID" ]; then
+            rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
+          fi
