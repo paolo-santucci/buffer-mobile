@@ -5,17 +5,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// [SettingsRepository] implementation backed by [SharedPreferences].
 ///
 /// Key contract (OQ-B1 + M6 + M7):
-/// - Writes exactly eight upstream gschema keys on [save]: four bools, two
+/// - Writes exactly seven upstream gschema keys on [save]: three bools, two
 ///   derived ints, one string, and one int. No "line-length-enabled" bool key.
 ///   Keys in write order:
 ///     1. "use-monospace-font"       (bool)
-///     2. "show-line-numbers"        (bool)
-///     3. "check-spelling"           (bool)
-///     4. "save-emergency-files"     (bool)
-///     5. "emergency-recovery-files" (int: 0 or 10)
-///     6. "line-length"              (int: 800 or 100000)
-///     7. "color-scheme"             (string: follow|light|dark)
-///     8. "font-size"                (int: 0–20, the fontSizeIndex slot)
+///     2. "check-spelling"           (bool)
+///     3. "save-emergency-files"     (bool)
+///     4. "emergency-recovery-files" (int: 0 or 10)
+///     5. "line-length"              (int: 800 or 100000)
+///     6. "color-scheme"             (string: follow|light|dark)
+///     7. "font-size"                (int: 0–20, the fontSizeIndex slot)
 /// - [load] derives [AppSettings.lineLengthEnabled] from the stored
 ///   "line-length" int: enabled iff (stored ?? 800) <= 800.
 /// - [load] parses "color-scheme" via a safe switch with a follow fallback —
@@ -33,7 +32,6 @@ class SharedPreferencesSettingsRepository implements SettingsRepository {
   @override
   Future<AppSettings> load() async {
     final useMonospaceFont = _safeBool(AppSettings.kUseMonospaceFont) ?? true;
-    final showLineNumbers = _safeBool(AppSettings.kShowLineNumbers) ?? false;
     final spellingEnabled = _safeBool(AppSettings.kSpellingEnabled) ?? true;
     final emergencyRecoveryEnabled =
         _safeBool(AppSettings.kEmergencyRecoveryEnabled) ?? true;
@@ -55,7 +53,6 @@ class SharedPreferencesSettingsRepository implements SettingsRepository {
 
     return AppSettings(
       useMonospaceFont: useMonospaceFont,
-      showLineNumbers: showLineNumbers,
       spellingEnabled: spellingEnabled,
       emergencyRecoveryEnabled: emergencyRecoveryEnabled,
       lineLengthEnabled: lineLengthEnabled,
@@ -67,7 +64,6 @@ class SharedPreferencesSettingsRepository implements SettingsRepository {
   @override
   Future<void> save(AppSettings s) async {
     await _prefs.setBool(AppSettings.kUseMonospaceFont, s.useMonospaceFont);
-    await _prefs.setBool(AppSettings.kShowLineNumbers, s.showLineNumbers);
     await _prefs.setBool(AppSettings.kSpellingEnabled, s.spellingEnabled);
     await _prefs.setBool(
       AppSettings.kEmergencyRecoveryEnabled,

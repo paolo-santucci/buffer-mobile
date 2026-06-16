@@ -232,10 +232,6 @@
   "@settingsMonospaceFont": {
     "description": "Label for the monospace font toggle in the Settings screen Appearance section."
   },
-  "settingsLineNumbers": "Show line numbers",
-  "@settingsLineNumbers": {
-    "description": "Label for the show-line-numbers toggle in the Settings screen Appearance section. SP-20260615 FR-18."
-  },
   "a11yZoomIn": "Increase font size",
   "@a11yZoomIn": {
     "description": "Accessibility label for the increase font size (zoom in) button in the FontSizeStepper."

@@ -232,10 +232,6 @@
   "@settingsMonospaceFont": {
     "description": "Etichetta per l'interruttore del carattere monospazio nella sezione Aspetto della schermata delle impostazioni."
   },
-  "settingsLineNumbers": "Mostra i numeri di riga",
-  "@settingsLineNumbers": {
-    "description": "Etichetta per l'interruttore mostra-numeri-di-riga nella sezione Aspetto della schermata delle impostazioni. SP-20260615 FR-18."
-  },
   "a11yZoomIn": "Aumenta dimensione carattere",
   "@a11yZoomIn": {
     "description": "Etichetta di accessibilità per il pulsante di aumento della dimensione del carattere (zoom in) nel FontSizeStepper."

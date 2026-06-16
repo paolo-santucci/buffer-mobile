@@ -66,7 +66,6 @@ import 'package:buffer/infrastructure/share/share_intent_service.dart';
 import 'package:buffer/l10n/app_localizations.dart';
 import 'package:buffer/presentation/editor/buffer_screen.dart';
 import 'package:buffer/presentation/editor/editor_actions.dart';
-import 'package:buffer/presentation/editor/line_number_gutter.dart';
 import 'package:buffer/presentation/editor/share_providers.dart';
 import 'package:buffer/presentation/find/find_provider.dart';
 import 'package:buffer/presentation/find/find_search_bar.dart';
@@ -3771,111 +3770,6 @@ void main() {
           reason:
               '_openFindFromMenu must dispatch via OpenFindIntent (not startSearch directly).',
         );
-      },
-    );
-  });
-
-  // =========================================================================
-  // Group 30 — TASK-08 SP-20260615: LineNumberGutter visibility assertions
-  //
-  // Spec refs: FR-14 (gutter present/absent on toggle)
-  // Contract: C7 (spec §5.1), spec §5.2
-  //
-  // Additive only — does NOT modify TASK-07 tests.
-  // The LineNumberGutter widget is imported at the top of this file via
-  // `package:buffer/presentation/editor/line_number_gutter.dart`.
-  // =========================================================================
-  group('TASK-08 SP-20260615 — LineNumberGutter mount visibility', () {
-    // -----------------------------------------------------------------------
-    // 30.1  Gutter absent when showLineNumbers == false (FR-14)
-    // -----------------------------------------------------------------------
-    testWidgets('gutter absent when showLineNumbers == false (FR-14)', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(800.0, 1200.0);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      await _pumpBufferScreenM7(
-        tester,
-        settings: const AppSettings(showLineNumbers: false),
-      );
-      expect(find.byType(LineNumberGutter), findsNothing);
-    });
-
-    // -----------------------------------------------------------------------
-    // 30.2  Gutter present when showLineNumbers == true (FR-14)
-    // -----------------------------------------------------------------------
-    testWidgets('gutter present when showLineNumbers == true (FR-14)', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(800.0, 1200.0);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      await _pumpBufferScreenM7(
-        tester,
-        settings: const AppSettings(showLineNumbers: true),
-      );
-      expect(find.byType(LineNumberGutter), findsOneWidget);
-    });
-
-    // -----------------------------------------------------------------------
-    // 30.3  Gutter top aligns with TextField top within 2px (FR-06a coupling)
-    // -----------------------------------------------------------------------
-    testWidgets(
-      'gutter top == TextField top within 2px — FR-06a coupling (padding.top=24)',
-      (tester) async {
-        tester.view.devicePixelRatio = 1.0;
-        tester.view.padding = const FakeViewPadding(top: 24.0);
-        tester.view.physicalSize = const Size(800.0, 1200.0);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        addTearDown(tester.view.resetPadding);
-        addTearDown(tester.view.resetPhysicalSize);
-
-        await _pumpBufferScreenM7(
-          tester,
-          settings: const AppSettings(showLineNumbers: true),
-        );
-
-        expect(find.byType(LineNumberGutter), findsOneWidget);
-
-        final gutterRect = tester.getRect(find.byType(LineNumberGutter));
-        final editorTf = find.byWidgetPredicate(
-          (w) => w is TextField && w.expands == true,
-        );
-        if (tester.any(editorTf)) {
-          final tfRect = tester.getRect(editorTf.first);
-          expect(
-            (gutterRect.top - tfRect.top).abs(),
-            lessThanOrEqualTo(2.0),
-            reason:
-                'Gutter top must align with TextField top within 2px (FR-06a, spec §5.2 step 5)',
-          );
-        }
-      },
-    );
-
-    // -----------------------------------------------------------------------
-    // 30.4  Existing TASK-07 tests unaffected — horizontal margin still present
-    //        when gutter is ON (no-regression guard for TASK-07 margin wiring).
-    // -----------------------------------------------------------------------
-    testWidgets(
-      'outer Padding still has horizontal margin when gutter ON (TASK-07 no-regression)',
-      (tester) async {
-        tester.view.physicalSize = const Size(800.0, 1200.0);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        await _pumpBufferScreenM7(
-          tester,
-          settings: const AppSettings(showLineNumbers: true),
-        );
-        // TASK-07's outer Padding must still have left > 0.
-        _assertOuterPaddingHasHorizontalMargin(tester);
       },
     );
   });

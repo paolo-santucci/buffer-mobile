@@ -932,32 +932,31 @@ void main() {
   // state, so the most recently saved note was missing on re-open).
   // -------------------------------------------------------------------------
   group('RecoveryScreen refresh on mount', () {
-    testWidgets(
-      'given_mounted_then_refreshCalledOnceSoLatestSaveIsFetched',
-      (tester) async {
-        final recoveryNotifier = _FakeRecoveryListNotifier(
-          initialNotes: [_note('a')],
-        );
+    testWidgets('given_mounted_then_refreshCalledOnceSoLatestSaveIsFetched', (
+      tester,
+    ) async {
+      final recoveryNotifier = _FakeRecoveryListNotifier(
+        initialNotes: [_note('a')],
+      );
 
-        await tester.pumpWidget(
-          _buildApp(
-            recoveryNotifier: recoveryNotifier,
-            settingsNotifier: _FakeSettingsNotifier(),
-            bufferNotifier: _TrackingBufferNotifier(),
-          ),
-        );
-        // Pump the post-frame callback that triggers the re-fetch.
-        await tester.pump();
+      await tester.pumpWidget(
+        _buildApp(
+          recoveryNotifier: recoveryNotifier,
+          settingsNotifier: _FakeSettingsNotifier(),
+          bufferNotifier: _TrackingBufferNotifier(),
+        ),
+      );
+      // Pump the post-frame callback that triggers the re-fetch.
+      await tester.pump();
 
-        expect(
-          recoveryNotifier.refreshCount,
-          greaterThanOrEqualTo(1),
-          reason:
-              'Screen must re-fetch the list on mount so a note saved after '
-              'the provider first built (e.g. on backgrounding) appears.',
-        );
-      },
-    );
+      expect(
+        recoveryNotifier.refreshCount,
+        greaterThanOrEqualTo(1),
+        reason:
+            'Screen must re-fetch the list on mount so a note saved after '
+            'the provider first built (e.g. on backgrounding) appears.',
+      );
+    });
   });
 }
 

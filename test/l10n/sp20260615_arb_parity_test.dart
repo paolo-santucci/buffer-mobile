@@ -2,20 +2,18 @@
 //
 // ARB-parity gate for SP-20260615 TASK-01.
 //
-// Spec refs: FR-17, FR-18, NFR-07
+// Spec refs: FR-17, NFR-07
 //
 // Asserts:
 //  - "menuFind" present with non-empty value in both EN and IT ARBs.
-//  - "settingsLineNumbers" present with non-empty value in both EN and IT ARBs.
-//  - Each key has a @key metadata block with a description.
+//  - "menuFind" has a @key metadata block with a description.
 //  - Full parity: EN and IT visible key sets are identical (extending the
 //    NFR-M6-02 / NFR-07 discipline already established in
 //    app_it_arb_parity_test.dart).
 //
-// A compile-time reference to AppLocalizations.menuFind and
-// AppLocalizations.settingsLineNumbers is placed in a dummy getter below —
-// this file will not compile (and therefore the test suite will fail to load)
-// if flutter gen-l10n has not been re-run after the keys are added.
+// A compile-time reference to AppLocalizations.menuFind is placed in a dummy
+// getter below — this file will not compile (and therefore the test suite will
+// fail to load) if flutter gen-l10n has not been re-run after the key is added.
 
 import 'dart:convert';
 import 'dart:io';
@@ -24,19 +22,15 @@ import 'package:buffer/l10n/app_localizations.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-// Compile-time gate: these accessors must resolve to actual getters on the
+// Compile-time gate: this accessor must resolve to an actual getter on the
 // generated AppLocalizations class.  If gen-l10n was not re-run the file fails
 // to compile and the whole test suite reports a load error — which is the
 // intended red signal.
 //
 // The getter is never executed at runtime (the widget tree is not pumped);
-// it exists solely to make the Dart analyser / compiler verify the symbols.
+// it exists solely to make the Dart analyser / compiler verify the symbol.
 // ignore: unused_element
 String _compileTimeMenuFind(AppLocalizations l10n) => l10n.menuFind;
-
-// ignore: unused_element
-String _compileTimeSettingsLineNumbers(AppLocalizations l10n) =>
-    l10n.settingsLineNumbers;
 
 // Dummy reference to BuildContext so the import of package:flutter/widgets.dart
 // is not flagged as unused.
@@ -63,7 +57,7 @@ void main() {
 
   // ─── SP-20260615 TASK-01 keys ────────────────────────────────────────────
 
-  const spKeys = <String>['menuFind', 'settingsLineNumbers'];
+  const spKeys = <String>['menuFind'];
 
   group(
     'TASK-01 — SP-20260615 ARB keys present in app_en.arb (FR-17, FR-18)',
@@ -150,19 +144,6 @@ void main() {
         _visibleKeys(it).contains('menuFind'),
         isTrue,
         reason: 'menuFind missing from IT visible keys',
-      );
-    });
-
-    test('settingsLineNumbers present in both EN and IT', () {
-      expect(
-        _visibleKeys(en).contains('settingsLineNumbers'),
-        isTrue,
-        reason: 'settingsLineNumbers missing from EN visible keys',
-      );
-      expect(
-        _visibleKeys(it).contains('settingsLineNumbers'),
-        isTrue,
-        reason: 'settingsLineNumbers missing from IT visible keys',
       );
     });
 

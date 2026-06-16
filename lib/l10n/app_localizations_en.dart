@@ -179,9 +179,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsMonospaceFont => 'Monospace font';
 
   @override
-  String get settingsLineNumbers => 'Show line numbers';
-
-  @override
   String get a11yZoomIn => 'Increase font size';
 
   @override

@@ -30,13 +30,11 @@
 //        Expected count: EXACTLY ONE (in buffer_screen.dart, the wiring site).
 //
 //   3. ARB parity (NFR-07):
-//        Both `menuFind` and `settingsLineNumbers` keys present and non-empty
-//        in app_en.arb AND app_it.arb.
+//        The `menuFind` key present and non-empty in app_en.arb AND app_it.arb.
 //
 //   4. Ephemerality scan (NFR-09):
-//        The new editor files (line_number_gutter.dart and the SP-20260615
-//        edits to buffer_screen.dart / editor_actions.dart / menu_sheet.dart)
-//        must add ZERO buffer-text persistence calls:
+//        The SP-20260615 edits to buffer_screen.dart / editor_actions.dart /
+//        menu_sheet.dart must add ZERO buffer-text persistence calls:
 //          - no `writeAsString(` or `writeAsStringSync(` in lib/presentation/
 //          - no `setString(`/`setBool(`/`setInt(`/`setDouble(` in lib/presentation/
 //        Settings-repository calls in lib/infrastructure/ are expected and excluded.
@@ -260,44 +258,21 @@ void main() {
   });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Gate 3 — ARB parity: menuFind + settingsLineNumbers in EN + IT (NFR-07)
+  // Gate 3 — ARB parity: menuFind in EN + IT (NFR-07)
   //
-  // Both ARB keys must be present in app_en.arb and app_it.arb with non-empty
-  // values.  This is a targeted sub-parity check; the full key-set parity is
-  // already covered by m6_gate_test.dart gate 2.
+  // The `menuFind` key must be present in app_en.arb and app_it.arb with
+  // non-empty values.  This is a targeted sub-parity check; the full key-set
+  // parity is already covered by m6_gate_test.dart gate 2.
   // ──────────────────────────────────────────────────────────────────────────
 
-  group('gate 3 — ARB parity: menuFind + settingsLineNumbers in EN and IT '
-      '(NFR-07, FR-17, FR-18)', () {
-    const spKeys = {'menuFind', 'settingsLineNumbers'};
-
-    // ── red fixture: ARB content missing settingsLineNumbers ──────────────
-    group('fixture — ARB JSON missing settingsLineNumbers key', () {
-      const brokenArbJson =
-          '{'
-          '"menuFind": "Find / Replace"'
-          '}'; // settingsLineNumbers intentionally absent
-
-      test('should_FAIL_arb_parity_when_settingsLineNumbers_missing', () {
-        final decoded = json.decode(brokenArbJson) as Map<String, dynamic>;
-        final keys = decoded.keys.where((k) => !k.startsWith('@')).toSet();
-        final missing = spKeys.difference(keys);
-        expect(
-          missing,
-          isNotEmpty,
-          reason:
-              'Broken fixture must show a missing SP key to prove the ARB '
-              'parity scan fires when settingsLineNumbers is absent.',
-        );
-      });
-    });
+  group('gate 3 — ARB parity: menuFind in EN and IT (NFR-07, FR-17)', () {
+    const spKeys = {'menuFind'};
 
     // ── red fixture: ARB content with empty menuFind value ────────────────
     group('fixture — ARB JSON with empty menuFind value', () {
       const brokenArbJson =
           '{'
-          '"menuFind": "",'
-          '"settingsLineNumbers": "Show line numbers"'
+          '"menuFind": ""'
           '}';
 
       test('should_FAIL_arb_parity_when_menuFind_value_is_empty', () {
@@ -361,56 +336,15 @@ void main() {
           reason: 'app_it.arb["menuFind"] must be non-empty (FR-17, NFR-07).',
         );
       });
-
-      test(
-        'should_have_settingsLineNumbers_key_in_app_en_arb_with_non_empty_value',
-        () {
-          expect(
-            enDecoded.containsKey('settingsLineNumbers'),
-            isTrue,
-            reason:
-                'app_en.arb must contain key "settingsLineNumbers" '
-                '(FR-18, NFR-07).',
-          );
-          expect(
-            (enDecoded['settingsLineNumbers'] as String).isNotEmpty,
-            isTrue,
-            reason:
-                'app_en.arb["settingsLineNumbers"] must be non-empty '
-                '(FR-18, NFR-07).',
-          );
-        },
-      );
-
-      test(
-        'should_have_settingsLineNumbers_key_in_app_it_arb_with_non_empty_value',
-        () {
-          expect(
-            itDecoded.containsKey('settingsLineNumbers'),
-            isTrue,
-            reason:
-                'app_it.arb must contain key "settingsLineNumbers" '
-                '(FR-18, NFR-07).',
-          );
-          expect(
-            (itDecoded['settingsLineNumbers'] as String).isNotEmpty,
-            isTrue,
-            reason:
-                'app_it.arb["settingsLineNumbers"] must be non-empty '
-                '(FR-18, NFR-07).',
-          );
-        },
-      );
     });
   });
 
   // ──────────────────────────────────────────────────────────────────────────
   // Gate 4 — Ephemerality scan (NFR-09)
   //
-  // The SP-20260615 changes (accent, margins, find affordance, line-number
-  // gutter) must add ZERO buffer-text persistence calls in lib/presentation/.
-  // Settings-level booleans (setShowLineNumbers) write to SharedPreferences
-  // via lib/infrastructure/settings/ — that is expected and excluded.
+  // The SP-20260615 changes (accent, margins, find affordance) must add ZERO
+  // buffer-text persistence calls in lib/presentation/.
+  // Settings writes go via lib/infrastructure/settings/ — expected, excluded.
   //
   // Scanned patterns in lib/presentation/ non-comment code lines:
   //   a) `writeAsString(` or `writeAsStringSync(` — file writes

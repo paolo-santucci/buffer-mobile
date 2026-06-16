@@ -18,7 +18,6 @@ final _privateConstructorUsedError = UnsupportedError(
 /// @nodoc
 mixin _$AppSettings {
   bool get useMonospaceFont => throw _privateConstructorUsedError;
-  bool get showLineNumbers => throw _privateConstructorUsedError;
   bool get spellingEnabled => throw _privateConstructorUsedError;
   bool get emergencyRecoveryEnabled => throw _privateConstructorUsedError;
   bool get lineLengthEnabled => throw _privateConstructorUsedError;
@@ -42,7 +41,6 @@ abstract class $AppSettingsCopyWith<$Res> {
   @useResult
   $Res call({
     bool useMonospaceFont,
-    bool showLineNumbers,
     bool spellingEnabled,
     bool emergencyRecoveryEnabled,
     bool lineLengthEnabled,
@@ -67,7 +65,6 @@ class _$AppSettingsCopyWithImpl<$Res, $Val extends AppSettings>
   @override
   $Res call({
     Object? useMonospaceFont = null,
-    Object? showLineNumbers = null,
     Object? spellingEnabled = null,
     Object? emergencyRecoveryEnabled = null,
     Object? lineLengthEnabled = null,
@@ -79,10 +76,6 @@ class _$AppSettingsCopyWithImpl<$Res, $Val extends AppSettings>
             useMonospaceFont: null == useMonospaceFont
                 ? _value.useMonospaceFont
                 : useMonospaceFont // ignore: cast_nullable_to_non_nullable
-                      as bool,
-            showLineNumbers: null == showLineNumbers
-                ? _value.showLineNumbers
-                : showLineNumbers // ignore: cast_nullable_to_non_nullable
                       as bool,
             spellingEnabled: null == spellingEnabled
                 ? _value.spellingEnabled
@@ -121,7 +114,6 @@ abstract class _$$AppSettingsImplCopyWith<$Res>
   @useResult
   $Res call({
     bool useMonospaceFont,
-    bool showLineNumbers,
     bool spellingEnabled,
     bool emergencyRecoveryEnabled,
     bool lineLengthEnabled,
@@ -145,7 +137,6 @@ class __$$AppSettingsImplCopyWithImpl<$Res>
   @override
   $Res call({
     Object? useMonospaceFont = null,
-    Object? showLineNumbers = null,
     Object? spellingEnabled = null,
     Object? emergencyRecoveryEnabled = null,
     Object? lineLengthEnabled = null,
@@ -157,10 +148,6 @@ class __$$AppSettingsImplCopyWithImpl<$Res>
         useMonospaceFont: null == useMonospaceFont
             ? _value.useMonospaceFont
             : useMonospaceFont // ignore: cast_nullable_to_non_nullable
-                  as bool,
-        showLineNumbers: null == showLineNumbers
-            ? _value.showLineNumbers
-            : showLineNumbers // ignore: cast_nullable_to_non_nullable
                   as bool,
         spellingEnabled: null == spellingEnabled
             ? _value.spellingEnabled
@@ -192,7 +179,6 @@ class __$$AppSettingsImplCopyWithImpl<$Res>
 class _$AppSettingsImpl extends _AppSettings {
   const _$AppSettingsImpl({
     this.useMonospaceFont = true,
-    this.showLineNumbers = false,
     this.spellingEnabled = true,
     this.emergencyRecoveryEnabled = true,
     this.lineLengthEnabled = true,
@@ -203,9 +189,6 @@ class _$AppSettingsImpl extends _AppSettings {
   @override
   @JsonKey()
   final bool useMonospaceFont;
-  @override
-  @JsonKey()
-  final bool showLineNumbers;
   @override
   @JsonKey()
   final bool spellingEnabled;
@@ -225,7 +208,7 @@ class _$AppSettingsImpl extends _AppSettings {
 
   @override
   String toString() {
-    return 'AppSettings(useMonospaceFont: $useMonospaceFont, showLineNumbers: $showLineNumbers, spellingEnabled: $spellingEnabled, emergencyRecoveryEnabled: $emergencyRecoveryEnabled, lineLengthEnabled: $lineLengthEnabled, colorScheme: $colorScheme, fontSizeIndex: $fontSizeIndex)';
+    return 'AppSettings(useMonospaceFont: $useMonospaceFont, spellingEnabled: $spellingEnabled, emergencyRecoveryEnabled: $emergencyRecoveryEnabled, lineLengthEnabled: $lineLengthEnabled, colorScheme: $colorScheme, fontSizeIndex: $fontSizeIndex)';
   }
 
   @override
@@ -235,8 +218,6 @@ class _$AppSettingsImpl extends _AppSettings {
             other is _$AppSettingsImpl &&
             (identical(other.useMonospaceFont, useMonospaceFont) ||
                 other.useMonospaceFont == useMonospaceFont) &&
-            (identical(other.showLineNumbers, showLineNumbers) ||
-                other.showLineNumbers == showLineNumbers) &&
             (identical(other.spellingEnabled, spellingEnabled) ||
                 other.spellingEnabled == spellingEnabled) &&
             (identical(
@@ -256,7 +237,6 @@ class _$AppSettingsImpl extends _AppSettings {
   int get hashCode => Object.hash(
     runtimeType,
     useMonospaceFont,
-    showLineNumbers,
     spellingEnabled,
     emergencyRecoveryEnabled,
     lineLengthEnabled,
@@ -276,7 +256,6 @@ class _$AppSettingsImpl extends _AppSettings {
 abstract class _AppSettings extends AppSettings {
   const factory _AppSettings({
     final bool useMonospaceFont,
-    final bool showLineNumbers,
     final bool spellingEnabled,
     final bool emergencyRecoveryEnabled,
     final bool lineLengthEnabled,
@@ -287,8 +266,6 @@ abstract class _AppSettings extends AppSettings {
 
   @override
   bool get useMonospaceFont;
-  @override
-  bool get showLineNumbers;
   @override
   bool get spellingEnabled;
   @override
