@@ -83,20 +83,6 @@ class AppSettings with _$AppSettings {
   // values, breaking `identical(this)` no-op assertions.
   // ---------------------------------------------------------------------------
 
-  /// Increments [fontSizeIndex] by 1, clamped to [0, slotList.length-1].
-  /// Returns `this` when already at the maximum (no-op).
-  AppSettings incrementFontSize() {
-    if (fontSizeIndex >= slotList.length - 1) return this;
-    return copyWith(fontSizeIndex: fontSizeIndex + 1);
-  }
-
-  /// Decrements [fontSizeIndex] by 1, clamped to [0, slotList.length-1].
-  /// Returns `this` when already at the minimum (no-op).
-  AppSettings decrementFontSize() {
-    if (fontSizeIndex <= 0) return this;
-    return copyWith(fontSizeIndex: fontSizeIndex - 1);
-  }
-
   /// Sets [fontSizeIndex] to [index], clamped to [0, slotList.length-1].
   /// Returns `this` when the clamped value equals the current index (no-op).
   AppSettings setFontSizeIndex(int index) {

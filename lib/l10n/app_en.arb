@@ -138,6 +138,10 @@
   "@menuTooltip": {
     "description": "Tooltip and accessibility label for the chrome menu affordance button that opens the main menu sheet."
   },
+  "shareTooltip": "Share",
+  "@shareTooltip": {
+    "description": "Tooltip/Semantics label for the outgoing-share button in the editor chrome."
+  },
   "menuPreferences": "Preferences",
   "@menuPreferences": {
     "description": "Label for the Preferences entry in the main menu sheet, navigating to the Settings screen."

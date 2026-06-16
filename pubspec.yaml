@@ -42,6 +42,11 @@ dependencies:
   # Share intake (M2 — isolated behind ShareIntentService; see D-001-oq14-share-intent.md)
   receive_sharing_intent: ^1.8.0
 
+  # Outgoing share (SP-20260616) — CLAUDE.md §6: receive_sharing_intent is intake-only;
+  # url_launcher cannot populate a share sheet; no SDK channel for ACTION_SEND /
+  # UIActivityViewController; share_plus is the flutter.dev first-party plugin.
+  share_plus: ^12.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

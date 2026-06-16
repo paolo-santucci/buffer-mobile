@@ -290,6 +290,12 @@ abstract class AppLocalizations {
   /// **'Open menu'**
   String get menuTooltip;
 
+  /// Tooltip/Semantics label for the outgoing-share button in the editor chrome.
+  ///
+  /// In en, this message translates to:
+  /// **'Share'**
+  String get shareTooltip;
+
   /// Label for the Preferences entry in the main menu sheet, navigating to the Settings screen.
   ///
   /// In en, this message translates to:

@@ -98,11 +98,12 @@ void main() {
           launcherSeam: _FakeLauncherSeam(enabled: true),
         );
 
-        // App name "Buffer" from ARB aboutTitle (or as literal name row).
-        expect(find.text('Buffer'), findsAtLeastNWidgets(1));
+        // App name "Buffer Mobile" from ARB appTitle (commit 7ce7a8c renamed the
+        // app; about_screen.dart:161 renders l10n.appTitle == "Buffer Mobile").
+        expect(find.text('Buffer Mobile'), findsAtLeastNWidgets(1));
 
-        // Developer name — aboutDeveloper ARB key resolves to 'Chris Heywood'.
-        expect(find.text('Chris Heywood'), findsOneWidget);
+        // Developer name — aboutDeveloper ARB key resolves to 'Paolo Santucci'.
+        expect(find.text('Paolo Santucci'), findsOneWidget);
 
         // Version: '1.2.3' appears somewhere on screen.
         expect(find.textContaining('1.2.3'), findsOneWidget);
@@ -132,8 +133,8 @@ void main() {
         );
 
         // No exception — if we reach here, EC-10 is satisfied.
-        expect(find.text('Buffer'), findsAtLeastNWidgets(1));
-        expect(find.text('Chris Heywood'), findsOneWidget);
+        expect(find.text('Buffer Mobile'), findsAtLeastNWidgets(1));
+        expect(find.text('Paolo Santucci'), findsOneWidget);
         expect(find.text('GPL-3.0'), findsOneWidget);
       },
     );
@@ -184,7 +185,7 @@ void main() {
         expect(launcher.launched, isEmpty);
 
         // Other fields still rendered (screen as a whole is not broken).
-        expect(find.text('Buffer'), findsAtLeastNWidgets(1));
+        expect(find.text('Buffer Mobile'), findsAtLeastNWidgets(1));
         expect(find.text('GPL-3.0'), findsOneWidget);
       },
     );

@@ -111,6 +111,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get menuTooltip => 'Apri menu';
 
   @override
+  String get shareTooltip => 'Condividi';
+
+  @override
   String get menuPreferences => 'Preferenze';
 
   @override

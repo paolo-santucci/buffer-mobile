@@ -138,6 +138,10 @@
   "@menuTooltip": {
     "description": "Tooltip ed etichetta di accessibilità per il pulsante del menu principale che apre il foglio del menu."
   },
+  "shareTooltip": "Condividi",
+  "@shareTooltip": {
+    "description": "Tooltip/Etichetta semantica per il pulsante di condivisione in uscita nel chrome dell'editor."
+  },
   "menuPreferences": "Preferenze",
   "@menuPreferences": {
     "description": "Etichetta per la voce Preferenze nel foglio del menu principale, che naviga alla schermata delle impostazioni."

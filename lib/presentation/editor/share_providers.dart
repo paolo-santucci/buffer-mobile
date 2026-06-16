@@ -15,6 +15,8 @@ import 'package:buffer/infrastructure/paths/sandbox_path_provider.dart';
 import 'package:buffer/infrastructure/recovery/file_recovery_repository.dart';
 import 'package:buffer/infrastructure/share/receive_sharing_intent_service.dart';
 import 'package:buffer/infrastructure/share/share_intent_service.dart';
+import 'package:buffer/infrastructure/share/share_plus_service.dart';
+import 'package:buffer/infrastructure/share/share_target_service.dart';
 
 // ---------------------------------------------------------------------------
 // 1. initialSharedTextProvider — throws until overridden at the ProviderScope
@@ -33,9 +35,11 @@ final initialSharedTextProvider = Provider<String?>(
 // 2. shareIntentServiceProvider — concrete adapter for the platform share
 //    channel. Overridable in tests with a fake [ShareIntentService].
 // ---------------------------------------------------------------------------
-final shareIntentServiceProvider = Provider<ShareIntentService>(
-  (ref) => ReceiveSharingIntentService(),
-);
+final shareIntentServiceProvider = Provider<ShareIntentService>((ref) {
+  final service = ReceiveSharingIntentService();
+  ref.onDispose(service.dispose);
+  return service;
+});
 
 // ---------------------------------------------------------------------------
 // 3. recoveryRepositoryProvider — concrete filesystem-backed repository.
@@ -51,4 +55,14 @@ final recoveryRepositoryProvider = Provider<RecoveryRepository>(
 // ---------------------------------------------------------------------------
 final saveBufferToRecoveryProvider = Provider<SaveBufferToRecovery>(
   (ref) => SaveBufferToRecovery(ref.watch(recoveryRepositoryProvider)),
+);
+
+// ---------------------------------------------------------------------------
+// 5. shareTargetServiceProvider — composition-root seam for the OS share
+//    dispatch adapter. Resolves to [SharePlusService] by default (the only
+//    lib/ file that imports share_plus). Overridable in tests with a fake
+//    [ShareTargetService] (FR-08, §5.1.3, §5.3).
+// ---------------------------------------------------------------------------
+final shareTargetServiceProvider = Provider<ShareTargetService>(
+  (ref) => SharePlusService(),
 );

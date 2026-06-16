@@ -113,6 +113,7 @@ import 'package:buffer/presentation/settings/settings_provider.dart';
 import 'package:buffer/presentation/shell/chrome_overlay.dart';
 import 'package:buffer/presentation/shell/chrome_reveal_controller.dart';
 import 'package:buffer/presentation/shell/menu_sheet.dart';
+import 'package:buffer/presentation/shell/share_overlay.dart';
 import 'package:buffer/presentation/shell/toast_controller.dart';
 import 'package:buffer/presentation/shell/toast_overlay.dart';
 
@@ -255,6 +256,23 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
   final ValueNotifier<bool> _replaceRowNotifier = ValueNotifier<bool>(false);
 
   // -------------------------------------------------------------------------
+  // SP-20260616 TASK-09: Host-owned idle-reveal Timer (FR-09, FR-11, EC-08)
+  //
+  // Debounces typing: 1300 ms after the last real user keystroke, chrome
+  // is revealed via ChromeRevealController.reveal(). The timer lives entirely
+  // here — ChromeRevealController stays a pure timer-free Notifier<bool>
+  // (FR-11 host-owns-timers contract).
+  // -------------------------------------------------------------------------
+
+  /// Idle-reveal debounce duration (FR-09, NFR-04).
+  static const Duration kIdleRevealDuration = Duration(milliseconds: 1300);
+
+  /// Pending idle-reveal [Timer]. Cancelled and restarted on every real
+  /// keystroke (EC-06). Cancelled in [dispose] to prevent post-unmount calls
+  /// (EC-08). `null` when no timer is pending.
+  Timer? _idleRevealTimer;
+
+  // -------------------------------------------------------------------------
   // M7 (TASK-12): Pinch-to-zoom state
   //
   // Orthogonal to _applyingState/_continuing (those guard text rewrites).
@@ -367,6 +385,10 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     _controller.dispose();
     _scrollController.dispose();
     _shareSubscription?.cancel();
+    // SP-20260616 TASK-09 (EC-08): Cancel idle-reveal timer before super.dispose()
+    // so a pending reveal() call cannot fire after the widget is unmounted.
+    // Mirrors the _shareSubscription?.cancel() discipline above.
+    _idleRevealTimer?.cancel();
     super.dispose();
   }
 
@@ -505,6 +527,16 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
         mounted &&
         newValue.text != _priorValue.text) {
       ref.read(chromeVisibilityProvider.notifier).onTextChanged();
+      // SP-20260616 TASK-09 (FR-09, FR-10, FR-11, NFR-04, EC-06, EC-08):
+      // Cancel-then-restart the host-owned idle-reveal debounce timer.
+      // After kIdleRevealDuration ms of no further real keystrokes, reveal
+      // the chrome. ChromeRevealController is NOT modified (host-owns-timers,
+      // FR-11). The `mounted` re-check inside the callback prevents a
+      // post-unmount reveal() if the widget is disposed while the timer runs.
+      _idleRevealTimer?.cancel();
+      _idleRevealTimer = Timer(kIdleRevealDuration, () {
+        if (mounted) ref.read(chromeVisibilityProvider.notifier).reveal();
+      });
     }
 
     // --- Detection predicate (§5.4a, OQ-04) ---
@@ -974,6 +1006,11 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     // Watch find state for conditional FindSearchBar mount (i).
     final findState = ref.watch(findProvider);
 
+    // SP-20260616 TASK-09 (FR-05, EC-02, OQ-03): Derive share-enabled flag.
+    // Whitespace-only text is treated as empty — share_plus throws ArgumentError
+    // on empty strings; the disabled guard prevents the call reaching the adapter.
+    final shareEnabled = ref.watch(bufferProvider).text.trim().isNotEmpty;
+
     // (g) Spell-check wiring (FR-20, FR-21): watch settingsProvider reactively.
     // settingsProvider is an AsyncNotifierProvider<SettingsNotifier, AppSettings>.
     // When loading or erroring, fall back to defaults (spellingEnabled = true).
@@ -1240,11 +1277,30 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
               // the hamburger (the search bar already owns the top; Esc / the
               // bar's own back button close find). Mounting the chrome only when
               // find is inactive removes the collision entirely.
-              if (!findState.active)
+              // SP-20260616 TASK-09 (FR-01, EC-05, §5.1.6):
+              // ShareOverlay and ChromeOverlay share the same guard so they
+              // enter/exit the tree in lockstep (FR-02). Both hidden while
+              // find is active — the FindSearchBar owns the top of the screen
+              // and its rightmost controls would be obscured by the overlays.
+              if (!findState.active) ...[
                 ChromeOverlay(
                   onMenuTap: () =>
                       openMenuSheet(context, onFind: _openFindFromMenu),
                 ),
+                // SP-20260616 TASK-09 (FR-01, FR-04, FR-05, EC-02, EC-05):
+                // Top-LEFT mirror of ChromeOverlay. enabled flag is whitespace-
+                // aware (OQ-03). onShareTap reads from bufferProvider.text (NOT
+                // _controller.text — anti-pattern) so the value is the
+                // canonical Riverpod state, not a potentially-lagging controller.
+                // The uniform kChromeMenuZoneHeight top inset already clears the
+                // top-left button — no editorHorizontalMargin change needed.
+                ShareOverlay(
+                  enabled: shareEnabled,
+                  onShareTap: () => ref
+                      .read(shareTargetServiceProvider)
+                      .shareText(ref.read(bufferProvider).text),
+                ),
+              ],
 
               // ---------------------------------------------------------------
               // ToastOverlay: Positioned top-centre (canon §Components §8).

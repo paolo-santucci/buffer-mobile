@@ -19,6 +19,8 @@ import 'package:buffer/domain/recovery/recovery_note.dart';
 import 'package:buffer/domain/recovery/recovery_repository.dart';
 import 'package:buffer/domain/recovery/save_buffer_to_recovery.dart';
 import 'package:buffer/infrastructure/share/share_intent_service.dart';
+import 'package:buffer/infrastructure/share/share_plus_service.dart';
+import 'package:buffer/infrastructure/share/share_target_service.dart';
 import 'package:buffer/presentation/editor/share_providers.dart';
 
 // ---------------------------------------------------------------------------
@@ -26,7 +28,12 @@ import 'package:buffer/presentation/editor/share_providers.dart';
 // ---------------------------------------------------------------------------
 
 /// Minimal [ShareIntentService] fake for override-friendliness test.
+///
+/// [disposed] is set to `true` when [dispose] is called, letting tests assert
+/// that the provider lifecycle correctly invokes dispose exactly once.
 class _FakeShareIntentService implements ShareIntentService {
+  bool disposed = false;
+
   @override
   Future<String?> initialSharedText() async => null;
 
@@ -34,7 +41,15 @@ class _FakeShareIntentService implements ShareIntentService {
   Stream<String> sharedTextStream() => const Stream.empty();
 
   @override
-  void dispose() {}
+  void dispose() {
+    disposed = true;
+  }
+}
+
+/// Minimal [ShareTargetService] fake for override test.
+class _FakeShareTargetService implements ShareTargetService {
+  @override
+  Future<void> shareText(String text) async {}
 }
 
 /// Minimal [RecoveryRepository] fake for graph-wiring assertion.
@@ -120,6 +135,61 @@ void main() {
 
       expect(container.read(shareIntentServiceProvider), same(fake));
     });
+
+    test(
+      'dispose-once: dispose() called exactly once on container disposal',
+      () {
+        final fake = _FakeShareIntentService();
+        final container = ProviderContainer(
+          overrides: [
+            shareIntentServiceProvider.overrideWith((ref) {
+              ref.onDispose(fake.dispose);
+              return fake;
+            }),
+          ],
+        );
+
+        // Read to instantiate the provider (lazy providers run on first read).
+        container.read(shareIntentServiceProvider);
+
+        expect(
+          fake.disposed,
+          isFalse,
+          reason: 'dispose must not be called while provider is alive',
+        );
+        container.dispose();
+        expect(
+          fake.disposed,
+          isTrue,
+          reason:
+              'dispose must be called exactly once after container disposal',
+        );
+      },
+    );
+
+    test(
+      'no-premature-teardown: disposed remains false while provider is alive',
+      () {
+        final fake = _FakeShareIntentService();
+        final container = ProviderContainer(
+          overrides: [
+            shareIntentServiceProvider.overrideWith((ref) {
+              ref.onDispose(fake.dispose);
+              return fake;
+            }),
+          ],
+        );
+        addTearDown(container.dispose);
+
+        container.read(shareIntentServiceProvider);
+
+        expect(
+          fake.disposed,
+          isFalse,
+          reason: 'dispose must not fire before the container is disposed',
+        );
+      },
+    );
   });
 
   group('recoveryRepositoryProvider', () {
@@ -180,5 +250,32 @@ void main() {
         expect(fakeRepo.saveCalled, isFalse);
       },
     );
+  });
+
+  // TASK-08: shareTargetServiceProvider — composition-root seam tests.
+  // Spec refs: FR-08, §5.1.3, §5.3.
+  group('shareTargetServiceProvider', () {
+    test(
+      'default resolution: resolves to SharePlusService (a ShareTargetService)',
+      () {
+        final container = ProviderContainer();
+        addTearDown(container.dispose);
+
+        final service = container.read(shareTargetServiceProvider);
+
+        expect(service, isA<SharePlusService>());
+        expect(service, isA<ShareTargetService>());
+      },
+    );
+
+    test('override: returns the fake instance when overridden', () {
+      final fake = _FakeShareTargetService();
+      final container = ProviderContainer(
+        overrides: [shareTargetServiceProvider.overrideWithValue(fake)],
+      );
+      addTearDown(container.dispose);
+
+      expect(container.read(shareTargetServiceProvider), same(fake));
+    });
   });
 }

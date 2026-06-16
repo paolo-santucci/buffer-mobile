@@ -323,64 +323,6 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  // incrementFontSize — FR-M7-03
-  // ---------------------------------------------------------------------------
-  group('AppSettings.incrementFontSize (FR-M7-03)', () {
-    test(
-      'given_fontSizeIndex_0_when_incrementFontSize_then_index_becomes_1',
-      () {
-        final settings = AppSettings(fontSizeIndex: 0);
-        expect(settings.incrementFontSize().fontSizeIndex, equals(1));
-      },
-    );
-
-    test(
-      'given_fontSizeIndex_19_when_incrementFontSize_then_index_becomes_20',
-      () {
-        final settings = AppSettings(fontSizeIndex: 19);
-        expect(settings.incrementFontSize().fontSizeIndex, equals(20));
-      },
-    );
-
-    test(
-      'given_fontSizeIndex_20_when_incrementFontSize_then_returns_identical_this',
-      () {
-        final settings = AppSettings(fontSizeIndex: 20);
-        expect(identical(settings.incrementFontSize(), settings), isTrue);
-      },
-    );
-  });
-
-  // ---------------------------------------------------------------------------
-  // decrementFontSize — FR-M7-03
-  // ---------------------------------------------------------------------------
-  group('AppSettings.decrementFontSize (FR-M7-03)', () {
-    test(
-      'given_fontSizeIndex_20_when_decrementFontSize_then_index_becomes_19',
-      () {
-        final settings = AppSettings(fontSizeIndex: 20);
-        expect(settings.decrementFontSize().fontSizeIndex, equals(19));
-      },
-    );
-
-    test(
-      'given_fontSizeIndex_1_when_decrementFontSize_then_index_becomes_0',
-      () {
-        final settings = AppSettings(fontSizeIndex: 1);
-        expect(settings.decrementFontSize().fontSizeIndex, equals(0));
-      },
-    );
-
-    test(
-      'given_fontSizeIndex_0_when_decrementFontSize_then_returns_identical_this',
-      () {
-        final settings = AppSettings(fontSizeIndex: 0);
-        expect(identical(settings.decrementFontSize(), settings), isTrue);
-      },
-    );
-  });
-
-  // ---------------------------------------------------------------------------
   // setFontSizeIndex — FR-M7-04
   // ---------------------------------------------------------------------------
   group('AppSettings.setFontSizeIndex (FR-M7-04)', () {
