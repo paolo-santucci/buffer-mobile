@@ -31,10 +31,9 @@
 // Resolved OQ-B1 persistence contract (authoritative)
 // ---------------------------------------------------------------------------
 //
-// save() writes EXACTLY eight upstream gschema keys:
+// save() writes EXACTLY seven upstream gschema keys:
 //
 //   setBool("use-monospace-font",   s.useMonospaceFont)          // bool
-//   setBool("show-line-numbers",    s.showLineNumbers)            // bool
 //   setBool("check-spelling",       s.spellingEnabled)            // bool
 //   setBool("save-emergency-files", s.emergencyRecoveryEnabled)   // bool
 //   setInt("emergency-recovery-files", s.emergencyRecoveryFiles)  // 0 or 10
@@ -84,7 +83,6 @@ void main() {
         expect(settings.emergencyRecoveryEnabled, isTrue);
         expect(settings.spellingEnabled, isTrue);
         expect(settings.useMonospaceFont, isTrue);
-        expect(settings.showLineNumbers, isFalse);
         expect(settings.lineLengthEnabled, isTrue);
 
         // Derived integer getters must reflect defaults.
@@ -216,7 +214,6 @@ void main() {
         // Flip every field away from its default.
         const saved = AppSettings(
           useMonospaceFont: false,
-          showLineNumbers: true,
           spellingEnabled: false,
           emergencyRecoveryEnabled: false,
           lineLengthEnabled: false,
@@ -226,7 +223,6 @@ void main() {
         final loaded = await repo.load();
 
         expect(loaded.useMonospaceFont, isFalse);
-        expect(loaded.showLineNumbers, isTrue);
         expect(loaded.spellingEnabled, isFalse);
         expect(loaded.emergencyRecoveryEnabled, isFalse);
         expect(loaded.lineLengthEnabled, isFalse);
@@ -260,7 +256,7 @@ void main() {
 
   group('SharedPreferencesSettingsRepository.save — key-string fidelity (OQ-B1)', () {
     test(
-      'given_default_settings_when_save_called_then_prefs_contains_exactly_eight_verbatim_upstream_keys',
+      'given_default_settings_when_save_called_then_prefs_contains_exactly_seven_verbatim_upstream_keys',
       () async {
         SharedPreferences.setMockInitialValues({});
         final prefs = await SharedPreferences.getInstance();
@@ -270,12 +266,11 @@ void main() {
 
         final keys = prefs.getKeys();
 
-        // The eight required upstream gschema keys must be present.
+        // The seven required upstream gschema keys must be present.
         expect(
           keys,
           containsAll(<String>{
             AppSettings.kUseMonospaceFont,
-            AppSettings.kShowLineNumbers,
             AppSettings.kSpellingEnabled,
             AppSettings.kEmergencyRecoveryEnabled,
             AppSettings.kEmergencyRecoveryFiles,
@@ -284,15 +279,15 @@ void main() {
             AppSettings.kFontSize,
           }),
           reason:
-              'OQ-B1: all eight upstream gschema keys must be written (7 M6 keys + font-size)',
+              'OQ-B1: all seven upstream gschema keys must be written (6 M6 keys + font-size)',
         );
 
-        // Exactly eight keys — no extras.
+        // Exactly seven keys — no extras.
         expect(
           keys,
-          hasLength(8),
+          hasLength(7),
           reason:
-              'OQ-B1: save() must write exactly eight keys after M7 font-size addition',
+              'OQ-B1: save() must write exactly seven keys after line-number removal',
         );
 
         // Forbidden keys — must not appear.
@@ -533,7 +528,7 @@ void main() {
     );
 
     test(
-      'given_settings_with_colorScheme_dark_when_save_called_then_all_eight_keys_are_written_atomically',
+      'given_settings_with_colorScheme_dark_when_save_called_then_all_seven_keys_are_written_atomically',
       () async {
         SharedPreferences.setMockInitialValues({});
         final prefs = await SharedPreferences.getInstance();
@@ -543,12 +538,11 @@ void main() {
 
         final keys = prefs.getKeys();
 
-        // All seven pre-existing keys plus the new font-size key.
+        // All seven keys written in the same save() call.
         expect(
           keys,
           containsAll(<String>{
             AppSettings.kUseMonospaceFont,
-            AppSettings.kShowLineNumbers,
             AppSettings.kSpellingEnabled,
             AppSettings.kEmergencyRecoveryEnabled,
             AppSettings.kEmergencyRecoveryFiles,
@@ -557,15 +551,15 @@ void main() {
             AppSettings.kFontSize,
           }),
           reason:
-              'FR-M6-12/§5.2/FR-M7-03: all eight keys must be written in the same save() call',
+              'FR-M6-12/§5.2/FR-M7-03: all seven keys must be written in the same save() call',
         );
 
-        // Exactly eight keys — no extras.
+        // Exactly seven keys — no extras.
         expect(
           keys,
-          hasLength(8),
+          hasLength(7),
           reason:
-              'save() must write exactly eight keys after adding font-size (M7)',
+              'save() must write exactly seven keys after line-number removal',
         );
       },
     );
@@ -713,7 +707,7 @@ void main() {
 
   group('SharedPreferencesSettingsRepository — font-size round-trip (FR-M7-03)', () {
     test(
-      'given_fontSizeIndex_5_when_save_then_load_then_fontSizeIndex_is_5_and_key_count_is_8',
+      'given_fontSizeIndex_5_when_save_then_load_then_fontSizeIndex_is_5_and_key_count_is_7',
       () async {
         SharedPreferences.setMockInitialValues({});
         final prefs = await SharedPreferences.getInstance();
@@ -732,9 +726,9 @@ void main() {
         final keys = prefs.getKeys();
         expect(
           keys,
-          hasLength(8),
+          hasLength(7),
           reason:
-              'FR-M7-03: save() must write exactly 8 keys (7 prior + font-size)',
+              'FR-M7-03: save() must write exactly 7 keys (6 prior + font-size)',
         );
         expect(
           keys,

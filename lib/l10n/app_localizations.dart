@@ -416,12 +416,6 @@ abstract class AppLocalizations {
   /// **'Monospace font'**
   String get settingsMonospaceFont;
 
-  /// Label for the show-line-numbers toggle in the Settings screen Appearance section. SP-20260615 FR-18.
-  ///
-  /// In en, this message translates to:
-  /// **'Show line numbers'**
-  String get settingsLineNumbers;
-
   /// Accessibility label for the increase font size (zoom in) button in the FontSizeStepper.
   ///
   /// In en, this message translates to:

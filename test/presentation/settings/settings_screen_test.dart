@@ -154,13 +154,9 @@ void main() {
 
     // -----------------------------------------------------------------------
     // TC-6 : No line-LENGTH row (FR-M6-13 / D8).
-    //        NARROWED (SP-20260615 TASK-06): the old gate forbade any switch
-    //        whose title contained "line" — that was a proxy to catch the
-    //        dropped line-length control. Adding "Show line numbers"
-    //        (settingsLineNumbers) would have tripped the wide gate.
-    //        The gate now forbids ONLY "line length" (case-insensitive),
-    //        which is the vestigial proxy that must not reappear (D8).
-    //        The "Show line numbers" row IS allowed.
+    //        Gate forbids any SwitchListTile title containing "line length"
+    //        (case-insensitive), which is the vestigial proxy control that
+    //        must not reappear (D8).
     // -----------------------------------------------------------------------
     testWidgets('TC-6: no line-length row present (narrowed gate)', (
       tester,
@@ -471,142 +467,6 @@ void main() {
 
         expect(repo.savedArgs, isNotEmpty);
         expect(repo.savedArgs.last.useMonospaceFont, isFalse);
-      },
-    );
-  });
-
-  // -------------------------------------------------------------------------
-  // SP-20260615 TASK-06 tests — "Show line numbers" toggle in Appearance group
-  // Spec refs: FR-12, FR-13, FR-18, NFR-02, NFR-05
-  // -------------------------------------------------------------------------
-
-  group('SettingsScreen — show-line-numbers toggle (TASK-06)', () {
-    late _FakeSettingsRepository repo;
-
-    setUp(() {
-      repo = _FakeSettingsRepository();
-      SharedPreferences.setMockInitialValues({});
-    });
-
-    // -----------------------------------------------------------------------
-    // TC-18: "Show line numbers" SwitchListTile is present after monospace row.
-    //        Default showLineNumbers == false → switch value is false (FR-12).
-    // -----------------------------------------------------------------------
-    testWidgets(
-      'TC-18: show-line-numbers SwitchListTile present, default value false',
-      (tester) async {
-        // Default AppSettings: showLineNumbers == false.
-        await _pumpSettingsScreen(tester, repo);
-
-        // settingsLineNumbers EN: "Show line numbers"
-        final sw = tester.widget<SwitchListTile>(
-          find.ancestor(
-            of: find.text('Show line numbers'),
-            matching: find.byType(SwitchListTile),
-          ),
-        );
-        expect(sw.value, isFalse);
-      },
-    );
-
-    // -----------------------------------------------------------------------
-    // TC-19: toggle ON → setShowLineNumbers(true) called →
-    //        repo.savedArgs.last.showLineNumbers == true (FR-13).
-    // -----------------------------------------------------------------------
-    testWidgets(
-      'TC-19: toggle ON writes showLineNumbers true through notifier',
-      (tester) async {
-        repo = _FakeSettingsRepository(
-          initial: const AppSettings(showLineNumbers: false),
-        );
-        await _pumpSettingsScreen(tester, repo);
-
-        await tester.tap(
-          find.ancestor(
-            of: find.text('Show line numbers'),
-            matching: find.byType(SwitchListTile),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        expect(repo.savedArgs, isNotEmpty);
-        expect(repo.savedArgs.last.showLineNumbers, isTrue);
-      },
-    );
-
-    // -----------------------------------------------------------------------
-    // TC-20: toggle back OFF → repo.savedArgs.last.showLineNumbers == false.
-    //        FR-13
-    // -----------------------------------------------------------------------
-    testWidgets(
-      'TC-20: toggle OFF writes showLineNumbers false through notifier',
-      (tester) async {
-        repo = _FakeSettingsRepository(
-          initial: const AppSettings(showLineNumbers: true),
-        );
-        await _pumpSettingsScreen(tester, repo);
-
-        await tester.tap(
-          find.ancestor(
-            of: find.text('Show line numbers'),
-            matching: find.byType(SwitchListTile),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        expect(repo.savedArgs, isNotEmpty);
-        expect(repo.savedArgs.last.showLineNumbers, isFalse);
-      },
-    );
-
-    // -----------------------------------------------------------------------
-    // TC-21: ≥ 48dp touch target (NFR-02).
-    //        The SwitchListTile minimum height is 56dp by Material 3 spec,
-    //        which exceeds the 48dp floor.  We assert the rendered height.
-    // -----------------------------------------------------------------------
-    testWidgets('TC-21: show-line-numbers row height >= 48dp', (tester) async {
-      await _pumpSettingsScreen(tester, repo);
-
-      final tile = tester.getRect(
-        find.ancestor(
-          of: find.text('Show line numbers'),
-          matching: find.byType(SwitchListTile),
-        ),
-      );
-      expect(tile.height, greaterThanOrEqualTo(48.0));
-    });
-
-    // -----------------------------------------------------------------------
-    // TC-22: key-count unchanged — still 8 SwitchListTiles total (NFR-05).
-    //        Appearance: monospace + show-line-numbers (2).
-    //        Behavior: recovery + spell-check (2).
-    //        Total: 4 (same overall switch count after adding the new row).
-    //
-    //        NOTE: NFR-05 refers to persistence-key count (8), not widget count.
-    //        This test guards widget-count stability so new rows are intentional.
-    // -----------------------------------------------------------------------
-    testWidgets(
-      'TC-22: exactly 4 SwitchListTiles in the screen (no unintended additions)',
-      (tester) async {
-        await _pumpSettingsScreen(tester, repo);
-
-        expect(find.byType(SwitchListTile), findsNWidgets(4));
-      },
-    );
-
-    // -----------------------------------------------------------------------
-    // TC-23: Italian locale — row title matches app_it.arb settingsLineNumbers.
-    //        FR-18
-    // -----------------------------------------------------------------------
-    testWidgets(
-      'TC-23: under it locale show-line-numbers row title is Italian',
-      (tester) async {
-        await _pumpSettingsScreen(tester, repo, locale: const Locale('it'));
-
-        // settingsLineNumbers IT: "Mostra i numeri di riga"
-        expect(find.text('Mostra i numeri di riga'), findsOneWidget);
-        // English must NOT appear.
-        expect(find.text('Show line numbers'), findsNothing);
       },
     );
   });

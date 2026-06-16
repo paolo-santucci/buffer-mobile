@@ -6,7 +6,6 @@
 //   AppSettings exposes static const String fields using the `k` prefix +
 //   camelCase field name:
 //     AppSettings.kUseMonospaceFont         == "use-monospace-font"
-//     AppSettings.kShowLineNumbers          == "show-line-numbers"
 //     AppSettings.kSpellingEnabled          == "check-spelling"
 //     AppSettings.kEmergencyRecoveryEnabled == "save-emergency-files"
 //     AppSettings.kEmergencyRecoveryFiles   == "emergency-recovery-files"
@@ -208,13 +207,6 @@ void main() {
       'given_key_constant_kUseMonospaceFont_when_read_then_equals_upstream_gschema_key',
       () {
         expect(AppSettings.kUseMonospaceFont, equals('use-monospace-font'));
-      },
-    );
-
-    test(
-      'given_key_constant_kShowLineNumbers_when_read_then_equals_upstream_gschema_key',
-      () {
-        expect(AppSettings.kShowLineNumbers, equals('show-line-numbers'));
       },
     );
 

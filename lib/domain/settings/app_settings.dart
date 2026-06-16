@@ -19,7 +19,6 @@ class AppSettings with _$AppSettings {
 
   const factory AppSettings({
     @Default(true) bool useMonospaceFont,
-    @Default(false) bool showLineNumbers,
     @Default(true) bool spellingEnabled,
     @Default(true) bool emergencyRecoveryEnabled,
     @Default(true) bool lineLengthEnabled,
@@ -119,7 +118,6 @@ class AppSettings with _$AppSettings {
   // ---------------------------------------------------------------------------
 
   static const String kUseMonospaceFont = 'use-monospace-font';
-  static const String kShowLineNumbers = 'show-line-numbers';
   static const String kSpellingEnabled = 'check-spelling';
   static const String kEmergencyRecoveryEnabled = 'save-emergency-files';
   static const String kEmergencyRecoveryFiles = 'emergency-recovery-files';

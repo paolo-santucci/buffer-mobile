@@ -105,7 +105,6 @@ import 'package:buffer/domain/settings/app_settings.dart';
 import 'package:buffer/presentation/editor/editor_actions.dart';
 import 'package:buffer/presentation/editor/editor_controller.dart';
 import 'package:buffer/presentation/editor/editor_layout.dart';
-import 'package:buffer/presentation/editor/line_number_gutter.dart';
 import 'package:buffer/presentation/editor/share_providers.dart';
 import 'package:buffer/presentation/find/find_provider.dart';
 import 'package:buffer/presentation/find/find_search_bar.dart';
@@ -1202,59 +1201,14 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
                           final topInset = findState.active
                               ? vMargin
                               : editorTopInset(maxWidth, safeAreaTop);
-                          // SP-20260615 TASK-08 (FR-14, FR-15, FR-16, NFR-06,
-                          // NFR-09, C7): Conditional LineNumberGutter mount.
-                          //
-                          // The gutter is a Row-sibling on the LEADING edge of the
-                          // text column, INSIDE the outer Padding so its top origin
-                          // equals editorTopInset (FR-06a coupling, spec §5.2 step 5).
-                          // Net layout: [hMargin][gutter][text column][hMargin].
-                          //
-                          // Mounted only when showLineNumbers == true (FR-14).
-                          // Holds NO text, NO persistence (NFR-09 ephemerality).
-                          // textStyle + strutStyle are passed so font/strut changes
-                          // (M7 pinch) rebuild the gutter and re-query RenderEditable
-                          // boxes (FR-16 M7 sync, EC-M7-11 paired invariant).
-                          //
-                          // The gutter is OUTSIDE RenderEditable so _scrollToMatch
-                          // / after-Enter geometry remain valid (NFR-08).
-                          final strutStyle = StrutStyle(
-                            fontSize: fontSizePt,
-                            height: 1.4,
-                            forceStrutHeight: true,
+                          final editorColumn = Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(
+                                maxWidth: 720.0,
+                              ),
+                              child: editorField,
+                            ),
                           );
-                          final editorColumn = settings.showLineNumbers
-                              ? Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    LineNumberGutter(
-                                      scrollController: _scrollController,
-                                      editorContext: context,
-                                      textStyle: editorStyle,
-                                      strutStyle: strutStyle,
-                                      // Read-only text source so the gutter recomputes
-                                      // on every keystroke, not just on scroll (FR-16).
-                                      // Typed Listenable → cannot mutate (NFR-09).
-                                      textListenable: _controller,
-                                    ),
-                                    Expanded(
-                                      child: ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          maxWidth: 720.0,
-                                        ),
-                                        child: editorField,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Center(
-                                  child: ConstrainedBox(
-                                    constraints: const BoxConstraints(
-                                      maxWidth: 720.0,
-                                    ),
-                                    child: editorField,
-                                  ),
-                                );
                           return Padding(
                             padding: EdgeInsets.fromLTRB(
                               hMargin,

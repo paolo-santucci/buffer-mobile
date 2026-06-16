@@ -176,9 +176,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get settingsMonospaceFont => 'Carattere monospazio';
 
   @override
-  String get settingsLineNumbers => 'Mostra i numeri di riga';
-
-  @override
   String get a11yZoomIn => 'Aumenta dimensione carattere';
 
   @override
