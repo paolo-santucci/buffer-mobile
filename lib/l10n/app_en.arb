@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "appTitle": "Buffer Mobile",
+  "appTitle": "Foglietto",
   "@appTitle": {
     "description": "The title of the application displayed in the window title bar and as the app name."
   },
@@ -45,6 +45,10 @@
   "findCloseTooltip": "Back",
   "@findCloseTooltip": {
     "description": "Tooltip for the close/back button in the search bar."
+  },
+  "findDoneTooltip": "Close search",
+  "@findDoneTooltip": {
+    "description": "Tooltip for the done/close affordance that dismisses the find bar entirely (SP-20260618 toolbar-find-expand)."
   },
   "recoveryTitle": "Recovery",
   "@recoveryTitle": {
@@ -182,7 +186,7 @@
   "@settingsSpellCheck": {
     "description": "Label for the spell-check toggle in the Settings screen Behavior section."
   },
-  "aboutTitle": "About Buffer",
+  "aboutTitle": "About Foglietto",
   "@aboutTitle": {
     "description": "Title displayed in the About screen app bar."
   },
@@ -239,5 +243,33 @@
   "a11yZoomOut": "Decrease font size",
   "@a11yZoomOut": {
     "description": "Accessibility label for the decrease font size (zoom out) button in the FontSizeStepper."
+  },
+  "copyTooltip": "Copy",
+  "@copyTooltip": {
+    "description": "Tooltip for the Copy button in the bottom-left floating action bar (SP-20260617 FR-26)."
+  },
+  "pasteTooltip": "Paste",
+  "@pasteTooltip": {
+    "description": "Tooltip for the Paste button in the bottom-left floating action bar (SP-20260617 FR-26)."
+  },
+  "findTooltip": "Find",
+  "@findTooltip": {
+    "description": "Tooltip for the Find button in the bottom-left floating action bar (SP-20260617 FR-26)."
+  },
+  "copySemantics": "Copy",
+  "@copySemantics": {
+    "description": "Accessibility semantics label for the Copy button in the bottom-left floating action bar."
+  },
+  "pasteSemantics": "Paste",
+  "@pasteSemantics": {
+    "description": "Accessibility semantics label for the Paste button in the bottom-left floating action bar."
+  },
+  "findSemantics": "Find",
+  "@findSemantics": {
+    "description": "Accessibility semantics label for the Find button in the bottom-left floating action bar."
+  },
+  "copiedToast": "Copied",
+  "@copiedToast": {
+    "description": "Toast message shown briefly after the buffer text is copied to clipboard (SP-20260617 FR-26)."
   }
 }

@@ -12,7 +12,7 @@
 //   - savedAt.isUtc == true
 //   - savedAt derived from the filename, never from mtime
 
-import 'package:buffer/domain/recovery/recovery_note.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

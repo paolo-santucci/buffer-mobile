@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:buffer/domain/recovery/recovery_note.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
 
 /// Domain port (repository interface) for the recovery persistence boundary.
 ///

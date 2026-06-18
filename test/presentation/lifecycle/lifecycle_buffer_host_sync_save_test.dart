@@ -18,13 +18,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/domain/buffer/buffer_provider.dart';
-import 'package:buffer/domain/recovery/recovery_note.dart';
-import 'package:buffer/domain/recovery/recovery_repository.dart';
-import 'package:buffer/infrastructure/paths/sandbox_path_provider.dart';
-import 'package:buffer/infrastructure/recovery/file_recovery_repository.dart';
-import 'package:buffer/presentation/editor/share_providers.dart';
-import 'package:buffer/presentation/lifecycle/lifecycle_buffer_host.dart';
+import 'package:foglietto/domain/buffer/buffer_provider.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
+import 'package:foglietto/domain/recovery/recovery_repository.dart';
+import 'package:foglietto/infrastructure/paths/sandbox_path_provider.dart';
+import 'package:foglietto/infrastructure/recovery/file_recovery_repository.dart';
+import 'package:foglietto/presentation/editor/share_providers.dart';
+import 'package:foglietto/presentation/lifecycle/lifecycle_buffer_host.dart';
 
 // ---------------------------------------------------------------------------
 // Stub SandboxPathProvider that returns a fixed directory.

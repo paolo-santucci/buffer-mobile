@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:buffer/domain/buffer/buffer_notifier_impl.dart';
-import 'package:buffer/domain/buffer/buffer_state.dart';
+import 'package:foglietto/domain/buffer/buffer_notifier_impl.dart';
+import 'package:foglietto/domain/buffer/buffer_state.dart';
 
 /// The single, non-auto-disposed buffer-state hub (FR-10, EC-05, §5.3).
 ///

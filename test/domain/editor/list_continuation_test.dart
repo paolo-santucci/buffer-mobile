@@ -1,7 +1,7 @@
 // ignore_for_file: prefer_const_constructors
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/domain/editor/list_continuation.dart';
+import 'package:foglietto/domain/editor/list_continuation.dart';
 
 void main() {
   // =========================================================================

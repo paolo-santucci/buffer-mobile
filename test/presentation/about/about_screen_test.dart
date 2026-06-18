@@ -17,8 +17,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/l10n/app_localizations.dart';
-import 'package:buffer/presentation/about/about_screen.dart';
+import 'package:foglietto/l10n/app_localizations.dart';
+import 'package:foglietto/presentation/about/about_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Fake seams
@@ -98,9 +98,9 @@ void main() {
           launcherSeam: _FakeLauncherSeam(enabled: true),
         );
 
-        // App name "Buffer Mobile" from ARB appTitle (commit 7ce7a8c renamed the
-        // app; about_screen.dart:161 renders l10n.appTitle == "Buffer Mobile").
-        expect(find.text('Buffer Mobile'), findsAtLeastNWidgets(1));
+        // App name "Foglietto" from ARB appTitle (commit 7ce7a8c renamed the
+        // app; about_screen.dart:161 renders l10n.appTitle == "Foglietto").
+        expect(find.text('Foglietto'), findsAtLeastNWidgets(1));
 
         // Developer name — aboutDeveloper ARB key resolves to 'Paolo Santucci'.
         expect(find.text('Paolo Santucci'), findsOneWidget);
@@ -133,7 +133,7 @@ void main() {
         );
 
         // No exception — if we reach here, EC-10 is satisfied.
-        expect(find.text('Buffer Mobile'), findsAtLeastNWidgets(1));
+        expect(find.text('Foglietto'), findsAtLeastNWidgets(1));
         expect(find.text('Paolo Santucci'), findsOneWidget);
         expect(find.text('GPL-3.0'), findsOneWidget);
       },
@@ -185,7 +185,7 @@ void main() {
         expect(launcher.launched, isEmpty);
 
         // Other fields still rendered (screen as a whole is not broken).
-        expect(find.text('Buffer Mobile'), findsAtLeastNWidgets(1));
+        expect(find.text('Foglietto'), findsAtLeastNWidgets(1));
         expect(find.text('GPL-3.0'), findsOneWidget);
       },
     );
@@ -204,10 +204,10 @@ void main() {
       );
 
       // IT translations for about keys:
-      //   aboutTitle → 'Informazioni su Buffer'
+      //   aboutTitle → 'Informazioni su Foglietto'
       //   aboutIssues → 'Segnala un problema'
       //   aboutWebsite → 'Sito web'
-      expect(find.text('Informazioni su Buffer'), findsOneWidget);
+      expect(find.text('Informazioni su Foglietto'), findsOneWidget);
       expect(find.text('Segnala un problema'), findsOneWidget);
       expect(find.text('Sito web'), findsOneWidget);
 

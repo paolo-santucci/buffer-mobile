@@ -101,7 +101,7 @@ abstract class AppLocalizations {
   /// The title of the application displayed in the window title bar and as the app name.
   ///
   /// In en, this message translates to:
-  /// **'Buffer Mobile'**
+  /// **'Foglietto'**
   String get appTitle;
 
   /// Placeholder text shown in the search field.
@@ -151,6 +151,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Back'**
   String get findCloseTooltip;
+
+  /// Tooltip for the done/close affordance that dismisses the find bar entirely (SP-20260618 toolbar-find-expand).
+  ///
+  /// In en, this message translates to:
+  /// **'Close search'**
+  String get findDoneTooltip;
 
   /// Title displayed in the recovery screen app bar.
   ///
@@ -359,7 +365,7 @@ abstract class AppLocalizations {
   /// Title displayed in the About screen app bar.
   ///
   /// In en, this message translates to:
-  /// **'About Buffer'**
+  /// **'About Foglietto'**
   String get aboutTitle;
 
   /// Developer name displayed in the About screen.
@@ -433,6 +439,48 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Decrease font size'**
   String get a11yZoomOut;
+
+  /// Tooltip for the Copy button in the bottom-left floating action bar (SP-20260617 FR-26).
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get copyTooltip;
+
+  /// Tooltip for the Paste button in the bottom-left floating action bar (SP-20260617 FR-26).
+  ///
+  /// In en, this message translates to:
+  /// **'Paste'**
+  String get pasteTooltip;
+
+  /// Tooltip for the Find button in the bottom-left floating action bar (SP-20260617 FR-26).
+  ///
+  /// In en, this message translates to:
+  /// **'Find'**
+  String get findTooltip;
+
+  /// Accessibility semantics label for the Copy button in the bottom-left floating action bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get copySemantics;
+
+  /// Accessibility semantics label for the Paste button in the bottom-left floating action bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste'**
+  String get pasteSemantics;
+
+  /// Accessibility semantics label for the Find button in the bottom-left floating action bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Find'**
+  String get findSemantics;
+
+  /// Toast message shown briefly after the buffer text is copied to clipboard (SP-20260617 FR-26).
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get copiedToast;
 }
 
 class _AppLocalizationsDelegate

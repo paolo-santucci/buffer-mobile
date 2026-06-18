@@ -33,14 +33,14 @@ jobs:
         run: |
           cd build/app/outputs/flutter-apk
           for f in *-debug.apk; do
-            mv "$f" "${f/app-/com.paolosantucci.buffer-}"
+            mv "$f" "${f/app-/com.paolosantucci.foglietto-}"
           done
 
       - name: Upload debug APKs
         uses: actions/upload-artifact@v4
         with:
           name: debug-apks
-          path: build/app/outputs/flutter-apk/com.paolosantucci.buffer-*-debug.apk
+          path: build/app/outputs/flutter-apk/com.paolosantucci.foglietto-*-debug.apk
 
       # Signing steps only run when KEYSTORE_BASE64 secret is configured.
       # On forks or before the secret is set, these steps are skipped and
@@ -73,14 +73,14 @@ jobs:
         run: |
           cd build/app/outputs/flutter-apk
           for f in *-release.apk; do
-            mv "$f" "${f/app-/com.paolosantucci.buffer-}"
+            mv "$f" "${f/app-/com.paolosantucci.foglietto-}"
           done
 
       - name: Upload release APKs
         uses: actions/upload-artifact@v4
         with:
           name: release-apks
-          path: build/app/outputs/flutter-apk/com.paolosantucci.buffer-*-release.apk
+          path: build/app/outputs/flutter-apk/com.paolosantucci.foglietto-*-release.apk
 
       - name: Build release bundle (AAB)
         run: flutter build appbundle --release
@@ -88,10 +88,10 @@ jobs:
       - name: Rename release AAB
         run: |
           mv build/app/outputs/bundle/release/app-release.aab \
-             build/app/outputs/bundle/release/com.paolosantucci.buffer-release.aab
+             build/app/outputs/bundle/release/com.paolosantucci.foglietto-release.aab
 
       - name: Upload release AAB
         uses: actions/upload-artifact@v4
         with:
           name: release-aab
-          path: build/app/outputs/bundle/release/com.paolosantucci.buffer-release.aab
+          path: build/app/outputs/bundle/release/com.paolosantucci.foglietto-release.aab

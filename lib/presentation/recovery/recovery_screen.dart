@@ -43,11 +43,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import 'package:buffer/domain/buffer/buffer_provider.dart';
-import 'package:buffer/domain/recovery/recovery_note.dart';
-import 'package:buffer/l10n/app_localizations.dart';
-import 'package:buffer/presentation/recovery/recovery_list_provider.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
+import 'package:foglietto/domain/buffer/buffer_provider.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
+import 'package:foglietto/l10n/app_localizations.dart';
+import 'package:foglietto/presentation/recovery/recovery_list_provider.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
 
 /// Recovery list screen — lists saved recovery notes, allows restore/delete.
 ///

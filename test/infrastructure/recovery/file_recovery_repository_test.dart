@@ -12,8 +12,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:buffer/infrastructure/paths/sandbox_path_provider.dart';
-import 'package:buffer/infrastructure/recovery/file_recovery_repository.dart';
+import 'package:foglietto/infrastructure/paths/sandbox_path_provider.dart';
+import 'package:foglietto/infrastructure/recovery/file_recovery_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -10,7 +10,7 @@
 	<string>__TEAM_ID__</string>
 	<key>provisioningProfiles</key>
 	<dict>
-		<key>com.paolosantucci.buffer</key>
+		<key>com.paolosantucci.foglietto</key>
 		<string>__PROFILE_UUID__</string>
 	</dict>
 	<key>signingCertificate</key>

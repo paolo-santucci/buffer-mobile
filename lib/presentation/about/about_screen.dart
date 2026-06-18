@@ -26,7 +26,7 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:buffer/l10n/app_localizations.dart';
+import 'package:foglietto/l10n/app_localizations.dart';
 
 // ---------------------------------------------------------------------------
 // Seam interfaces
@@ -157,7 +157,7 @@ class _AboutBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListView(
       children: [
-        // App name — "Buffer Mobile" via ARB appTitle (upstream `application_name`).
+        // App name — "Foglietto" via ARB appTitle (upstream `application_name`).
         ListTile(title: Text(l10n.appTitle)),
         const Divider(height: 1),
 

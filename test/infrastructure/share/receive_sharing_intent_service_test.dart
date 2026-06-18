@@ -22,7 +22,7 @@
 
 import 'dart:async';
 
-import 'package:buffer/infrastructure/share/receive_sharing_intent_service.dart';
+import 'package:foglietto/infrastructure/share/receive_sharing_intent_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 

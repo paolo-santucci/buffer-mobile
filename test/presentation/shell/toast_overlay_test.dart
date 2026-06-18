@@ -1,6 +1,7 @@
-// Tests for ToastOverlay widget (TASK-13b, M6).
+// Tests for ToastOverlay widget (TASK-13b, M6 + TASK-10 glass restyle).
 //
 // Spec refs: FR-M6-14, FR-M6-15, NFR-M6-03, EC-04, EC-12, §Components §8
+//            FR-28, FR-20, FR-27, NFR-06, EC-08, EC-09
 // Canon ref: .claude/docs/canon/ui-design-bible.md §Components §8
 //            "Timed notification toast" — Positioned top-centre, crossfade only.
 //
@@ -14,13 +15,17 @@
 //  4. No SlideTransition/ScaleTransition in the file; only AnimatedOpacity/FadeTransition.
 //  5. MediaQuery(disableAnimations: true) → AnimatedOpacity duration == Duration.zero (EC-12).
 //  6. null state → fully transparent (opacity 0.0).
+//  8. GlassSurface wiring (FR-28): visible toast has one GlassSurface child with pillRadius.
+//  9. Opaque branch via toast (EC-08): highContrast=true → 0 BackdropFilter descendants.
+// 10. Unmount-at-zero via toast (EC-09): opacity==0 (null state) → 0 BackdropFilter descendants.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/presentation/shell/toast_controller.dart';
-import 'package:buffer/presentation/shell/toast_overlay.dart';
+import 'package:foglietto/presentation/shell/toast_controller.dart';
+import 'package:foglietto/presentation/shell/toast_overlay.dart';
+import 'package:foglietto/presentation/theme/glass_surface.dart';
 
 // ---------------------------------------------------------------------------
 // Fake notifier — overrides toastProvider with controllable state.
@@ -50,6 +55,7 @@ class _FakeToastNotifier extends ToastController {
 Widget _buildApp({
   _FakeToastNotifier? notifier,
   bool disableAnimations = false,
+  bool highContrast = false,
 }) {
   final overrides = <Override>[
     if (notifier != null) toastProvider.overrideWith(() => notifier),
@@ -58,7 +64,10 @@ Widget _buildApp({
   return ProviderScope(
     overrides: overrides,
     child: MediaQuery(
-      data: MediaQueryData(disableAnimations: disableAnimations),
+      data: MediaQueryData(
+        disableAnimations: disableAnimations,
+        highContrast: highContrast,
+      ),
       child: MaterialApp(
         home: Scaffold(
           body: SizedBox(
@@ -323,4 +332,89 @@ void main() {
       reason: 'Non-null toast state must render as fully opaque',
     );
   });
+
+  // =========================================================================
+  // 8. GlassSurface wiring (FR-28, TASK-10):
+  //    visible toast → exactly one GlassSurface descendant inside ToastOverlay,
+  //    with borderRadius == GlassTokens.of(context).pillRadius.
+  // =========================================================================
+  testWidgets(
+    'given_visibleToast_when_mounted_then_glassSurfaceDescendantWithPillRadius',
+    (tester) async {
+      final notifier = _FakeToastNotifier(const ToastMessage('glass'));
+      await tester.pumpWidget(_buildApp(notifier: notifier));
+
+      // One GlassSurface must be a descendant of ToastOverlay.
+      expect(
+        find.descendant(
+          of: find.byType(ToastOverlay),
+          matching: find.byType(GlassSurface),
+        ),
+        findsOneWidget,
+        reason: 'FR-28: toast container must use GlassSurface',
+      );
+
+      // The GlassSurface must carry the pillRadius token.
+      final glassSurface = tester.widget<GlassSurface>(
+        find.descendant(
+          of: find.byType(ToastOverlay),
+          matching: find.byType(GlassSurface),
+        ),
+      );
+      // GlassTokens is registered in AppTheme; here we cross-check against
+      // the default token constant since tests use MaterialApp defaults.
+      expect(
+        glassSurface.borderRadius,
+        kDefaultGlassTokens.pillRadius,
+        reason: 'FR-28: GlassSurface.borderRadius must equal tokens.pillRadius',
+      );
+    },
+  );
+
+  // =========================================================================
+  // 9. Opaque branch via toast (EC-08):
+  //    MediaQuery.highContrast == true → 0 BackdropFilter descendants inside
+  //    ToastOverlay (inherited from GlassSurface opaque branch).
+  // =========================================================================
+  testWidgets(
+    'given_highContrast_when_toastVisible_then_noBackdropFilterInToastSubtree',
+    (tester) async {
+      final notifier = _FakeToastNotifier(const ToastMessage('high contrast'));
+      await tester.pumpWidget(
+        _buildApp(notifier: notifier, highContrast: true),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byType(ToastOverlay),
+          matching: find.byType(BackdropFilter),
+        ),
+        findsNothing,
+        reason: 'EC-08: high-contrast mode must suppress BackdropFilter',
+      );
+    },
+  );
+
+  // =========================================================================
+  // 10. Unmount-at-zero via toast (EC-09):
+  //     when the toast state is null (opacity == 0) → 0 BackdropFilter
+  //     descendants inside ToastOverlay.
+  // =========================================================================
+  testWidgets(
+    'given_nullToastState_when_mounted_then_noBackdropFilterInToastSubtree',
+    (tester) async {
+      // null initial state → opacity fed as 0.0 → GlassSurface absent branch.
+      final notifier = _FakeToastNotifier(null);
+      await tester.pumpWidget(_buildApp(notifier: notifier));
+
+      expect(
+        find.descendant(
+          of: find.byType(ToastOverlay),
+          matching: find.byType(BackdropFilter),
+        ),
+        findsNothing,
+        reason: 'EC-09: opacity==0 must unmount BackdropFilter entirely',
+      );
+    },
+  );
 }

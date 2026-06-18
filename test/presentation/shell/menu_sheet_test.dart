@@ -1,47 +1,44 @@
-// Tests for MenuSheet widget and openMenuSheet helper (TASK-09)
-// Extended in TASK-07 (M7): FontSizeStepper embed tests.
+// Tests for openMenuSheet helper (TASK-07)
 //
-// Spec refs: FR-M6-08, FR-M6-23, OQ-M6-02, §Mobile-adaptation
-//            FR-M7-06 (FontSizeStepper host in menu sheet)
-// Canon ref: .claude/docs/canon/ui-design-bible.md §Mobile-adaptation
-//            .claude/docs/canon/ui-design-bible.md §5 "Font-size selector"
-//            .claude/docs/canon/ui-design-bible.md §7 "Menu sheet"
+// Formerly tested the bottom-sheet path. Rewritten to test the popover path
+// after the conversion of menu_sheet.dart to OverflowPopover (FR-04).
+//
+// Spec refs: FR-04, FR-05, FR-06, FR-19
+// Plan refs: TASK-07 (Wave 2), sp-20260617-liquid-glass-floating-chrome-plan.md
 //
 // TDD: tests written FIRST, implementation follows.
 //
-// Acceptance criteria verified here:
-//   1. Sheet contains a ThemeSelector, Preferences tile (menuPreferences ARB),
-//      About tile (menuAbout ARB), Recovery tile (menuRecovery ARB).
-//   2. NO font-size stepper / slider / +/- control anywhere in the sheet (D2
-//      pre-M7). POST-M7 the Material Stepper widget is still absent; the custom
-//      FontSizeStepper is PRESENT (see group 8).
-//   3. Tap Preferences → Navigator route /settings.
-//   4. Tap About → Navigator route /about.
-//   5. Tap Recovery → Navigator route /recovery.
-//   6. Scrim tap dismisses; Navigator back at '/'.
-//   7. Labels localized under it locale (no English leak).
-//   8. FontSizeStepper present; steps and disables-at-ends work in-sheet
-//      (FR-M7-06).
+// OQ-12 caveat: harness uses MaterialApp (real Overlay/Navigator) so
+// OverlayEntry insertions are detectable via find.byType(OverflowPopover).
 //
-// <!-- CANON GAP: OQ-M6-12 — ui-design-bible.md has no bottom-sheet container
-//      anatomy (padding, corner radius, handle bar, elevation). Layout below
-//      uses Material defaults. Flag for upstream review if fidelity gaps are
-//      reported. -->
+// Acceptance criteria verified here:
+//   1. openMenuSheet opens an OverflowPopover, NOT a BottomSheet.
+//   2. The popover has exactly 5 entries: ThemeSelector, FontSizeStepper,
+//      Preferences, About, Recovery — and NO Find/Replace tile.
+//   3. Outside-tap dismisses the popover.
+//   4. Preferences, About, Recovery navigation works.
+//   5. Italian locale renders correct labels.
+//   6. FontSizeStepper present; step behaviour in-popover works.
+//   7. onFind compat: openMenuSheet compiles with and without onFind; the
+//      Find tile is absent either way (FR-05 / backward-compat).
+//
+// <!-- CANON GAP: anchored popover bubble anatomy + outside-tap-dismiss rule
+//      See overflow_popover.dart for the full canon gap note. -->
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/domain/settings/app_settings.dart';
-import 'package:buffer/l10n/app_localizations.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
-import 'package:buffer/presentation/shell/menu_sheet.dart';
-import 'package:buffer/presentation/shell/theme_selector.dart';
-import 'package:buffer/presentation/typography/font_size_stepper.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
+import 'package:foglietto/l10n/app_localizations.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
+import 'package:foglietto/presentation/shell/menu_sheet.dart';
+import 'package:foglietto/presentation/shell/overflow_popover.dart';
+import 'package:foglietto/presentation/shell/theme_selector.dart';
+import 'package:foglietto/presentation/typography/font_size_stepper.dart';
 
 // ---------------------------------------------------------------------------
-// Fake SettingsNotifier — seeds configurable AppSettings, implements all
-// mutating setters so widget taps produce observable state changes.
+// Fake SettingsNotifier
 // ---------------------------------------------------------------------------
 
 class _FakeSettingsNotifier extends SettingsNotifier {
@@ -64,14 +61,12 @@ class _FakeSettingsNotifier extends SettingsNotifier {
   Future<void> setFontSizeIndex(int index) async {
     final current = state.value ?? const AppSettings();
     final next = current.setFontSizeIndex(index);
-    if (!identical(next, current)) {
-      state = AsyncData(next);
-    }
+    if (!identical(next, current)) state = AsyncData(next);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Stub screens for named routes tested in navigation assertions.
+// Stub screens for named routes
 // ---------------------------------------------------------------------------
 
 class _StubSettings extends StatelessWidget {
@@ -96,19 +91,43 @@ class _StubRecovery extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Host screen: renders a button that calls openMenuSheet (no onFind).
+// Host screen: renders an anchor button that calls openMenuSheet.
 // ---------------------------------------------------------------------------
 
-class _HostScreen extends StatelessWidget {
-  const _HostScreen();
+class _HostScreen extends StatefulWidget {
+  const _HostScreen({this.onFind});
+
+  final VoidCallback? onFind;
+
+  @override
+  State<_HostScreen> createState() => _HostScreenState();
+}
+
+class _HostScreenState extends State<_HostScreen> {
+  final LayerLink _link = LayerLink();
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(
-        child: ElevatedButton(
-          onPressed: () => openMenuSheet(context),
-          child: const Text('Open Menu'),
+      body: Align(
+        alignment: Alignment.topRight,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 8.0, right: 8.0),
+          child: CompositedTransformTarget(
+            link: _link,
+            child: SizedBox(
+              width: 80,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: () => openMenuSheet(
+                  context,
+                  anchorLink: _link,
+                  onFind: widget.onFind,
+                ),
+                child: const Text('Open Menu'),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -116,34 +135,13 @@ class _HostScreen extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Host screen with onFind injection (TASK-05).
-// ---------------------------------------------------------------------------
-
-class _HostScreenWithFind extends StatelessWidget {
-  const _HostScreenWithFind({required this.onFind});
-
-  final VoidCallback onFind;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: ElevatedButton(
-          onPressed: () => openMenuSheet(context, onFind: onFind),
-          child: const Text('Open Menu'),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Harness builder.
+// Harness builder (OQ-12: MaterialApp for real Overlay/Navigator).
 // ---------------------------------------------------------------------------
 
 Widget _buildApp({
   Locale locale = const Locale('en'),
   AppSettings initial = const AppSettings(),
+  VoidCallback? onFind,
 }) {
   return ProviderScope(
     overrides: [
@@ -156,7 +154,7 @@ Widget _buildApp({
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       routes: {
-        '/': (_) => const _HostScreen(),
+        '/': (_) => _HostScreen(onFind: onFind),
         '/settings': (_) => const _StubSettings(),
         '/about': (_) => const _StubAbout(),
         '/recovery': (_) => const _StubRecovery(),
@@ -165,34 +163,10 @@ Widget _buildApp({
   );
 }
 
-/// Opens the menu sheet by tapping the host button.
-Future<void> _openSheet(WidgetTester tester) async {
+/// Opens the popover by tapping the host button.
+Future<void> _openPopover(WidgetTester tester) async {
   await tester.tap(find.text('Open Menu'));
   await tester.pumpAndSettle();
-}
-
-// ---------------------------------------------------------------------------
-// Harness builder with onFind injection (TASK-05).
-// ---------------------------------------------------------------------------
-
-Widget _buildAppWithFind({
-  required VoidCallback onFind,
-  Locale locale = const Locale('en'),
-}) {
-  return ProviderScope(
-    overrides: [settingsProvider.overrideWith(() => _FakeSettingsNotifier())],
-    child: MaterialApp(
-      locale: locale,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      routes: {
-        '/': (_) => _HostScreenWithFind(onFind: onFind),
-        '/settings': (_) => const _StubSettings(),
-        '/about': (_) => const _StubAbout(),
-        '/recovery': (_) => const _StubRecovery(),
-      },
-    ),
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -201,30 +175,70 @@ Widget _buildAppWithFind({
 
 void main() {
   // =========================================================================
-  // 1. Sheet contents — ThemeSelector + three nav tiles
+  // 1. Open — OverflowPopover, NOT BottomSheet (FR-04)
   // =========================================================================
-  group('MenuSheet — contents', () {
+  group('openMenuSheet — opens OverflowPopover, not BottomSheet (FR-04)', () {
     testWidgets(
-      'given_sheet_opened_when_inspected_then_ThemeSelector_is_present',
+      'given_openMenuSheet_called_then_OverflowPopover_in_tree_and_no_BottomSheet',
       (tester) async {
         await tester.pumpWidget(_buildApp());
-        await _openSheet(tester);
+        await _openPopover(tester);
+
+        expect(
+          find.byType(OverflowPopover),
+          findsOneWidget,
+          reason:
+              'openMenuSheet must open an OverflowPopover (FR-04, popover-not-sheet)',
+        );
+        expect(
+          find.byType(BottomSheet),
+          findsNothing,
+          reason:
+              'showModalBottomSheet must not be used — no BottomSheet in tree',
+        );
+      },
+    );
+  });
+
+  // =========================================================================
+  // 2. Contents — ThemeSelector + FontSizeStepper + 3 nav tiles; no Find
+  //    (FR-05 exact entry set)
+  // =========================================================================
+  group('openMenuSheet — popover contents (FR-05)', () {
+    testWidgets(
+      'given_popover_open_when_inspected_then_ThemeSelector_present',
+      (tester) async {
+        await tester.pumpWidget(_buildApp());
+        await _openPopover(tester);
 
         expect(
           find.byType(ThemeSelector),
           findsOneWidget,
-          reason: 'MenuSheet must embed exactly one ThemeSelector (FR-M6-08)',
+          reason: 'Popover must embed exactly one ThemeSelector (FR-05)',
         );
       },
     );
 
     testWidgets(
-      'given_sheet_opened_when_inspected_then_Preferences_tile_present_en',
+      'given_popover_open_when_inspected_then_FontSizeStepper_present',
       (tester) async {
         await tester.pumpWidget(_buildApp());
-        await _openSheet(tester);
+        await _openPopover(tester);
 
-        // EN: menuPreferences = "Preferences"
+        expect(
+          find.byType(FontSizeStepper),
+          findsOneWidget,
+          reason: 'Popover must embed exactly one FontSizeStepper (FR-05)',
+        );
+      },
+    );
+
+    testWidgets(
+      'given_popover_open_when_inspected_then_Preferences_tile_present_en',
+      (tester) async {
+        await tester.pumpWidget(_buildApp());
+        await _openPopover(tester);
+
         expect(
           find.text('Preferences'),
           findsAtLeastNWidgets(1),
@@ -235,12 +249,11 @@ void main() {
     );
 
     testWidgets(
-      'given_sheet_opened_when_inspected_then_About_tile_present_en',
+      'given_popover_open_when_inspected_then_About_tile_present_en',
       (tester) async {
         await tester.pumpWidget(_buildApp());
-        await _openSheet(tester);
+        await _openPopover(tester);
 
-        // EN: menuAbout = "About"
         expect(
           find.text('About'),
           findsAtLeastNWidgets(1),
@@ -250,12 +263,11 @@ void main() {
     );
 
     testWidgets(
-      'given_sheet_opened_when_inspected_then_Recovery_tile_present_en',
+      'given_popover_open_when_inspected_then_Recovery_tile_present_en',
       (tester) async {
         await tester.pumpWidget(_buildApp());
-        await _openSheet(tester);
+        await _openPopover(tester);
 
-        // EN: menuRecovery = "Recovery"
         expect(
           find.text('Recovery'),
           findsAtLeastNWidgets(1),
@@ -264,48 +276,70 @@ void main() {
         );
       },
     );
-  });
 
-  // =========================================================================
-  // 2. D2 guard — NO font-size control anywhere in the sheet
-  // =========================================================================
-  group('MenuSheet — D2 font-size-free (CRITICAL)', () {
-    testWidgets('given_sheet_opened_when_inspected_then_no_Slider_present', (
+    testWidgets('given_popover_open_when_inspected_then_NO_Find_tile_present', (
       tester,
     ) async {
       await tester.pumpWidget(_buildApp());
-      await _openSheet(tester);
+      await _openPopover(tester);
+
+      expect(
+        find.text('Find / Replace'),
+        findsNothing,
+        reason:
+            'Find/Replace tile must NOT be in the popover (FR-05 — Find moved '
+            'to bottom toolbar)',
+      );
+    });
+  });
+
+  // =========================================================================
+  // 3. D2 guard — NO Material Stepper anywhere in the popover
+  //    (D2 pre-M7; the custom FontSizeStepper is present, Stepper is not)
+  // =========================================================================
+  group('openMenuSheet — D2 no Material Stepper (CRITICAL)', () {
+    testWidgets('given_popover_open_when_inspected_then_no_Slider_present', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildApp());
+      await _openPopover(tester);
 
       expect(
         find.byType(Slider),
         findsNothing,
-        reason: 'D2: NO font-size Slider anywhere in MenuSheet',
+        reason: 'D2: NO font-size Slider anywhere in the popover',
       );
     });
 
-    testWidgets('given_sheet_opened_when_inspected_then_no_Stepper_present', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildApp());
-      await _openSheet(tester);
+    testWidgets(
+      'given_popover_open_when_inspected_then_no_Material_Stepper_present',
+      (tester) async {
+        await tester.pumpWidget(_buildApp());
+        await _openPopover(tester);
 
-      expect(
-        find.byType(Stepper),
-        findsNothing,
-        reason: 'D2: NO font-size Stepper anywhere in MenuSheet',
-      );
-    });
+        expect(
+          find.byType(Stepper),
+          findsNothing,
+          reason: 'D2: NO Material Stepper anywhere in the popover',
+        );
+      },
+    );
   });
 
   // =========================================================================
-  // 3–5. Navigation — tap each tile → correct route
+  // 4. Navigation — tap each tile → correct route (FR-06 nav seam)
   // =========================================================================
-  group('MenuSheet — navigation', () {
+  group('openMenuSheet — navigation (FR-06)', () {
     testWidgets(
-      'given_sheet_opened_when_Preferences_tapped_then_navigates_to_settings',
+      'given_popover_open_when_Preferences_tapped_then_navigates_to_settings',
       (tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
         await tester.pumpWidget(_buildApp());
-        await _openSheet(tester);
+        await _openPopover(tester);
 
         await tester.tap(find.text('Preferences'));
         await tester.pumpAndSettle();
@@ -319,10 +353,15 @@ void main() {
     );
 
     testWidgets(
-      'given_sheet_opened_when_About_tapped_then_navigates_to_about',
+      'given_popover_open_when_About_tapped_then_navigates_to_about',
       (tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
         await tester.pumpWidget(_buildApp());
-        await _openSheet(tester);
+        await _openPopover(tester);
 
         await tester.tap(find.text('About'));
         await tester.pumpAndSettle();
@@ -336,10 +375,15 @@ void main() {
     );
 
     testWidgets(
-      'given_sheet_opened_when_Recovery_tapped_then_navigates_to_recovery',
+      'given_popover_open_when_Recovery_tapped_then_navigates_to_recovery',
       (tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
         await tester.pumpWidget(_buildApp());
-        await _openSheet(tester);
+        await _openPopover(tester);
 
         await tester.tap(find.text('Recovery'));
         await tester.pumpAndSettle();
@@ -354,111 +398,100 @@ void main() {
   });
 
   // =========================================================================
-  // 6. Scrim tap dismisses sheet; Navigator stays at '/'
+  // 5. Outside-tap dismiss (FR-06/EC-15)
   // =========================================================================
-  group('MenuSheet — dismiss', () {
-    testWidgets('given_sheet_opened_when_scrim_tapped_then_sheet_dismissed', (
-      tester,
-    ) async {
-      await tester.pumpWidget(_buildApp());
-      await _openSheet(tester);
+  group('openMenuSheet — dismiss (FR-06/EC-15)', () {
+    testWidgets(
+      'given_popover_open_when_barrier_tapped_then_popover_dismissed',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      // Verify sheet is open (ThemeSelector visible)
-      expect(find.byType(ThemeSelector), findsOneWidget);
+        await tester.pumpWidget(_buildApp());
+        await _openPopover(tester);
 
-      // Tap the scrim (top-left corner, outside the sheet)
-      await tester.tapAt(const Offset(10, 10));
-      await tester.pumpAndSettle();
+        expect(find.byType(ThemeSelector), findsOneWidget);
 
-      // Sheet dismissed: ThemeSelector no longer in tree
-      expect(
-        find.byType(ThemeSelector),
-        findsNothing,
-        reason: 'Tapping scrim must dismiss the sheet',
-      );
+        // Tap bottom-left — outside the popover bubble (which is top-right).
+        await tester.tapAt(const Offset(20, 1100));
+        await tester.pumpAndSettle();
 
-      // Navigator is back at '/' host
-      expect(
-        find.text('Open Menu'),
-        findsOneWidget,
-        reason: 'After dismiss, Navigator must be back at the host route',
-      );
-    });
+        expect(
+          find.byType(OverflowPopover),
+          findsNothing,
+          reason: 'Tapping the barrier must dismiss the popover (FR-06/EC-15)',
+        );
+        expect(
+          find.text('Open Menu'),
+          findsOneWidget,
+          reason: 'After dismiss, host screen must still be visible',
+        );
+      },
+    );
   });
 
   // =========================================================================
-  // 7. Italian locale — labels from app_it.arb; no English leak
+  // 6. Italian locale — labels from app_it.arb; no English leak
   // =========================================================================
-  group('MenuSheet — Italian locale (FR-M6-17, NFR-M6-01)', () {
-    testWidgets('given_it_locale_when_sheet_opened_then_labels_are_italian', (
+  group('openMenuSheet — Italian locale (FR-M6-17, NFR-M6-01)', () {
+    testWidgets('given_it_locale_when_popover_opened_then_labels_are_italian', (
       tester,
     ) async {
       await tester.pumpWidget(_buildApp(locale: const Locale('it')));
-      await _openSheet(tester);
+      await _openPopover(tester);
 
-      // IT: menuPreferences = "Preferenze"
       expect(
         find.text('Preferenze'),
         findsAtLeastNWidgets(1),
         reason:
             'menuPreferences ARB key must resolve to "Preferenze" in it locale',
       );
-
-      // IT: menuAbout = "Informazioni"
       expect(
         find.text('Informazioni'),
         findsAtLeastNWidgets(1),
         reason: 'menuAbout ARB key must resolve to "Informazioni" in it locale',
       );
-
-      // IT: menuRecovery = "Recupero"
       expect(
         find.text('Recupero'),
         findsAtLeastNWidgets(1),
         reason: 'menuRecovery ARB key must resolve to "Recupero" in it locale',
       );
-
-      // No English leak — none of the EN-only labels should appear as tiles
       expect(
         find.text('Preferences'),
         findsNothing,
-        reason: 'English "Preferences" must not leak into it locale rendering',
+        reason: 'English "Preferences" must not leak into it locale',
       );
       expect(
         find.text('About'),
         findsNothing,
-        reason: 'English "About" must not leak into it locale rendering',
+        reason: 'English "About" must not leak into it locale',
       );
     });
   });
 
   // =========================================================================
-  // 8. FontSizeStepper embed (FR-M7-06)
-  //
-  //    The stepper is hosted between the ThemeSelector Padding and the first
-  //    Divider, mirroring the ThemeSelector embed pattern (spec §4.1).
-  //    Tests written FIRST (TDD, red phase) before the embed lands in
-  //    menu_sheet.dart (TASK-07).
+  // 7. FontSizeStepper embed (FR-M7-06)
   // =========================================================================
-  group('MenuSheet — FontSizeStepper (FR-M7-06)', () {
+  group('openMenuSheet — FontSizeStepper (FR-M7-06)', () {
     testWidgets(
-      'given_default_settings_when_sheet_opened_then_FontSizeStepper_present_with_14pt_label',
+      'given_default_settings_when_popover_opened_then_FontSizeStepper_present_with_14pt_label',
       (tester) async {
         // Default fontSizeIndex == 8 → slotList[8] == 14 → label "14pt"
         await tester.pumpWidget(_buildApp());
-        await _openSheet(tester);
+        await _openPopover(tester);
 
         expect(
           find.byType(FontSizeStepper),
           findsOneWidget,
-          reason: 'MenuSheet must embed exactly one FontSizeStepper (FR-M7-06)',
+          reason: 'Popover must embed exactly one FontSizeStepper (FR-M7-06)',
         );
         expect(
           find.text('14pt'),
           findsOneWidget,
           reason:
-              'FontSizeStepper label must show "14pt" for default fontSizeIndex 8 '
-              '(slotList[8] == 14)',
+              'FontSizeStepper label must show "14pt" for default fontSizeIndex 8',
         );
       },
     );
@@ -471,13 +504,9 @@ void main() {
         await tester.pumpWidget(
           _buildApp(initial: const AppSettings(fontSizeIndex: 10)),
         );
-        await _openSheet(tester);
+        await _openPopover(tester);
 
-        expect(
-          find.text('16pt'),
-          findsOneWidget,
-          reason: 'Initial label must be "16pt" for fontSizeIndex 10',
-        );
+        expect(find.text('16pt'), findsOneWidget);
 
         await tester.tap(find.byIcon(Icons.add));
         await tester.pumpAndSettle();
@@ -485,9 +514,7 @@ void main() {
         expect(
           find.text('17pt'),
           findsOneWidget,
-          reason:
-              'After tapping Icons.add at index 10, label must update to "17pt" '
-              '(index 11, slotList[11] == 17)',
+          reason: 'After tapping Icons.add at index 10, label must be "17pt"',
         );
       },
     );
@@ -495,14 +522,11 @@ void main() {
     testWidgets(
       'given_fontSizeIndex_20_when_inspected_then_add_disabled_and_remove_steps_to_34pt',
       (tester) async {
-        // fontSizeIndex 20 → slotList[20] == 38 → "38pt"; add must be disabled
-        // After tapping Icons.remove → index 19 → slotList[19] == 34 → "34pt"
         await tester.pumpWidget(
           _buildApp(initial: const AppSettings(fontSizeIndex: 20)),
         );
-        await _openSheet(tester);
+        await _openPopover(tester);
 
-        // Icons.add must be disabled at the top of the scale
         final addButton = tester.widget<IconButton>(
           find.widgetWithIcon(IconButton, Icons.add),
         );
@@ -513,7 +537,6 @@ void main() {
               'Icons.add onPressed must be null at fontSizeIndex 20 (top of scale)',
         );
 
-        // Tapping Icons.remove should step down to index 19 → "34pt"
         await tester.tap(find.byIcon(Icons.remove));
         await tester.pumpAndSettle();
 
@@ -521,167 +544,37 @@ void main() {
           find.text('34pt'),
           findsOneWidget,
           reason:
-              'After tapping Icons.remove at index 20, label must update to "34pt" '
-              '(index 19, slotList[19] == 34)',
+              'After tapping Icons.remove at index 20, label must be "34pt"',
         );
       },
     );
   });
 
   // =========================================================================
-  // 9. Find / Replace tile — TASK-05 (SP-20260615, FR-08, FR-17, NFR-02,
-  //    NFR-04, contract C3)
-  //
-  //    The tile is rendered ONLY when onFind != null (callback-gated).
-  //    MenuSheet stays a StatelessWidget with no ref; the tile only pops the
-  //    sheet and invokes the injected callback.
-  //
-  //    Placement: after the Divider, before the Preferences tile (C3).
-  //    Icon: Icons.search (edit-find-symbolic → Icons.search per bible §Iconography).
-  //    Touch target: ListTile default >= 48dp (NFR-02).
-  //
-  // <!-- CANON GAP: ui-design-bible.md §Components.2 documents the chrome menu
-  //      tile pattern but does not name a specific icon for the Find entry.
-  //      Icons.search is the canonical Material mapping for edit-find-symbolic
-  //      (GNOME icon → Material equivalent per spec §Iconography). Using
-  //      Icons.search until the bible is updated with an explicit mapping. -->
-  //
-  //  Note: tests in this group that open the sheet with onFind != null set a
-  //  taller test-surface height (1200 logical px) to avoid Column overflow in
-  //  the 5-tile layout. The production widget is unchanged; this is a test
-  //  harness concern only (overflow fires at <= ~338 px available height).
+  // 8. onFind compat — openMenuSheet compiles and opens with/without onFind;
+  //    the Find tile is absent either way (FR-05 backward-compat)
   // =========================================================================
-  group('MenuSheet — Find tile (TASK-05, FR-08, FR-17, NFR-02, NFR-04)', () {
+  group('openMenuSheet — onFind compat (FR-05, backward-compat)', () {
     testWidgets(
-      'given_onFind_nonnull_when_sheet_opened_then_Find_tile_with_search_icon_present',
+      'given_onFind_nonnull_when_popover_opened_then_Find_tile_absent',
       (tester) async {
-        // Taller viewport: sheet now has 5 tiles + ThemeSelector + stepper.
-        tester.view.physicalSize = const Size(800, 1200);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        // FR-08, contract C3 — tile rendered when onFind != null
-        await tester.pumpWidget(_buildAppWithFind(onFind: () {}));
-        await _openSheet(tester);
+        // FR-05: Find tile is absent regardless of onFind injection.
+        // The Find button moved to the bottom toolbar.
+        int callCount = 0;
+        await tester.pumpWidget(_buildApp(onFind: () => callCount++));
+        await _openPopover(tester);
 
         expect(
           find.text('Find / Replace'),
-          findsOneWidget,
+          findsNothing,
           reason:
-              'menuFind ARB key must resolve to "Find / Replace" in en locale '
-              'when onFind != null (FR-17)',
+              'Find/Replace tile must NOT appear in the popover even when '
+              'onFind != null (FR-05 — Find moved to bottom toolbar)',
         );
-
-        // The tile must have leading Icons.search
         expect(
           find.byIcon(Icons.search),
-          findsOneWidget,
-          reason:
-              'Find tile must have leading Icons.search '
-              '(edit-find-symbolic mapping, canon §Iconography)',
-        );
-
-        // The text must be inside a ListTile
-        expect(
-          find.ancestor(
-            of: find.text('Find / Replace'),
-            matching: find.byType(ListTile),
-          ),
-          findsOneWidget,
-          reason: 'menuFind text must be inside a ListTile',
-        );
-      },
-    );
-
-    testWidgets('given_onFind_null_when_sheet_opened_then_Find_tile_absent', (
-      tester,
-    ) async {
-      // Callback-gated: tile must NOT appear when openMenuSheet(context) is
-      // called without onFind (additive/backward-compat, NFR-04).
-      await tester.pumpWidget(_buildApp());
-      await _openSheet(tester);
-
-      expect(
-        find.text('Find / Replace'),
-        findsNothing,
-        reason:
-            'Find tile must be absent when onFind == null (NFR-04 backward-compat)',
-      );
-      expect(
-        find.byIcon(Icons.search),
-        findsNothing,
-        reason:
-            'Icons.search must be absent when onFind == null '
-            '(tile is gated on the callback)',
-      );
-    });
-
-    testWidgets(
-      'given_onFind_nonnull_when_tile_tapped_then_callback_called_exactly_once_and_sheet_dismissed',
-      (tester) async {
-        // Taller viewport: sheet now has 5 tiles + ThemeSelector + stepper.
-        tester.view.physicalSize = const Size(800, 1200);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        // Tap fires injected callback and pops the sheet (FR-10 ordering:
-        // sheet dismissed, then onFind invoked).
-        int callCount = 0;
-        await tester.pumpWidget(_buildAppWithFind(onFind: () => callCount++));
-        await _openSheet(tester);
-
-        // Sheet is open — ThemeSelector visible
-        expect(find.byType(ThemeSelector), findsOneWidget);
-
-        await tester.tap(find.text('Find / Replace'));
-        await tester.pumpAndSettle();
-
-        expect(
-          callCount,
-          equals(1),
-          reason: 'onFind must be called exactly once after tapping the tile',
-        );
-
-        // Sheet must be dismissed (ThemeSelector gone)
-        expect(
-          find.byType(ThemeSelector),
           findsNothing,
-          reason: 'Sheet must be dismissed after tapping Find tile',
-        );
-      },
-    );
-
-    testWidgets(
-      'given_onFind_nonnull_when_sheet_opened_then_Find_tile_touch_target_meets_48dp_minimum',
-      (tester) async {
-        // Taller viewport: sheet now has 5 tiles + ThemeSelector + stepper.
-        tester.view.physicalSize = const Size(800, 1200);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        // NFR-02: touch target height >= 48dp.
-        await tester.pumpWidget(_buildAppWithFind(onFind: () {}));
-        await _openSheet(tester);
-
-        final tileFinder = find.ancestor(
-          of: find.text('Find / Replace'),
-          matching: find.byType(ListTile),
-        );
-        expect(tileFinder, findsOneWidget);
-
-        final rect = tester.getRect(tileFinder);
-        expect(
-          rect.height,
-          greaterThanOrEqualTo(48.0),
-          reason: 'ListTile tap-target height must be >= 48dp (NFR-02)',
-        );
-        expect(
-          rect.width,
-          greaterThan(0),
-          reason: 'ListTile must have positive width',
+          reason: 'No Find/Replace tile means no Icons.search in the popover',
         );
       },
     );
@@ -689,54 +582,19 @@ void main() {
     testWidgets(
       'given_additive_signature_when_openMenuSheet_called_without_onFind_then_compiles_and_opens',
       (tester) async {
-        // NFR-04 backward-compat: existing call sites compile and still open
-        // the sheet normally; no Find tile rendered.
+        // Backward-compat: existing call sites compile without onFind.
         await tester.pumpWidget(_buildApp());
-        await _openSheet(tester);
+        await _openPopover(tester);
 
-        // Sheet opened normally
         expect(
-          find.byType(ThemeSelector),
+          find.byType(OverflowPopover),
           findsOneWidget,
-          reason:
-              'openMenuSheet(context) without onFind must still open normally '
-              '(additive signature, NFR-04)',
+          reason: 'openMenuSheet without onFind must still open the popover',
         );
         expect(
           find.text('Find / Replace'),
           findsNothing,
           reason: 'No Find tile when onFind not provided',
-        );
-      },
-    );
-
-    testWidgets(
-      'given_it_locale_and_onFind_nonnull_when_sheet_opened_then_Find_tile_label_is_italian',
-      (tester) async {
-        // Taller viewport: sheet now has 5 tiles + ThemeSelector + stepper.
-        tester.view.physicalSize = const Size(800, 1200);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-
-        // FR-17: IT locale tile title matches app_it.arb menuFind value
-        // "Trova / Sostituisci".
-        await tester.pumpWidget(
-          _buildAppWithFind(onFind: () {}, locale: const Locale('it')),
-        );
-        await _openSheet(tester);
-
-        expect(
-          find.text('Trova / Sostituisci'),
-          findsOneWidget,
-          reason:
-              'menuFind ARB key must resolve to "Trova / Sostituisci" in it locale '
-              '(FR-17)',
-        );
-        expect(
-          find.text('Find / Replace'),
-          findsNothing,
-          reason: 'English label must not appear in it locale',
         );
       },
     );

@@ -32,9 +32,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:buffer/domain/settings/app_settings.dart';
-import 'package:buffer/domain/settings/settings_repository.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
+import 'package:foglietto/domain/settings/settings_repository.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Fake repo whose load() always throws — used for EC-04 test.

@@ -2,7 +2,7 @@
 // Const constructors require the generated freezed code to exist; at the RED
 // phase the generated part file is absent, so const is intentionally deferred.
 
-import 'package:buffer/domain/buffer/buffer_state.dart';
+import 'package:foglietto/domain/buffer/buffer_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

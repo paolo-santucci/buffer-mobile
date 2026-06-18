@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:buffer/domain/recovery/recovery_repository.dart';
+import 'package:foglietto/domain/recovery/recovery_repository.dart';
 
 /// Use case: save the current buffer text to the recovery store.
 ///

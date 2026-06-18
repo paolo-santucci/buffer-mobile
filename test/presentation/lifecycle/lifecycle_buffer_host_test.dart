@@ -26,15 +26,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/domain/buffer/buffer_notifier_impl.dart';
-import 'package:buffer/domain/recovery/recovery_note.dart';
-import 'package:buffer/domain/recovery/recovery_repository.dart';
-import 'package:buffer/domain/recovery/save_buffer_to_recovery.dart';
-import 'package:buffer/domain/buffer/buffer_provider.dart';
-import 'package:buffer/domain/settings/app_settings.dart';
-import 'package:buffer/presentation/editor/share_providers.dart';
-import 'package:buffer/presentation/lifecycle/lifecycle_buffer_host.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
+import 'package:foglietto/domain/buffer/buffer_notifier_impl.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
+import 'package:foglietto/domain/recovery/recovery_repository.dart';
+import 'package:foglietto/domain/recovery/save_buffer_to_recovery.dart';
+import 'package:foglietto/domain/buffer/buffer_provider.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
+import 'package:foglietto/presentation/editor/share_providers.dart';
+import 'package:foglietto/presentation/lifecycle/lifecycle_buffer_host.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Test doubles

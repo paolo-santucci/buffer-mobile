@@ -20,11 +20,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:buffer/infrastructure/share/share_intent_service.dart';
-import 'package:buffer/main.dart' show bootstrap;
-import 'package:buffer/presentation/app.dart';
-import 'package:buffer/presentation/editor/share_providers.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
+import 'package:foglietto/infrastructure/share/share_intent_service.dart';
+import 'package:foglietto/main.dart' show bootstrap;
+import 'package:foglietto/presentation/app.dart';
+import 'package:foglietto/presentation/editor/share_providers.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Recording fake — tracks call order for the ordering-assertion test.

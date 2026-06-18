@@ -1,201 +1,65 @@
-// MenuSheet widget + openMenuSheet helper (TASK-09)
-// Extended in TASK-07 (M7): FontSizeStepper hosted between ThemeSelector and
-// the first Divider (spec §4.1, FR-M7-06).
-// Extended in TASK-05 (SP-20260615): Find / Replace tile + onFind injection
-// (FR-08, FR-17, NFR-02, NFR-04, contract C3).
+// menu_sheet.dart — public entry point for the overflow menu (TASK-07)
 //
-// Spec refs: FR-M6-08, FR-M6-23, OQ-M6-02, §Mobile-adaptation
-//            FR-M7-06 (FontSizeStepper embed)
-//            FR-08, FR-17, NFR-02, NFR-04 (Find / Replace tile, TASK-05)
-// Canon ref: .claude/docs/canon/ui-design-bible.md §Mobile-adaptation
-//            .claude/docs/canon/ui-design-bible.md §5 "Font-size selector"
-//            .claude/docs/canon/ui-design-bible.md §7 "Menu sheet"
-//            .claude/docs/canon/ui-design-bible.md §Components.2 (chrome menu tiles)
-//            .claude/docs/canon/ui-design-bible.md §Iconography (edit-find-symbolic)
+// Formerly displayed the menu as a showModalBottomSheet. Now delegates to
+// OverflowPopover (an anchored glass popover bubble, FR-04).
 //
-// The MenuSheet is the SOLE navigation entry point for the app (FR-M6-23).
-// It is displayed via showModalBottomSheet and contains:
-//   - ThemeSelector (canon §Components §6)
-//   - FontSizeStepper (FR-M7-06, canon §5) — placed after ThemeSelector,
-//     before the Divider, mirroring the ThemeSelector Padding embed
-//   - Find / Replace tile — ONLY when onFind != null (contract C3, FR-08)
-//   - Preferences tile → /settings
-//   - About tile       → /about
-//   - Recovery tile    → /recovery
+// Spec refs: FR-04, FR-05, FR-06, FR-19
+// Plan refs: TASK-07 (Wave 2), sp-20260617-liquid-glass-floating-chrome-plan.md
 //
-// Labels: AppLocalizations.of(context)! — menuFind / menuPreferences / menuAbout
-//         / menuRecovery.
+// Public API:
+//   openMenuSheet(context, {anchorLink, onFind}) → VoidCallback
 //
-// <!-- CANON GAP: OQ-M6-12 — ui-design-bible.md has no bottom-sheet container
-//      anatomy (padding, corner radius, drag handle, elevation). Layout below
-//      uses Material showModalBottomSheet defaults. Flag for upstream review if
-//      fidelity gaps are reported. -->
+// Signature is backward-compatible with existing call sites in
+// buffer_screen.dart (TASK-11 will supply a real anchorLink from the pill).
+// When anchorLink is null, a transient LayerLink is created and the popover
+// appears anchored to top-left (no target registered). TASK-11 wires the real
+// pill CompositedTransformTarget link.
 //
-// <!-- CANON GAP: ui-design-bible.md §Components.2 documents the chrome menu
-//      tile pattern but does not name a specific icon for the Find entry.
-//      Icons.search is used as the canonical Material mapping for the GNOME
-//      edit-find-symbolic icon (spec §Iconography). Flag for upstream bible
-//      amendment if a different mapping is specified. -->
+// The onFind parameter is accepted for signature compat but is NOT passed to
+// the popover (Find/Replace tile is absent from the popover per FR-05 — Find
+// moved to the bottom toolbar). Existing callers that inject onFind compile
+// without change; the callback is silently dropped.
+//
+// <!-- CANON GAP: anchored popover bubble anatomy + outside-tap-dismiss rule
+//      See overflow_popover.dart for the full canon gap note. -->
 
 import 'package:flutter/material.dart';
 
-import 'package:buffer/l10n/app_localizations.dart';
-import 'package:buffer/presentation/shell/theme_selector.dart';
-import 'package:buffer/presentation/typography/font_size_stepper.dart';
+import 'package:foglietto/presentation/shell/overflow_popover.dart';
 
 // ---------------------------------------------------------------------------
-// openMenuSheet — public entry point called by TASK-12 chrome affordance
+// openMenuSheet — backward-compatible public entry point
 // ---------------------------------------------------------------------------
 
-/// Opens the main menu bottom sheet.
+/// Opens the overflow menu as a floating popover bubble.
 ///
-/// This is the single call-site contract. `BufferScreen` calls this from the
-/// chrome menu affordance tap handler.
+/// Delegates to [openOverflowPopover]. Returns a [VoidCallback] that
+/// programmatically dismisses the popover.
 ///
-/// The sheet is not a named route — it is a `showModalBottomSheet` overlay
-/// (§5.1-h, FR-M6-23).
+/// ### Backward-compatibility
+/// This function keeps the same call-site shape as the former
+/// `showModalBottomSheet` entrypoint so that `buffer_screen.dart` continues
+/// to compile without changes before TASK-11 wires the pill.
 ///
-/// [onFind] is an optional callback injected by the caller (contract C3,
-/// FR-08, TASK-05). When non-null a "Find / Replace" [ListTile] is rendered
-/// in the sheet; when null (the default) the tile is absent. Existing call
-/// sites that omit [onFind] are unaffected — the parameter is additive
-/// (NFR-04).
-Future<void> openMenuSheet(BuildContext context, {VoidCallback? onFind}) {
-  return showModalBottomSheet<void>(
-    context: context,
-    // useRootNavigator: false — sheet navigates within the same Navigator
-    // so that Navigator.pushNamed from within the sheet routes to the app's
-    // named route table, not a separate modal navigator.
-    useRootNavigator: false,
-    builder: (sheetContext) =>
-        _MenuSheetContent(hostContext: context, onFind: onFind),
-  );
-}
+/// - [anchorLink] — optional; the [LayerLink] attached to the pill's
+///   [CompositedTransformTarget]. Defaults to an unregistered [LayerLink]
+///   (popover anchors to the screen origin) until TASK-11 supplies the real
+///   pill link.
+/// - [onFind] — accepted for signature compat; **not used** (Find/Replace
+///   tile is absent from the popover per FR-05). Existing callers compile
+///   unchanged; the callback is dropped.
+VoidCallback openMenuSheet(
+  BuildContext context, {
+  LayerLink? anchorLink,
+  // Accepted for signature compat with existing call sites (buffer_screen.dart).
+  // NOT forwarded — Find/Replace tile is absent from the popover per FR-05.
+  // ignore: avoid_unused_constructor_parameters
+  VoidCallback? onFind,
+}) {
+  // If no anchorLink is provided, create a transient one.
+  // The CompositedTransformFollower will render at the screen origin until
+  // TASK-11 wires a real pill CompositedTransformTarget.
+  final link = anchorLink ?? LayerLink();
 
-// ---------------------------------------------------------------------------
-// _MenuSheetContent — internal widget rendered inside the bottom sheet
-// ---------------------------------------------------------------------------
-
-/// The content widget rendered inside `showModalBottomSheet`.
-///
-/// Hosts:
-///   - [ThemeSelector] (canon §Components §6)
-///   - [FontSizeStepper] (FR-M7-06, canon §5)
-///   - Find / Replace tile — only when [onFind] != null (contract C3, FR-08)
-///   - Preferences tile → Navigator.pushNamed '/settings'
-///   - About tile       → Navigator.pushNamed '/about'
-///   - Recovery tile    → Navigator.pushNamed '/recovery'
-class _MenuSheetContent extends StatelessWidget {
-  const _MenuSheetContent({required this.hostContext, this.onFind});
-
-  /// The BuildContext of the screen that opened the sheet.
-  ///
-  /// Navigation calls go through [hostContext] so that named routes resolve
-  /// via the app's root Navigator rather than the sheet's ephemeral context.
-  final BuildContext hostContext;
-
-  /// Optional callback injected by the caller (contract C3, FR-08).
-  ///
-  /// When non-null a "Find / Replace" [ListTile] is rendered after the
-  /// [Divider] and before Preferences. The tile pops the sheet then invokes
-  /// this callback — it does NOT call any provider or `startSearch` directly
-  /// (single-path discipline; the actual find dispatch lives in
-  /// `buffer_screen.dart`, TASK-07).
-  final VoidCallback? onFind;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ---------------------------------------------------------------
-          // ThemeSelector — three 44dp swatches (canon §Components §6)
-          // ---------------------------------------------------------------
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 12.0,
-            ),
-            child: const ThemeSelector(),
-          ),
-
-          // ---------------------------------------------------------------
-          // FontSizeStepper — decrease / {n}pt / increase (FR-M7-06)
-          // Positioned after ThemeSelector, before the Divider, mirroring
-          // the ThemeSelector Padding embed pattern (spec §4.1, canon §5).
-          // ---------------------------------------------------------------
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-            child: FontSizeStepper(),
-          ),
-
-          const Divider(height: 1),
-
-          // ---------------------------------------------------------------
-          // Find / Replace tile — shown ONLY when onFind != null (C3, FR-08)
-          //
-          // Placement: first tile after the Divider, before Preferences.
-          // Icon: Icons.search (GNOME edit-find-symbolic → Material mapping).
-          // Touch target: ListTile default min-height = 56dp >= 48dp (NFR-02).
-          //
-          // Single-path discipline (NFR-04): this tile ONLY pops the sheet
-          // and invokes the injected [onFind] callback. It does NOT call any
-          // provider or startSearch directly — the actual OpenFindIntent
-          // dispatch lives in buffer_screen.dart (TASK-07).
-          // ---------------------------------------------------------------
-          if (onFind != null)
-            ListTile(
-              leading: const Icon(Icons.search),
-              title: Text(l10n.menuFind),
-              onTap: () {
-                Navigator.of(context).pop();
-                onFind!();
-              },
-            ),
-
-          // ---------------------------------------------------------------
-          // Preferences tile → /settings
-          // ---------------------------------------------------------------
-          ListTile(
-            leading: const Icon(Icons.settings_outlined),
-            title: Text(l10n.menuPreferences),
-            onTap: () {
-              // Pop the sheet first, then navigate so the route animation
-              // is not stacked on top of the sheet dismiss.
-              Navigator.of(context).pop();
-              Navigator.of(hostContext).pushNamed('/settings');
-            },
-          ),
-
-          // ---------------------------------------------------------------
-          // About tile → /about
-          // ---------------------------------------------------------------
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: Text(l10n.menuAbout),
-            onTap: () {
-              Navigator.of(context).pop();
-              Navigator.of(hostContext).pushNamed('/about');
-            },
-          ),
-
-          // ---------------------------------------------------------------
-          // Recovery tile → /recovery
-          // ---------------------------------------------------------------
-          ListTile(
-            leading: const Icon(Icons.history_outlined),
-            title: Text(l10n.menuRecovery),
-            onTap: () {
-              Navigator.of(context).pop();
-              Navigator.of(hostContext).pushNamed('/recovery');
-            },
-          ),
-        ],
-      ),
-    );
-  }
+  return openOverflowPopover(context, anchorLink: link);
 }

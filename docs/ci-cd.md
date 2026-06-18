@@ -4,7 +4,7 @@ This project ships three GitHub Actions workflows under `.github/workflows/`. Th
 document explains what each one does, the secrets they need, how to obtain and add
 those secrets, and how to cut a release.
 
-> App identity: bundle / application id `com.paolosantucci.buffer` on both platforms.
+> App identity: bundle / application id `com.paolosantucci.foglietto` on both platforms.
 > Flutter is pinned in every workflow to **3.44.2** (your local version).
 
 ---
@@ -59,12 +59,12 @@ base64 -w0 buffer-release.keystore
 
 Add these secrets:
 
-| Secret | Value |
-|--------|-------|
-| `KEYSTORE_BASE64` | output of the `base64 -w0` command above |
-| `KEYSTORE_STORE_PASSWORD` | the keystore (store) password you chose |
-| `KEYSTORE_KEY_PASSWORD` | the key password you chose |
-| `KEYSTORE_KEY_ALIAS` | the alias (e.g. `buffer`) |
+| Secret                    | Value                                    |
+| ------------------------- | ---------------------------------------- |
+| `KEYSTORE_BASE64`         | output of the `base64 -w0` command above |
+| `KEYSTORE_STORE_PASSWORD` | the keystore (store) password you chose  |
+| `KEYSTORE_KEY_PASSWORD`   | the key password you chose               |
+| `KEYSTORE_KEY_ALIAS`      | the alias (e.g. `buffer`)                |
 
 > Local note: `android/key.properties`, `*.keystore`, `*.jks` are already gitignored.
 > For a local release build, create `android/key.properties` by hand with
@@ -78,16 +78,16 @@ You have no Mac locally — all of this is consumed on the CI macOS runner. You 
 need an **Apple Developer Program** membership ($99/yr) to obtain the materials. The
 items below come from the Apple Developer portal and App Store Connect.
 
-| Secret | What it is | Where to get it |
-|--------|-----------|-----------------|
-| `IOS_DIST_CERT_P12_BASE64` | Apple **Distribution** certificate + private key, as a base64 `.p12` | See "Distribution certificate" below |
-| `IOS_DIST_CERT_PASSWORD` | password you set when exporting the `.p12` | you choose it at export |
-| `IOS_PROVISIONING_PROFILE_BASE64` | base64 of an **App Store** provisioning profile for `com.paolosantucci.buffer` | Developer portal → Profiles → Distribution → App Store |
-| `IOS_KEYCHAIN_PASSWORD` | an arbitrary password for the throwaway CI keychain | invent any strong string |
-| `IOS_DEVELOPMENT_TEAM_ID` | your 10-char Apple Team ID | Apple Developer → Membership details |
-| `APP_STORE_CONNECT_API_KEY_BASE64` | base64 of the `.p8` App Store Connect API key | App Store Connect → Users and Access → Integrations → App Store Connect API |
-| `APP_STORE_CONNECT_API_KEY_ID` | the key's ID (e.g. `2X9ABC3DEF`) | shown next to the key |
-| `APP_STORE_CONNECT_API_ISSUER_ID` | the issuer UUID for the API keys | top of the same API keys page |
+| Secret                             | What it is                                                                        | Where to get it                                                             |
+| ---------------------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `IOS_DIST_CERT_P12_BASE64`         | Apple **Distribution** certificate + private key, as a base64 `.p12`              | See "Distribution certificate" below                                        |
+| `IOS_DIST_CERT_PASSWORD`           | password you set when exporting the `.p12`                                        | you choose it at export                                                     |
+| `IOS_PROVISIONING_PROFILE_BASE64`  | base64 of an **App Store** provisioning profile for `com.paolosantucci.foglietto` | Developer portal → Profiles → Distribution → App Store                      |
+| `IOS_KEYCHAIN_PASSWORD`            | an arbitrary password for the throwaway CI keychain                               | invent any strong string                                                    |
+| `IOS_DEVELOPMENT_TEAM_ID`          | your 10-char Apple Team ID                                                        | Apple Developer → Membership details                                        |
+| `APP_STORE_CONNECT_API_KEY_BASE64` | base64 of the `.p8` App Store Connect API key                                     | App Store Connect → Users and Access → Integrations → App Store Connect API |
+| `APP_STORE_CONNECT_API_KEY_ID`     | the key's ID (e.g. `2X9ABC3DEF`)                                                  | shown next to the key                                                       |
+| `APP_STORE_CONNECT_API_ISSUER_ID`  | the issuer UUID for the API keys                                                  | top of the same API keys page                                               |
 
 **Distribution certificate → `.p12` (no Mac):** the classic Keychain Access export
 needs a Mac. Without one, the simplest path is **fastlane** run on the macOS runner
@@ -119,7 +119,7 @@ base64 -w0 profile.mobileprovision   # → IOS_PROVISIONING_PROFILE_BASE64
 base64 -w0 AuthKey_XXXXXXXXXX.p8      # → APP_STORE_CONNECT_API_KEY_BASE64
 ```
 
-> The provisioning profile's bundle id **must** be `com.paolosantucci.buffer` and it
+> The provisioning profile's bundle id **must** be `com.paolosantucci.foglietto` and it
 > must reference the same Distribution certificate you put in `IOS_DIST_CERT_P12_BASE64`.
 > The export template at `ios/ExportOptions.plist.template` already pins that bundle id.
 
@@ -143,7 +143,7 @@ base64 -w0 AuthKey_XXXXXXXXXX.p8      # → APP_STORE_CONNECT_API_KEY_BASE64
    `+N` build number must strictly increase for each Play upload).
 2. Ensure the four Android secrets (§2a) are set so the AAB is release-signed.
 3. Push to `main` (or a `v*` tag) → download the `release-aab` artifact
-   (`com.paolosantucci.buffer-release.aab`).
+   (`com.paolosantucci.foglietto-release.aab`).
 4. Upload that AAB to the Play Console (Internal testing → … → Production).
 
 ### iOS (TestFlight)
@@ -188,7 +188,7 @@ generated files or formatting drifted — run the three commands above and commi
 
 ## 6. Turning coverage into a hard gate (later)
 
-Right now `quality.yml` only **prints** line coverage. Once you know buffer's real
+Right now `quality.yml` only **prints** line coverage. Once you know Foglietto's real
 number and want to enforce a floor, replace the "Coverage report" step's final lines
 with a threshold check, e.g.:
 

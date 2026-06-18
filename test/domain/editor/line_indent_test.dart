@@ -5,7 +5,7 @@
 // Convention: given_<context>_when_<action>_then_<outcome>
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:buffer/domain/editor/line_indent.dart';
+import 'package:foglietto/domain/editor/line_indent.dart';
 
 void main() {
   // ─── HIGHEST-RISK: offset-drift round-trip (R-10, EC-15, NFR-03) ───

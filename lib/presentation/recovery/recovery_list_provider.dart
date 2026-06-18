@@ -16,8 +16,8 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:buffer/domain/recovery/recovery_note.dart';
-import 'package:buffer/presentation/editor/share_providers.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
+import 'package:foglietto/presentation/editor/share_providers.dart';
 
 /// Non-auto-disposed provider for the recovery list screen state.
 ///

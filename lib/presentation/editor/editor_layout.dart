@@ -57,6 +57,27 @@ const double _kCharMarginMax = 38.0;
 const double kChromeMenuZoneHeight = 48.0;
 
 // ---------------------------------------------------------------------------
+// G5 — chrome-spacing gap constants (TASK-01)
+//
+// Three independently named constants so per-axis tuning is safe.
+// Each traces to spec §TASK-01 / ui-design-bible.md §Spacing-layout "chrome gaps".
+// ---------------------------------------------------------------------------
+
+/// Gap added above the first text row, between the menu/share pill and the
+/// editor text area (spec §TASK-01 kChromeTopGap).
+const double kChromeTopGap = 16.0;
+
+/// Gap added below the last visible text row, between the editor text and the
+/// bottom toolbar (spec §TASK-01 kChromeBottomGap).
+/// Appears as an explicit term inside [editorBottomInset]'s `max(...)` —
+/// never summed onto the result (anti-additive contract, NFR-02).
+const double kChromeBottomGap = 16.0;
+
+/// Horizontal gap between the editor text column and the chrome overlays
+/// (spec §TASK-01 kChromeSideMargin).
+const double kChromeSideMargin = 16.0;
+
+// ---------------------------------------------------------------------------
 // Functions
 // ---------------------------------------------------------------------------
 
@@ -96,15 +117,59 @@ double editorHorizontalMargin(double fontSizePt) {
   return raw;
 }
 
+/// Static bottom inset (logical px) for the editor's OUTER `Padding` (spec FR-22).
+///
+/// Guarantees the last visible text row clears whichever of the bottom-chrome
+/// zone, the breathing gap, the responsive vertical margin, or the software
+/// keyboard is tallest — then adds the system bottom safe-area:
+///
+/// ```
+/// editorBottomInset(width, keyboardInset, safeAreaBottom)
+///   = max( kChromeMenuZoneHeight, kChromeBottomGap,
+///          verticalMargin(width), keyboardInset )
+///     + safeAreaBottom
+/// ```
+///
+/// [kChromeBottomGap] is an explicit term inside the `max(...)` — never summed
+/// onto the result. In practice it is dominated by [kChromeMenuZoneHeight] (48 > 16),
+/// but it has an auditable home here so per-axis tuning is safe (TASK-01).
+///
+/// Anti-additive contract: when the keyboard dominates the result is
+/// `keyboardInset + safeAreaBottom`, never `kChromeMenuZoneHeight + keyboardInset
+/// + safeAreaBottom`. The `max` picks one dominant value; they are never summed.
+///
+/// Observable contract:
+///   - `result >= kChromeMenuZoneHeight + safeAreaBottom` always (floor guarantee).
+///   - `result >= kChromeBottomGap + safeAreaBottom` always (gap floor).
+///   - `result >= verticalMargin(width) + safeAreaBottom` always (responsive floor).
+///   - Monotonic non-decreasing in both [keyboardInset] and [safeAreaBottom].
+///   - `keyboardInset == 0` still reserves at least [kChromeMenuZoneHeight].
+///   - Pure: no side effects; repeated calls with identical args return identical results.
+///
+/// Applying this inset to the editor's `Padding` widget is Wave 3 (TASK-11).
+double editorBottomInset(
+  double width,
+  double keyboardInset,
+  double safeAreaBottom,
+) {
+  return max(
+        max(kChromeMenuZoneHeight, kChromeBottomGap),
+        max(verticalMargin(width), keyboardInset),
+      ) +
+      safeAreaBottom;
+}
+
 /// Static top inset (logical px) for the editor's OUTER `Padding` (spec §5.1 C2b).
 ///
 /// Guarantees the first visible text row clears the M6 chrome menu button
 /// (which sits at `top:0`) plus the system top safe-area, and is never less
-/// than the M7 responsive vertical margin (FR-06b floor):
+/// than the M7 responsive vertical margin (FR-06b floor), plus an explicit
+/// breathing gap [kChromeTopGap] above the text:
 ///
 /// ```
 /// editorTopInset(width, safeAreaTop)
 ///   = max( kChromeMenuZoneHeight + safeAreaTop , verticalMargin(width) )
+///     + kChromeTopGap
 /// ```
 ///
 /// Intentionally does NOT depend on chrome visibility (OQ-16 decision): the
@@ -112,12 +177,12 @@ double editorHorizontalMargin(double fontSizePt) {
 /// M6 chrome auto-hides/re-shows (stable baseline over reclaimed space).
 ///
 /// Observable contract:
-///   - `result >= verticalMargin(width)` always (FR-06b floor).
-///   - `result >= kChromeMenuZoneHeight + safeAreaTop` always (NFR-10).
-///   - Monotonic non-decreasing in [safeAreaTop].
-///   - `safeAreaTop == 0` still reserves at least [kChromeMenuZoneHeight].
+///   - `result >= verticalMargin(width) + kChromeTopGap` always (FR-06b floor).
+///   - `result >= kChromeMenuZoneHeight + safeAreaTop + kChromeTopGap` always (NFR-10).
+///   - Monotonic strictly increasing in [safeAreaTop] (bump is additive).
+///   - `safeAreaTop == 0` still reserves at least `kChromeMenuZoneHeight + kChromeTopGap`.
 double editorTopInset(double width, double safeAreaTop) {
   final chromeFloor = kChromeMenuZoneHeight + safeAreaTop;
   final m7Vertical = verticalMargin(width);
-  return max(chromeFloor, m7Vertical);
+  return max(chromeFloor, m7Vertical) + kChromeTopGap;
 }

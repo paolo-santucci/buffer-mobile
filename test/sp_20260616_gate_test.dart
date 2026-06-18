@@ -344,32 +344,30 @@ void main() {
   );
 
   // ────────────────────────────────────────────────────────────────────────────
-  // 4. ShareOverlay anatomy (FR-01, FR-03, §5.1.5)
+  // 4. ShareOverlay anatomy — RETIRED (SP-20260617 TASK-11)
   //
-  // share_overlay.dart must contain all required tokens:
-  //   chromeVisibilityProvider, kChromeMenuZoneHeight, left: 0, bottomRight,
-  //   onShareTap, enabled
-  // And must NOT contain a `Positioned(` with `right:` (it anchors top-LEFT).
+  // share_overlay.dart was deleted in Wave 1 (TASK-06). The twin-overlay
+  // model (ChromeOverlay + ShareOverlay) was superseded by ChromePill, which
+  // owns both share and overflow buttons in a single top-right pill.
+  //
+  // Old anatomy invariants (chromeVisibilityProvider, kChromeMenuZoneHeight,
+  // left:0, bottomRight, onShareTap, enabled) are now enforced by:
+  //   • chrome_pill_test.dart — ChromePill anatomy gate (TASK-06 Wave 1)
+  //   • buffer_screen_test.dart group 30 — ChromePill visibility + share wiring
+  //   • buffer_screen_share_idle_test.dart — share button enabled/disabled gate
+  //
+  // This gate retains its red fixture (which still proves the scan logic) but
+  // replaces the green assertion with a tombstone check that confirms
+  // share_overlay.dart is ABSENT (enforcing the Wave 1 deletion invariant).
   // ────────────────────────────────────────────────────────────────────────────
 
-  group(
-    'ShareOverlay anatomy — required tokens present, right: absent (FR-01, FR-03, §5.1.5)',
-    () {
-      const overlayRelPath = 'lib/presentation/shell/share_overlay.dart';
-
-      const requiredTokens = [
-        'chromeVisibilityProvider',
-        'kChromeMenuZoneHeight',
-        'left: 0',
-        'bottomRight',
-        'onShareTap',
-        'enabled',
-      ];
-
-      // ── red fixture: anatomy missing required tokens ───────────────────────
-      group('fixture — broken overlay missing required tokens', () {
-        // A minimal broken source that lacks the required anatomy tokens.
-        const brokenSource = '''
+  group('Gate 4 (retired): share_overlay.dart ABSENT + ChromePill present '
+      '(TASK-11 Wave-1 deletion invariant)', () {
+    // ── red fixture: kept to preserve scan-logic proof ─────────────────────
+    group('fixture — proof that anatomy tokens were scannable', () {
+      // The tokens that the old share_overlay.dart was required to contain.
+      // This fixture proves the scan logic would have fired on a minimal stub.
+      const brokenSource = '''
 class ShareOverlay extends ConsumerWidget {
   const ShareOverlay({super.key});
 
@@ -380,84 +378,51 @@ class ShareOverlay extends ConsumerWidget {
 }
 ''';
 
-        for (final token in requiredTokens) {
-          test('should_FAIL_anatomy_scan_for_missing_token_"$token"', () {
-            expect(
-              brokenSource.contains(token),
-              isFalse,
-              reason: 'Broken fixture must not contain "$token".',
-            );
-          });
-        }
-
-        test('should_DETECT_forbidden_right_positioning_in_broken_fixture', () {
-          // The broken source has `right: 0` inside Positioned — must be detected.
-          expect(
-            brokenSource.contains('right: 0'),
-            isTrue,
-            reason:
-                'Broken fixture must contain a right: positioning to validate '
-                'the absence check on the real file.',
-          );
-        });
+      test('fixture_missing_chromeVisibilityProvider_proves_scan_logic', () {
+        // Proves the anatomy scan would have caught a skeleton that lacked
+        // chromeVisibilityProvider. Logic is now moot but kept for audit trail.
+        expect(
+          brokenSource.contains('chromeVisibilityProvider'),
+          isFalse,
+          reason:
+              'Broken fixture must not contain the required token — '
+              'proves the old scan would have fired.',
+        );
       });
+    });
 
-      // ── green: real share_overlay.dart ───────────────────────────────────────
-      late String overlayContent;
+    // ── green: share_overlay.dart must be ABSENT (Wave 1 deletion gate) ────
+    test('should_NOT_exist_share_overlay_dart (deleted in Wave 1 TASK-06)', () {
+      const deletedPath = 'lib/presentation/shell/share_overlay.dart';
+      final file = File('$root/$deletedPath');
+      expect(
+        file.existsSync(),
+        isFalse,
+        reason:
+            '$deletedPath must NOT exist. It was deleted in Wave 1 '
+            '(TASK-06) when the twin-overlay model was replaced by '
+            'ChromePill. If this file reappears it is a regression. '
+            'Share anatomy is now covered by chrome_pill.dart.',
+      );
+    });
 
-      setUpAll(() {
-        final file = File('$root/$overlayRelPath');
+    // ── green: chrome_pill.dart must be PRESENT (replacement coverage) ─────
+    test(
+      'should_exist_chrome_pill_dart (Wave 1 replacement for share_overlay)',
+      () {
+        const pillPath = 'lib/presentation/shell/chrome_pill.dart';
+        final file = File('$root/$pillPath');
         expect(
           file.existsSync(),
           isTrue,
-          reason: '$overlayRelPath must exist (TASK-07).',
-        );
-        overlayContent = file.readAsStringSync();
-      });
-
-      for (final token in requiredTokens) {
-        test('should_contain_required_token_"$token"', () {
-          expect(
-            overlayContent.contains(token),
-            isTrue,
-            reason:
-                '$overlayRelPath must contain "$token" (FR-01, FR-03, §5.1.5). '
-                'The ShareOverlay anatomy is specified in the plan §5.1.5.',
-          );
-        });
-      }
-
-      test('should_NOT_contain_Positioned_with_right_parameter', () {
-        // The overlay must anchor at LEFT:0 (delta 1 from ChromeOverlay which
-        // anchors at right:0). Any `right:` inside a Positioned call in this file
-        // would mean the button is on the wrong side (FR-01, §5.1.5 delta 1).
-        //
-        // Strategy: scan non-comment lines for the pattern `right:` — a Positioned
-        // argument. The token `bottomRight` (borderRadius corner) is intentionally
-        // present and is NOT a Positioned argument; it does not match `right:`.
-        final lines = overlayContent.split('\n');
-        final positionedRightLines = <String>[];
-        for (var i = 0; i < lines.length; i++) {
-          final trimmed = lines[i].trimLeft();
-          if (trimmed.startsWith('//') || trimmed.startsWith('*')) continue;
-          // Match `right:` as a named argument — word boundary before `right`
-          // and `:` immediately following. This catches `right: 0` but not
-          // `bottomRight` (which has a word character before `Right`).
-          if (RegExp(r'\bright:').hasMatch(lines[i])) {
-            positionedRightLines.add('line ${i + 1}: ${lines[i].trim()}');
-          }
-        }
-        expect(
-          positionedRightLines,
-          isEmpty,
           reason:
-              '$overlayRelPath must NOT contain `right:` as a named parameter '
-              '(ShareOverlay anchors at left:0, not right:0 — FR-01, §5.1.5 delta 1).\n'
-              'Offenders:\n${positionedRightLines.join('\n')}',
+              '$pillPath must exist. It is the Wave 1 replacement for the '
+              'deleted ShareOverlay + ChromeOverlay twin-overlay model '
+              '(TASK-06, FR-01, FR-03).',
         );
-      });
-    },
-  );
+      },
+    );
+  });
 
   // ────────────────────────────────────────────────────────────────────────────
   // 5. Orphan-verb removal (FR-14, EC-13)

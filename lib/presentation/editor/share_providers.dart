@@ -9,14 +9,14 @@
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:buffer/domain/recovery/recovery_repository.dart';
-import 'package:buffer/domain/recovery/save_buffer_to_recovery.dart';
-import 'package:buffer/infrastructure/paths/sandbox_path_provider.dart';
-import 'package:buffer/infrastructure/recovery/file_recovery_repository.dart';
-import 'package:buffer/infrastructure/share/receive_sharing_intent_service.dart';
-import 'package:buffer/infrastructure/share/share_intent_service.dart';
-import 'package:buffer/infrastructure/share/share_plus_service.dart';
-import 'package:buffer/infrastructure/share/share_target_service.dart';
+import 'package:foglietto/domain/recovery/recovery_repository.dart';
+import 'package:foglietto/domain/recovery/save_buffer_to_recovery.dart';
+import 'package:foglietto/infrastructure/paths/sandbox_path_provider.dart';
+import 'package:foglietto/infrastructure/recovery/file_recovery_repository.dart';
+import 'package:foglietto/infrastructure/share/receive_sharing_intent_service.dart';
+import 'package:foglietto/infrastructure/share/share_intent_service.dart';
+import 'package:foglietto/infrastructure/share/share_plus_service.dart';
+import 'package:foglietto/infrastructure/share/share_target_service.dart';
 
 // ---------------------------------------------------------------------------
 // 1. initialSharedTextProvider — throws until overridden at the ProviderScope

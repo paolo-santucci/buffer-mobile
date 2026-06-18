@@ -7,7 +7,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/presentation/shell/toast_controller.dart';
+import 'package:foglietto/presentation/shell/toast_controller.dart';
 
 void main() {
   // ---------------------------------------------------------------------------

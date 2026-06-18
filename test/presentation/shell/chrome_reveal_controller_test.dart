@@ -16,7 +16,7 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/presentation/shell/chrome_reveal_controller.dart';
+import 'package:foglietto/presentation/shell/chrome_reveal_controller.dart';
 
 void main() {
   // ---------------------------------------------------------------------------

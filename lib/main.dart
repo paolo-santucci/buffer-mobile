@@ -35,13 +35,13 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:buffer/infrastructure/paths/sandbox_path_provider.dart';
-import 'package:buffer/infrastructure/recovery/file_recovery_repository.dart';
-import 'package:buffer/infrastructure/share/receive_sharing_intent_service.dart';
-import 'package:buffer/infrastructure/share/share_intent_service.dart';
-import 'package:buffer/presentation/app.dart';
-import 'package:buffer/presentation/editor/share_providers.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
+import 'package:foglietto/infrastructure/paths/sandbox_path_provider.dart';
+import 'package:foglietto/infrastructure/recovery/file_recovery_repository.dart';
+import 'package:foglietto/infrastructure/share/receive_sharing_intent_service.dart';
+import 'package:foglietto/infrastructure/share/share_intent_service.dart';
+import 'package:foglietto/presentation/app.dart';
+import 'package:foglietto/presentation/editor/share_providers.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
 
 /// Awaits [SharedPreferences.getInstance()] and [service.initialSharedText()]
 /// in parallel and returns both resolved values as a record.

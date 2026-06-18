@@ -16,7 +16,7 @@
 //   Buffer gschema before TASK-13 (SharedPreferencesSettingsRepository) is
 //   committed. A mismatch means stored values are never found on-device. -->
 
-import 'package:buffer/domain/settings/app_settings.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

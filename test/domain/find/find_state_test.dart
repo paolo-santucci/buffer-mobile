@@ -1,6 +1,6 @@
 // ignore_for_file: prefer_const_constructors
-import 'package:buffer/domain/find/find_engine.dart';
-import 'package:buffer/domain/find/find_state.dart';
+import 'package:foglietto/domain/find/find_engine.dart';
+import 'package:foglietto/domain/find/find_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

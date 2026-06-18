@@ -30,7 +30,7 @@
 
 import 'dart:io';
 
-import 'package:buffer/infrastructure/paths/sandbox_path_provider.dart';
+import 'package:foglietto/infrastructure/paths/sandbox_path_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider/path_provider.dart'
     show MissingPlatformDirectoryException;

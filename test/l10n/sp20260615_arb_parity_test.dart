@@ -18,7 +18,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:buffer/l10n/app_localizations.dart';
+import 'package:foglietto/l10n/app_localizations.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 

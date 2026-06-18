@@ -11,7 +11,7 @@
 
 import 'dart:async';
 
-import 'package:buffer/infrastructure/share/share_intent_service.dart';
+import 'package:foglietto/infrastructure/share/share_intent_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // ---------------------------------------------------------------------------

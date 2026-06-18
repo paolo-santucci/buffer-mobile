@@ -35,7 +35,8 @@
 //   9. Single ScrollController — exactly 1 ScrollController() construction
 //      in buffer_screen.dart. (LP §5.3 hard constraint)
 //  10. No chrome self-scroll — 0 jumpTo/animateTo/scrollTo in
-//      chrome_overlay.dart + chrome_reveal_controller.dart. (LP §5.3)
+//      chrome_pill.dart + chrome_reveal_controller.dart. (LP §5.3)
+//      (SP-20260617 TASK-11: chrome_overlay.dart deleted Wave 1 → chrome_pill.dart)
 
 // ignore_for_file: avoid_relative_lib_imports
 
@@ -644,7 +645,9 @@ Widget build(BuildContext context) {
   //
   // The M3 gate forbids any editor-area TextStyle from setting fontSize.
   // M6 must not introduce fontSize: in any of its new widget files.
-  // Scans: theme_selector, chrome_overlay, toast_overlay, menu_sheet,
+  // SP-20260617 TASK-11: chrome_overlay.dart deleted in Wave 1 (TASK-06);
+  // replaced by chrome_pill.dart. Gate 6 now scans chrome_pill.dart instead.
+  // Scans: theme_selector, chrome_pill, toast_overlay, menu_sheet,
   // settings_screen, about_screen. (FR-M6-02 scope-out, OQ-M6-02)
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -652,7 +655,8 @@ Widget build(BuildContext context) {
       '(M3 gate invariant, FR-M6-02 scope-out)', () {
     const m6Files = [
       'theme_selector.dart',
-      'chrome_overlay.dart',
+      // SP-20260617 TASK-11: chrome_overlay.dart → chrome_pill.dart (Wave 1).
+      'chrome_pill.dart',
       'toast_overlay.dart',
       'menu_sheet.dart',
       'settings_screen.dart',
@@ -950,17 +954,21 @@ Widget build(BuildContext context) {
 
   // ──────────────────────────────────────────────────────────────────────────
   // Gate 10 — no chrome self-scroll: 0 jumpTo/animateTo/scrollTo in
-  //           chrome_overlay.dart and chrome_reveal_controller.dart
+  //           chrome_pill.dart and chrome_reveal_controller.dart
+  //
+  // SP-20260617 TASK-11: chrome_overlay.dart deleted in Wave 1 (TASK-06);
+  // replaced by chrome_pill.dart. The no-self-scroll invariant now applies
+  // to chrome_pill.dart + chrome_reveal_controller.dart.
   //
   // LP §5.3 "no editor self-scroll" hard constraint: the chrome components
   // must NEVER call jumpTo, animateTo, or scrollTo on any scroll controller.
   // Programmatic scrolling is the exclusive concern of BufferScreen. (LP §5.3)
   // ──────────────────────────────────────────────────────────────────────────
 
-  group('gate 10 — 0 jumpTo/animateTo/scrollTo in chrome_overlay.dart and '
+  group('gate 10 — 0 jumpTo/animateTo/scrollTo in chrome_pill.dart and '
       'chrome_reveal_controller.dart (LP §5.3 no-self-scroll constraint)', () {
-    // ── red fixture: ChromeOverlay calling animateTo ───────────────────────
-    group('fixture — ChromeOverlay calling animateTo (forbidden)', () {
+    // ── red fixture: ChromePill calling animateTo (forbidden) ─────────────
+    group('fixture — ChromePill calling animateTo (forbidden)', () {
       const brokenSource =
           '  void _syncScroll(double offset) {\n'
           '    _controller.animateTo(offset,\n'
@@ -980,11 +988,12 @@ Widget build(BuildContext context) {
     });
 
     // ── green: real chrome files ──────────────────────────────────────────
+    // SP-20260617 TASK-11: chrome_overlay.dart → chrome_pill.dart.
     test(
-      'should_have_ZERO_scroll_calls_in_chrome_overlay_and_reveal_controller',
+      'should_have_ZERO_scroll_calls_in_chrome_pill_and_reveal_controller',
       () {
         final chromeFiles = [
-          '$root/lib/presentation/shell/chrome_overlay.dart',
+          '$root/lib/presentation/shell/chrome_pill.dart',
           '$root/lib/presentation/shell/chrome_reveal_controller.dart',
         ];
 
@@ -1007,7 +1016,7 @@ Widget build(BuildContext context) {
           hits,
           isEmpty,
           reason:
-              'chrome_overlay.dart and chrome_reveal_controller.dart must NOT '
+              'chrome_pill.dart and chrome_reveal_controller.dart must NOT '
               'call jumpTo(), animateTo(), or scrollTo() on any controller. '
               'Programmatic scrolling is the exclusive concern of BufferScreen '
               '(LP §5.3 no-editor-self-scroll hard constraint).\n'

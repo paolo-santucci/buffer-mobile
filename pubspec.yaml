@@ -1,4 +1,4 @@
-name: buffer
+name: foglietto
 description: "A minimal ephemeral text editor — Flutter port of the GNOME Buffer app."
 # Licensed under the GNU General Public License v3.0 — see LICENSE file.
 publish_to: 'none'
