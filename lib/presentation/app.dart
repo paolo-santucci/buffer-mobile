@@ -32,14 +32,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:buffer/l10n/app_localizations.dart';
-import 'package:buffer/presentation/about/about_screen.dart';
-import 'package:buffer/presentation/editor/buffer_screen.dart';
-import 'package:buffer/presentation/lifecycle/lifecycle_buffer_host.dart';
-import 'package:buffer/presentation/recovery/recovery_screen.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
-import 'package:buffer/presentation/settings/settings_screen.dart';
-import 'package:buffer/presentation/theme/app_theme.dart';
+import 'package:foglietto/l10n/app_localizations.dart';
+import 'package:foglietto/presentation/about/about_screen.dart';
+import 'package:foglietto/presentation/editor/buffer_screen.dart';
+import 'package:foglietto/presentation/lifecycle/lifecycle_buffer_host.dart';
+import 'package:foglietto/presentation/recovery/recovery_screen.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
+import 'package:foglietto/presentation/settings/settings_screen.dart';
+import 'package:foglietto/presentation/theme/app_theme.dart';
 
 /// Root widget of the application.
 ///

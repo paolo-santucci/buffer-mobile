@@ -13,9 +13,9 @@
 
 import 'dart:io';
 
-import 'package:buffer/domain/recovery/recovery_note.dart';
-import 'package:buffer/infrastructure/recovery/file_recovery_repository.dart';
-import 'package:buffer/infrastructure/paths/sandbox_path_provider.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
+import 'package:foglietto/infrastructure/recovery/file_recovery_repository.dart';
+import 'package:foglietto/infrastructure/paths/sandbox_path_provider.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

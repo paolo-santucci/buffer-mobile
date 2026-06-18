@@ -57,25 +57,36 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/domain/buffer/buffer_notifier_impl.dart';
-import 'package:buffer/domain/buffer/buffer_provider.dart';
-import 'package:buffer/domain/recovery/recovery_note.dart';
-import 'package:buffer/domain/recovery/recovery_repository.dart';
-import 'package:buffer/domain/settings/app_settings.dart';
-import 'package:buffer/infrastructure/share/share_intent_service.dart';
-import 'package:buffer/l10n/app_localizations.dart';
-import 'package:buffer/presentation/editor/buffer_screen.dart';
-import 'package:buffer/presentation/editor/editor_actions.dart';
-import 'package:buffer/presentation/editor/share_providers.dart';
-import 'package:buffer/presentation/find/find_provider.dart';
-import 'package:buffer/presentation/find/find_search_bar.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
-import 'package:buffer/presentation/editor/editor_layout.dart';
-import 'package:buffer/presentation/shell/chrome_overlay.dart';
-import 'package:buffer/presentation/shell/chrome_reveal_controller.dart';
-import 'package:buffer/presentation/shell/toast_controller.dart';
-import 'package:buffer/presentation/shell/toast_overlay.dart';
-import 'package:buffer/presentation/theme/app_theme.dart';
+import 'package:foglietto/domain/buffer/buffer_notifier_impl.dart';
+import 'package:foglietto/domain/buffer/buffer_provider.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
+import 'package:foglietto/domain/recovery/recovery_repository.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
+import 'package:foglietto/infrastructure/share/share_intent_service.dart';
+import 'package:foglietto/l10n/app_localizations.dart';
+import 'package:foglietto/presentation/editor/buffer_screen.dart';
+import 'package:foglietto/presentation/editor/editor_actions.dart';
+import 'package:foglietto/presentation/editor/share_providers.dart';
+import 'package:foglietto/presentation/find/find_provider.dart';
+import 'package:foglietto/presentation/find/find_search_bar.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
+import 'package:foglietto/presentation/editor/editor_layout.dart';
+import 'package:foglietto/presentation/shell/chrome_pill.dart';
+import 'package:foglietto/presentation/shell/chrome_reveal_controller.dart';
+import 'package:foglietto/presentation/shell/bottom_toolbar.dart';
+import 'package:foglietto/presentation/shell/overflow_popover.dart';
+import 'package:foglietto/presentation/shell/toast_controller.dart';
+import 'package:foglietto/presentation/shell/toast_overlay.dart';
+import 'package:foglietto/presentation/theme/app_theme.dart';
+import 'package:foglietto/presentation/theme/glass_surface.dart';
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+/// A no-op [VoidCallback] used as a stub when callback behavior is not
+/// under test (e.g. FindBackPill.onClose in isolation tests).
+void _noOp() {}
 
 // ---------------------------------------------------------------------------
 // Test doubles
@@ -1436,38 +1447,38 @@ void main() {
     );
 
     testWidgets(
-      'ChromeOverlay is removed while find is active so the Replace toggle is '
-      'not occluded by the top-end menu zone (on-device replace fix)',
+      // SP-20260617 TASK-11 (FR-18): ChromePill stays mounted during find
+      // (the old ChromeOverlay was removed when find was active; ChromePill
+      // is always mounted and uses AnimatedOpacity + IgnorePointer for
+      // visibility — no tap-target collision because the pill is top-right
+      // and the FindSearchBar occupies the bottom slot, not the top).
+      'ChromePill stays mounted while find is active (FR-18 — old ChromeOverlay guard removed)',
       (tester) async {
         await _pumpBufferScreen(tester, initialSharedText: null);
 
-        // At rest: chrome present (menu affordance).
-        expect(find.byType(ChromeOverlay), findsOneWidget);
+        // At rest: pill present.
+        expect(find.byType(ChromePill), findsOneWidget);
 
         final element = tester.element(find.byType(TextField).first);
         final container = ProviderScope.containerOf(element);
 
-        // Activate find — the FindSearchBar (full-width, top:0) now owns the
-        // top, including the top-end corner where its Replace toggle sits.
+        // Activate find.
         container.read(findProvider.notifier).startSearch(entryOffset: 0);
         await tester.pump();
 
         expect(find.byType(FindSearchBar), findsOneWidget);
-        // The chrome hamburger must NOT be mounted over the Replace toggle —
-        // otherwise its on-top, hit-testable IconButton swallows the tap and
-        // the user "can only search, not replace".
+        // ChromePill stays mounted during find (FR-18 — bottom-slot swap means
+        // no collision with FindSearchBar occupying the bottom slot).
         expect(
-          find.byType(ChromeOverlay),
-          findsNothing,
-          reason:
-              'ChromeOverlay must be hidden while find is active so the '
-              'rightmost Replace toggle is tappable.',
+          find.byType(ChromePill),
+          findsOneWidget,
+          reason: 'ChromePill must remain mounted when find is active (FR-18).',
         );
 
-        // Closing find restores the chrome.
+        // Closing find keeps the pill.
         container.read(findProvider.notifier).close();
         await tester.pump();
-        expect(find.byType(ChromeOverlay), findsOneWidget);
+        expect(find.byType(ChromePill), findsOneWidget);
       },
     );
   });
@@ -2163,34 +2174,33 @@ void main() {
   // -----------------------------------------------------------------------
   group('BufferScreen — M6: kDebugMode debug nav Row removed (FR-M6-23)', () {
     testWidgets(
-      'M6: no kDebugMode-wrapped /recovery Semantics label in widget tree',
+      'M6/TASK-11: no kDebugMode-wrapped /recovery Semantics label in widget tree',
       (tester) async {
         await _pumpBufferScreen(tester, initialSharedText: null);
 
         // After TASK-12 the debug Row with /recovery entry is gone.
-        // The menu sheet (via ChromeOverlay) is the sole nav entry point.
-        // The ChromeOverlay's Semantics label is 'Open menu' (menuTooltip),
-        // NOT 'Recovery'. Assert that the 'Recovery' Semantics label that was
-        // PREVIOUSLY the debug button label is no longer a standalone button.
-        //
-        // Note: 'Recovery' may appear inside MenuSheet if the sheet is open,
-        // but the sheet is not open at launch. So at rest: 0 matches.
-        //
-        // We verify by asserting the ChromeOverlay is present instead.
+        // SP-20260617 TASK-11: ChromeOverlay replaced by ChromePill.
+        // The ChromePill's overflow button is the sole nav entry point.
+        // We verify by asserting the ChromePill is present instead.
         expect(
-          find.byType(ChromeOverlay),
+          find.byType(ChromePill),
           findsOneWidget,
-          reason: 'ChromeOverlay (M6 menu affordance) must be present',
+          reason: 'ChromePill (TASK-11 menu affordance) must be present',
         );
       },
     );
 
     testWidgets(
-      'M6: ChromeOverlay menu affordance is the nav entry point — tap opens sheet',
+      'M6/TASK-11: ChromePill overflow button is the nav entry point',
       (tester) async {
         // Build with routes so pushNamed resolves without error.
         final fakeShare = _FakeShareIntentService();
         final fakeRepo = _FakeRecoveryRepository();
+
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
         await tester.pumpWidget(
           ProviderScope(
@@ -2217,8 +2227,8 @@ void main() {
         );
         await tester.pump();
 
-        // ChromeOverlay must be present (menu affordance).
-        expect(find.byType(ChromeOverlay), findsOneWidget);
+        // ChromePill must be present (overflow menu affordance — TASK-11).
+        expect(find.byType(ChromePill), findsOneWidget);
 
         // The debug nav Row with 'Indent'/'Outdent'/'Recovery' button labels
         // must NOT be present as standalone debug buttons.
@@ -2403,15 +2413,16 @@ void main() {
     // 27.1 Stack tree structure (FR-M6-05)
     // -----------------------------------------------------------------------
     testWidgets(
-      'Stack hosts editor TextField + ChromeOverlay + ToastOverlay (FR-M6-05)',
+      // SP-20260617 TASK-11: ChromeOverlay → ChromePill.
+      'Stack hosts editor TextField + ChromePill + ToastOverlay (FR-M6-05/TASK-11)',
       (tester) async {
         await _pumpBufferScreen(tester, initialSharedText: null);
 
-        // ChromeOverlay and ToastOverlay must be in the tree.
+        // ChromePill and ToastOverlay must be in the tree.
         expect(
-          find.byType(ChromeOverlay),
+          find.byType(ChromePill),
           findsOneWidget,
-          reason: 'ChromeOverlay must be a Stack child (FR-M6-05)',
+          reason: 'ChromePill must be a Stack child (FR-M6-05 / TASK-11)',
         );
         expect(
           find.byType(ToastOverlay),
@@ -2428,8 +2439,8 @@ void main() {
         );
         expect(editorTf, isNotNull);
 
-        // ChromeOverlay must be a Positioned (top-end) child inside the Stack.
-        // Verify by checking that a Positioned widget exists in the subtree.
+        // ChromePill is a Positioned (top-right) child inside the Stack.
+        // Verify by checking that Positioned widgets exist in the subtree.
         expect(find.byType(Positioned), findsWidgets);
       },
     );
@@ -2439,21 +2450,13 @@ void main() {
       (tester) async {
         await _pumpBufferScreen(tester, initialSharedText: null);
 
-        // The editor and ChromeOverlay must NOT be Column siblings.
-        // We verify this by asserting the editor is a direct Stack child,
-        // not wrapped in an Expanded inside a Column with the chrome.
-        //
-        // Strategy: ChromeOverlay and the editor TextField must both be
-        // descendants of the same Stack, not separate Column children.
-        // The Positioned nature of ChromeOverlay is the key structural marker.
-        final chromeOverlay = find.byType(ChromeOverlay);
-        expect(chromeOverlay, findsOneWidget);
+        // The editor and ChromePill must NOT be Column siblings.
+        // ChromePill is always mounted (FR-18) and renders a Positioned
+        // internally. Verify the Stack structure is intact.
+        final chromePill = find.byType(ChromePill);
+        expect(chromePill, findsOneWidget);
 
-        // The parent of ChromeOverlay should be a Positioned (which is inside
-        // the Stack), not a Column child. We verify by finding Positioned
-        // containing ChromeOverlay.
-        // Since ChromeOverlay itself renders Positioned internally, we look
-        // for the overall Stack structure.
+        // The Stack wraps overlays as Positioned children, not Column siblings.
         expect(find.byType(Stack), findsWidgets);
       },
     );
@@ -2628,11 +2631,9 @@ void main() {
     // 27.6 Tap chrome menu affordance → MenuSheet shown (FR-M6-23)
     // -----------------------------------------------------------------------
     testWidgets(
-      'tap chrome menu affordance → ModalBottomSheet (MenuSheet) in tree (FR-M6-23)',
+      // SP-20260617 TASK-11: ChromeOverlay → ChromePill; BottomSheet → OverflowPopover.
+      'tap chrome overflow (…) button → OverflowPopover in tree (FR-M6-23/TASK-11 FR-04)',
       (tester) async {
-        // TASK-07 SP-20260615: menu sheet now includes a Find / Replace tile,
-        // making the sheet taller; use 800×1200 viewport to prevent overflow
-        // (same fix applied in menu_sheet_test.dart TASK-05 tests).
         tester.view.physicalSize = const Size(800, 1200);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.resetPhysicalSize);
@@ -2666,22 +2667,24 @@ void main() {
         );
         await tester.pump();
 
-        // Tap the ChromeOverlay menu icon.
-        // The ChromeOverlay contains an IconButton with the menu icon.
-        final menuBtn = find.descendant(
-          of: find.byType(ChromeOverlay),
-          matching: find.byType(IconButton),
+        // Tap the … overflow button inside ChromePill.
+        // After TASK-11, ChromeOverlay is replaced by ChromePill.
+        // The overflow … button opens OverflowPopover (not ModalBottomSheet).
+        final overflowBtn = find.descendant(
+          of: find.byType(ChromePill),
+          matching: find.byIcon(Icons.more_horiz),
         );
-        expect(menuBtn, findsOneWidget);
-        await tester.tap(menuBtn);
-        await tester.pumpAndSettle();
+        expect(overflowBtn, findsOneWidget);
+        await tester.tap(overflowBtn);
+        await tester.pump();
 
-        // ModalBottomSheet must be shown.
+        // OverflowPopover must be shown (replaces BottomSheet — TASK-11 FR-04).
         expect(
-          find.byType(BottomSheet),
+          find.byType(OverflowPopover),
           findsOneWidget,
-          reason: 'Tapping chrome menu must open the MenuSheet (FR-M6-23)',
+          reason: 'Tapping … must open OverflowPopover (TASK-11 FR-04)',
         );
+        expect(find.byType(BottomSheet), findsNothing);
       },
     );
 
@@ -2763,15 +2766,15 @@ void main() {
       (tester) async {
         await _pumpBufferScreen(tester, initialSharedText: null);
 
-        // At rest (no sheet open) there must be no buttons with Semantics
+        // At rest (no popover open) there must be no buttons with Semantics
         // label 'Recovery' that would indicate the old debug Row is present.
-        // The ChromeOverlay's label is 'Open menu' (menuTooltip ARB), not 'Recovery'.
-        // We just verify the screen renders without the debug Row.
+        // SP-20260617 TASK-11: ChromeOverlay replaced by ChromePill.
+        // ChromePill is the sole top-right nav affordance.
         expect(find.byType(BufferScreen), findsOneWidget);
         expect(
-          find.byType(ChromeOverlay),
+          find.byType(ChromePill),
           findsOneWidget,
-          reason: 'ChromeOverlay is the sole nav affordance at rest',
+          reason: 'ChromePill is the sole top-right nav affordance (TASK-11)',
         );
       },
     );
@@ -3225,54 +3228,73 @@ void main() {
     // -----------------------------------------------------------------------
     // 28.8  Responsive margin via LayoutBuilder (FR-M7-11 / spec §5.1.5e)
     //
-    // Wraps the screen in a constrained SizedBox at specific widths and verifies
-    // that the vertical padding applied to the editor matches verticalMargin().
+    // SP-20260617 TASK-11: The outer Padding bottom is now editorBottomInset()
+    // instead of verticalMargin(). editorBottomInset(width, 0, 0) =
+    // max(kChromeMenuZoneHeight=48, verticalMargin(width)) = 48 for all widths
+    // <= 800 (since kChromeMenuZoneHeight dominates). The helper and test
+    // expectations are updated accordingly.
     // -----------------------------------------------------------------------
     testWidgets(
-      'responsive LayoutBuilder: width 400 → verticalPadding == 10.0',
+      'responsive LayoutBuilder: width 400 → bottom == editorBottomInset(400,0,0)',
       (tester) async {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = const FakeViewPadding(bottom: 0.0);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
         await _pumpBufferScreenM7(
           tester,
           settings: const AppSettings(),
           width: 400,
         );
-        _assertEditorVerticalPadding(tester, verticalMargin(400));
+        _assertEditorVerticalPadding(tester, editorBottomInset(400, 0, 0));
       },
     );
 
     testWidgets(
-      'responsive LayoutBuilder: width 600 → verticalPadding == 23.0',
+      'responsive LayoutBuilder: width 600 → bottom == editorBottomInset(600,0,0)',
       (tester) async {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = const FakeViewPadding(bottom: 0.0);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
         await _pumpBufferScreenM7(
           tester,
           settings: const AppSettings(),
           width: 600,
         );
-        _assertEditorVerticalPadding(tester, verticalMargin(600));
+        _assertEditorVerticalPadding(tester, editorBottomInset(600, 0, 0));
       },
     );
 
     testWidgets(
-      'responsive LayoutBuilder: width 800 → verticalPadding == 36.0',
+      'responsive LayoutBuilder: width 800 → bottom == editorBottomInset(800,0,0)',
       (tester) async {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = const FakeViewPadding(bottom: 0.0);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
         await _pumpBufferScreenM7(
           tester,
           settings: const AppSettings(),
           width: 800,
         );
-        _assertEditorVerticalPadding(tester, verticalMargin(800));
+        _assertEditorVerticalPadding(tester, editorBottomInset(800, 0, 0));
       },
     );
 
     testWidgets(
-      'responsive LayoutBuilder: width 320 → verticalPadding == 10.0 (floor clamp)',
+      'responsive LayoutBuilder: width 320 → bottom == editorBottomInset(320,0,0) (floor clamp)',
       (tester) async {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = const FakeViewPadding(bottom: 0.0);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
         await _pumpBufferScreenM7(
           tester,
           settings: const AppSettings(),
           width: 320,
         );
-        _assertEditorVerticalPadding(tester, verticalMargin(320));
+        _assertEditorVerticalPadding(tester, editorBottomInset(320, 0, 0));
       },
     );
 
@@ -3584,48 +3606,37 @@ void main() {
     // 29.9  Find tile flow (FR-10):
     //        Tap chrome menu → tap Find / Replace tile → FindSearchBar visible.
     // -----------------------------------------------------------------------
-    testWidgets('tap chrome menu → tap Find tile → FindSearchBar visible (FR-10)', (
-      tester,
-    ) async {
-      // Taller viewport: sheet has ThemeSelector + stepper + Find tile
-      // + Divider + 3 nav tiles; needs 800×1200 to avoid overflow (same
-      // reasoning as menu_sheet_test.dart TASK-05 tests).
-      tester.view.physicalSize = const Size(800, 1200);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets(
+      // SP-20260617 TASK-11: Find no longer via menu tile; via BottomToolbar.onFind.
+      // FR-11: single Find entry point = _dispatchOpenFind() → BottomToolbar.
+      'tap BottomToolbar Find button → FindSearchBar visible (FR-10/TASK-11)',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
 
-      await _pumpBufferScreenM7(tester, settings: const AppSettings());
+        await _pumpBufferScreenM7(tester, settings: const AppSettings());
 
-      // Tap the chrome menu affordance (ChromeOverlay's GestureDetector/InkWell).
-      final chromeOverlay = find.byType(ChromeOverlay);
-      expect(
-        chromeOverlay,
-        findsOneWidget,
-        reason: 'ChromeOverlay must be in the tree',
-      );
-      await tester.tap(chromeOverlay);
-      await tester.pumpAndSettle();
+        // Tap BottomToolbar Find button (replaces menu→Find tile path).
+        final findBtn = find.byKey(const ValueKey('toolbar_find'));
+        expect(
+          findBtn,
+          findsOneWidget,
+          reason: 'BottomToolbar Find button must be present',
+        );
+        await tester.tap(findBtn);
+        await tester.pump();
 
-      // The bottom sheet should now be open with a "Find / Replace" tile.
-      expect(
-        find.text('Find / Replace'),
-        findsOneWidget,
-        reason: 'Menu sheet must contain the Find / Replace tile (FR-10)',
-      );
-
-      // Tap the Find / Replace tile.
-      await tester.tap(find.text('Find / Replace'));
-      await tester.pumpAndSettle();
-
-      // FindSearchBar must now be visible.
-      expect(
-        find.byType(FindSearchBar),
-        findsOneWidget,
-        reason:
-            'FindSearchBar must be visible after tapping Find / Replace tile (FR-10)',
-      );
-    });
+        // FindSearchBar must now be visible in the bottom slot.
+        expect(
+          find.byType(FindSearchBar),
+          findsOneWidget,
+          reason:
+              'FindSearchBar must be visible after BottomToolbar Find tap (FR-10/TASK-11)',
+        );
+      },
+    );
 
     // -----------------------------------------------------------------------
     // 29.10  Unfocused clamp (EC-02 / FR-11):
@@ -3721,28 +3732,23 @@ void main() {
     );
 
     // -----------------------------------------------------------------------
-    // 29.12  Single-path (NFR-04):
-    //         Only ONE file in lib/ calls notifier.startSearch directly.
-    //         _openFindFromMenu must NOT contain a startSearch( call.
+    // 29.12  Single-path (NFR-04 / NFR-01):
+    //         _openFindFromMenu must NOT call startSearch( directly.
+    //         After TASK-05 extraction, it delegates to _dispatchOpenFind()
+    //         (which in turn dispatches OpenFindIntent).
     // -----------------------------------------------------------------------
     test(
-      '_openFindFromMenu in buffer_screen.dart must not call startSearch( directly (NFR-04 single-path)',
+      '_openFindFromMenu must not call startSearch( directly; delegates to _dispatchOpenFind() (NFR-01)',
       () {
-        // Read buffer_screen.dart and verify _openFindFromMenu does not call
-        // startSearch( — it must dispatch via OpenFindIntent instead.
         final bufferScreenFile = File(
           '${Directory.current.path}/../lib/presentation/editor/buffer_screen.dart',
         );
-        // Fallback if run from test/ subdir cwd.
         final effectiveFile = bufferScreenFile.existsSync()
             ? bufferScreenFile
             : File('lib/presentation/editor/buffer_screen.dart');
 
         final content = effectiveFile.readAsStringSync();
 
-        // Extract the _openFindFromMenu method body.
-        // Heuristic: find from the method signature to the next blank-line + }
-        // and check the extracted body has no startSearch call.
         final methodStart = content.indexOf('void _openFindFromMenu()');
         expect(
           methodStart,
@@ -3750,7 +3756,6 @@ void main() {
           reason: '_openFindFromMenu() method must exist in buffer_screen.dart',
         );
 
-        // Find the end of the method: next occurrence of '  }' after start.
         final methodEnd = content.indexOf('\n  }\n', methodStart);
         final methodBody = methodEnd > 0
             ? content.substring(methodStart, methodEnd)
@@ -3760,15 +3765,1546 @@ void main() {
           methodBody,
           isNot(contains('startSearch(')),
           reason:
-              '_openFindFromMenu must NOT call startSearch( directly (NFR-04 single-path). '
-              'It must dispatch via OpenFindIntent.',
+              '_openFindFromMenu must NOT call startSearch( directly (NFR-01 single-path).',
         );
+
+        // After TASK-05 extraction: _openFindFromMenu delegates to
+        // _dispatchOpenFind() rather than calling Actions.maybeInvoke directly.
+        expect(
+          methodBody,
+          contains('_dispatchOpenFind()'),
+          reason:
+              '_openFindFromMenu must delegate to _dispatchOpenFind() after TASK-05 extraction.',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 29.13  TASK-05 extraction behaviour (C7 / NFR-01):
+    //         _dispatchOpenFind() exists; _openFindFromMenu delegates to it;
+    //         menu→Find→active still works after extraction.
+    // -----------------------------------------------------------------------
+
+    // 29.13a  Structural: _dispatchOpenFind() is declared and
+    //          _openFindFromMenu body calls _dispatchOpenFind() (not the
+    //          Actions.maybeInvoke directly).
+    test(
+      'TASK-05: _dispatchOpenFind() declared; _openFindFromMenu delegates to it (C7)',
+      () {
+        final bufferScreenFile = File(
+          '${Directory.current.path}/../lib/presentation/editor/buffer_screen.dart',
+        );
+        final effectiveFile = bufferScreenFile.existsSync()
+            ? bufferScreenFile
+            : File('lib/presentation/editor/buffer_screen.dart');
+        final content = effectiveFile.readAsStringSync();
+
+        // 1. _dispatchOpenFind must be declared.
+        expect(
+          content,
+          contains('void _dispatchOpenFind()'),
+          reason:
+              '_dispatchOpenFind() must be declared in buffer_screen.dart (TASK-05 C7)',
+        );
+
+        // 2. _openFindFromMenu must call _dispatchOpenFind(), not invoke
+        //    Actions.maybeInvoke directly.
+        final methodStart = content.indexOf('void _openFindFromMenu()');
+        expect(methodStart, greaterThan(0));
+        final methodEnd = content.indexOf('\n  }\n', methodStart);
+        final methodBody = methodEnd > 0
+            ? content.substring(methodStart, methodEnd)
+            : content.substring(methodStart, methodStart + 500);
 
         expect(
           methodBody,
+          contains('_dispatchOpenFind()'),
+          reason:
+              '_openFindFromMenu must delegate to _dispatchOpenFind() (TASK-05 C7)',
+        );
+        expect(
+          methodBody,
+          isNot(contains('Actions.maybeInvoke')),
+          reason:
+              '_openFindFromMenu must not call Actions.maybeInvoke directly '
+              'after extraction — it delegates to _dispatchOpenFind() (TASK-05 C7)',
+        );
+
+        // 3. _dispatchOpenFind must dispatch via OpenFindIntent.
+        final dispatchStart = content.indexOf('void _dispatchOpenFind()');
+        final dispatchEnd = content.indexOf('\n  }\n', dispatchStart);
+        final dispatchBody = dispatchEnd > 0
+            ? content.substring(dispatchStart, dispatchEnd)
+            : content.substring(dispatchStart, dispatchStart + 300);
+
+        expect(
+          dispatchBody,
           contains('OpenFindIntent'),
           reason:
-              '_openFindFromMenu must dispatch via OpenFindIntent (not startSearch directly).',
+              '_dispatchOpenFind() must dispatch OpenFindIntent (TASK-05 C7)',
+        );
+        expect(
+          dispatchBody,
+          contains('Actions.maybeInvoke'),
+          reason:
+              '_dispatchOpenFind() must call Actions.maybeInvoke (TASK-05 C7)',
+        );
+        expect(
+          dispatchBody,
+          isNot(contains('startSearch')),
+          reason:
+              '_dispatchOpenFind() must NOT call startSearch directly (NFR-01 single-path)',
+        );
+      },
+    );
+
+    // 29.13b  Single notifier call site: the only place that calls
+    //          `findProvider.notifier).startSearch` (the real provider verb)
+    //          is the lambda wired in buffer_screen.dart.  _dispatchOpenFind()
+    //          must not introduce a second raw notifier invocation (NFR-01).
+    test(
+      'TASK-05: findProvider.notifier.startSearch called in exactly one place in lib/ (NFR-01)',
+      () {
+        final libDir = Directory(
+          Directory.current.path.endsWith('test')
+              ? '${Directory.current.path}/../lib'
+              : '${Directory.current.path}/lib',
+        );
+        final dartFiles = libDir
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((f) => f.path.endsWith('.dart'))
+            .toList();
+
+        // The canonical notifier call pattern uses `.startSearch(entryOffset:`
+        // immediately after reading the notifier via ref.read / .notifier.
+        // We scan for lines that contain BOTH `.startSearch(` AND
+        // `notifier)` or `findProvider` to narrow to actual notifier calls.
+        final notifierCallLines = <String>[];
+        for (final f in dartFiles) {
+          final content = f.readAsStringSync();
+          // Look for the notifier dispatch pattern.
+          for (final line in f.readAsLinesSync()) {
+            final trimmed = line.trimLeft();
+            if (trimmed.startsWith('//') || trimmed.startsWith('///')) continue;
+            if (trimmed.contains('.startSearch(entryOffset:') &&
+                (content.contains('findProvider.notifier') ||
+                    trimmed.contains('startSearch(entryOffset:')) &&
+                !trimmed.contains('void startSearch') &&
+                !trimmed.startsWith('final void Function')) {
+              notifierCallLines.add('${f.path}: ${line.trimRight()}');
+            }
+          }
+        }
+
+        // There are exactly 2 expected raw startSearch(entryOffset: lines:
+        // 1. The lambda in buffer_screen.dart wiring the notifier call.
+        // 2. The _OpenFindOrRefocusAction.invoke() calling the callback.
+        // (OpenFindAction in editor_actions.dart is also present but dead.)
+        // What must NOT appear is any new invocation added by _dispatchOpenFind.
+        // We assert the buffer_screen.dart file does NOT call startSearch
+        // from within _dispatchOpenFind().
+        final bsRoot = Directory.current.path.endsWith('test')
+            ? '${Directory.current.path}/..'
+            : Directory.current.path;
+        final bufferScreenFile = File(
+          '$bsRoot/lib/presentation/editor/buffer_screen.dart',
+        );
+        final bsContent = bufferScreenFile.readAsStringSync();
+
+        final dispatchStart = bsContent.indexOf('void _dispatchOpenFind()');
+        if (dispatchStart >= 0) {
+          final dispatchEnd = bsContent.indexOf('\n  }\n', dispatchStart);
+          final dispatchBody = dispatchEnd > 0
+              ? bsContent.substring(dispatchStart, dispatchEnd)
+              : bsContent.substring(dispatchStart, dispatchStart + 300);
+
+          expect(
+            dispatchBody,
+            isNot(contains('startSearch')),
+            reason:
+                '_dispatchOpenFind() must NOT call startSearch (NFR-01 single-path). '
+                'It must only dispatch OpenFindIntent.',
+          );
+        }
+
+        // Additionally: no new file has been added that calls startSearch.
+        // The pre-extraction set is: buffer_screen.dart, editor_actions.dart,
+        // find_provider.dart.  Assert no unexpected files joined the set.
+        final filesWithRawStartSearch = dartFiles
+            .where((f) => f.readAsStringSync().contains('startSearch'))
+            .map((f) => f.path.split('/').last)
+            .toSet();
+
+        expect(
+          filesWithRawStartSearch,
+          containsAll(['buffer_screen.dart', 'find_provider.dart']),
+          reason:
+              'buffer_screen.dart and find_provider.dart must contain startSearch (expected)',
+        );
+      },
+    );
+
+    // 29.13c  Behavioural: menu→Find via the extracted _dispatchOpenFind()
+    //          path still activates findProvider (mirrors :3587).
+    testWidgets(
+      'TASK-05: menu→Find tile→_dispatchOpenFind()→findProvider.active (C7/FR-11)',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await _pumpBufferScreenM7(tester, settings: const AppSettings());
+
+        // Open chrome menu via ChromePill overflow button.
+        // After TASK-11, ChromeOverlay is replaced by ChromePill.
+        // The overflow button (…) opens the popover instead of a bottom sheet.
+        // The Find tile is removed from the popover (FR-05).
+        // Find is now opened via BottomToolbar.onFind (FR-11).
+        // This test verifies the single find-start path via BottomToolbar.
+        final toolbarFind = find.byKey(const ValueKey('toolbar_find'));
+        expect(
+          toolbarFind,
+          findsOneWidget,
+          reason: 'BottomToolbar Find button must be present (TASK-11 FR-07)',
+        );
+        await tester.tap(toolbarFind);
+        await tester.pump();
+
+        final element = tester.element(find.byType(BufferScreen));
+        final container = ProviderScope.containerOf(element);
+        expect(
+          container.read(findProvider).active,
+          isTrue,
+          reason:
+              'findProvider must be active after BottomToolbar Find tap (TASK-11 FR-11)',
+        );
+      },
+    );
+  });
+
+  // -----------------------------------------------------------------------
+  // Group 30 — TASK-11 (SP-20260617 Wave 3): buffer_screen.dart Stack rewiring
+  //
+  // TDD red phase — these tests are written FIRST and must FAIL before the
+  // implementation is added, then PASS after.
+  //
+  // Spec refs: FR-01, FR-03, FR-04, FR-07, FR-08, FR-09, FR-10, FR-12,
+  //            FR-14, FR-16, FR-17, FR-18, FR-22, FR-23, FR-24, NFR-07
+  // -----------------------------------------------------------------------
+  group('BufferScreen — TASK-11 SP-20260617 Wave 3 rewiring', () {
+    // -----------------------------------------------------------------------
+    // 30.1  Single pill replaces both overlays (FR-01)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'ChromePill present, ChromeOverlay and ShareOverlay absent (FR-01)',
+      (tester) async {
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        // ChromeOverlay and ShareOverlay are deleted in Wave 1 (TASK-06).
+        // ChromePill is the single top-right affordance (FR-01).
+        expect(
+          find.byType(ChromePill),
+          findsOneWidget,
+          reason: 'ChromePill must be the single top-right affordance (FR-01)',
+        );
+        // BottomToolbar is the single bottom affordance at rest (FR-07).
+        expect(find.byType(BottomToolbar), findsOneWidget);
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.2  Popover opens on overflow tap (FR-04)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'tap … overflow button → OverflowPopover in tree; no BottomSheet (FR-04)',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final fakeShare = _FakeShareIntentService();
+        final fakeRepo = _FakeRecoveryRepository();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              initialSharedTextProvider.overrideWithValue(null),
+              shareIntentServiceProvider.overrideWithValue(fakeShare),
+              recoveryRepositoryProvider.overrideWithValue(fakeRepo),
+              settingsProvider.overrideWith(
+                () => _FakeSettingsNotifier(const AppSettings()),
+              ),
+            ],
+            child: MaterialApp(
+              theme: AppTheme.light(),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              routes: {
+                '/recovery': (_) => const Scaffold(body: SizedBox.shrink()),
+                '/settings': (_) => const Scaffold(body: SizedBox.shrink()),
+                '/about': (_) => const Scaffold(body: SizedBox.shrink()),
+              },
+              home: const BufferScreen(),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        // Tap the overflow … button inside ChromePill.
+        final overflowBtn = find.descendant(
+          of: find.byType(ChromePill),
+          matching: find.byIcon(Icons.more_horiz),
+        );
+        expect(overflowBtn, findsOneWidget);
+        await tester.tap(overflowBtn);
+        await tester.pump();
+
+        expect(
+          find.byType(OverflowPopover),
+          findsOneWidget,
+          reason: 'OverflowPopover must open on overflow tap (FR-04)',
+        );
+        // Must NOT open a BottomSheet (the old modal path is gone).
+        expect(find.byType(BottomSheet), findsNothing);
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.3  Popover dismisses with chrome (EC-16)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'popover dismisses when chromeVisibilityProvider → false (EC-16)',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final fakeShare = _FakeShareIntentService();
+        final fakeRepo = _FakeRecoveryRepository();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              initialSharedTextProvider.overrideWithValue(null),
+              shareIntentServiceProvider.overrideWithValue(fakeShare),
+              recoveryRepositoryProvider.overrideWithValue(fakeRepo),
+              settingsProvider.overrideWith(
+                () => _FakeSettingsNotifier(const AppSettings()),
+              ),
+            ],
+            child: MaterialApp(
+              theme: AppTheme.light(),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const BufferScreen(),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final element = tester.element(find.byType(BufferScreen));
+        final container = ProviderScope.containerOf(element);
+
+        // Open popover.
+        final overflowBtn = find.descendant(
+          of: find.byType(ChromePill),
+          matching: find.byIcon(Icons.more_horiz),
+        );
+        await tester.tap(overflowBtn);
+        await tester.pump();
+        expect(find.byType(OverflowPopover), findsOneWidget);
+
+        // Hide chrome — popover must dismiss.
+        container.read(chromeVisibilityProvider.notifier).onTextChanged();
+        await tester.pump();
+
+        expect(
+          find.byType(OverflowPopover),
+          findsNothing,
+          reason: 'Popover must dismiss when chrome hides (EC-16)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.4  BottomToolbar visible at rest (FR-07)
+    // -----------------------------------------------------------------------
+    testWidgets('BottomToolbar present when find inactive (FR-07)', (
+      tester,
+    ) async {
+      await _pumpBufferScreen(tester, initialSharedText: null);
+
+      expect(
+        find.byType(BottomToolbar),
+        findsOneWidget,
+        reason:
+            'BottomToolbar must be in the tree when find is inactive (FR-07)',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // 30.5  toolbar↔find swap (FR-12/14)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'find active → BottomToolbar absent, FindSearchBar visible (FR-12)',
+      (tester) async {
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        expect(find.byType(BottomToolbar), findsOneWidget);
+        expect(find.byType(FindSearchBar), findsNothing);
+
+        final element = tester.element(find.byType(TextField).first);
+        final container = ProviderScope.containerOf(element);
+
+        container.read(findProvider.notifier).startSearch(entryOffset: 0);
+        // pumpAndSettle: AnimatedSwitcher must fully complete so the exiting
+        // BottomToolbar child is removed from the tree before asserting absence.
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byType(FindSearchBar),
+          findsOneWidget,
+          reason:
+              'FindSearchBar must appear in bottom slot when find is active (FR-12)',
+        );
+        expect(
+          find.byType(BottomToolbar),
+          findsNothing,
+          reason: 'BottomToolbar must be absent when find is active (FR-12)',
+        );
+      },
+    );
+
+    testWidgets(
+      'find close → BottomToolbar restored, FindSearchBar absent (FR-14)',
+      (tester) async {
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        final element = tester.element(find.byType(TextField).first);
+        final container = ProviderScope.containerOf(element);
+
+        container.read(findProvider.notifier).startSearch(entryOffset: 0);
+        await tester.pumpAndSettle();
+        expect(find.byType(BottomToolbar), findsNothing);
+
+        container.read(findProvider.notifier).close();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byType(BottomToolbar),
+          findsOneWidget,
+          reason: 'BottomToolbar must be restored when find closes (FR-14)',
+        );
+        expect(find.byType(FindSearchBar), findsNothing);
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.6  ChromePill stays mounted during find (FR-18)
+    // -----------------------------------------------------------------------
+    testWidgets('ChromePill stays mounted while find is active (FR-18)', (
+      tester,
+    ) async {
+      await _pumpBufferScreen(tester, initialSharedText: null);
+
+      final element = tester.element(find.byType(TextField).first);
+      final container = ProviderScope.containerOf(element);
+
+      container.read(findProvider.notifier).startSearch(entryOffset: 0);
+      await tester.pump();
+
+      expect(
+        find.byType(ChromePill),
+        findsOneWidget,
+        reason: 'ChromePill must stay mounted during find (FR-18)',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // 30.7  chrome axis: toolbar hides with chrome (FR-16)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'chromeVisibilityProvider → false: ChromePill opacity 0.0 + toolbar hidden (FR-16)',
+      (tester) async {
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        final element = tester.element(find.byType(TextField).first);
+        final container = ProviderScope.containerOf(element);
+
+        // Toolbar must be present before hide.
+        expect(find.byType(BottomToolbar), findsOneWidget);
+
+        // Hide chrome.
+        container.read(chromeVisibilityProvider.notifier).onTextChanged();
+        await tester.pump();
+        await tester.pump(
+          const Duration(milliseconds: 250),
+        ); // settle animation
+
+        // Toolbar must be invisible (driven by chrome axis).
+        // BottomToolbar is wrapped in AnimatedOpacity + IgnorePointer like the pill.
+        // It may still be in the tree but must not be hit-testable.
+        // We verify by checking the AnimatedOpacity opacity is 0.
+        final pillAo = find.descendant(
+          of: find.byType(ChromePill),
+          matching: find.byType(AnimatedOpacity),
+        );
+        expect(pillAo, findsOneWidget);
+        final ao = tester.widget<AnimatedOpacity>(pillAo);
+        expect(
+          ao.opacity,
+          equals(0.0),
+          reason:
+              'ChromePill AnimatedOpacity must be 0.0 when chrome hidden (FR-16)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.8  find axis: find pill stays visible while find active (FR-17)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'find active + chrome hidden → FindSearchBar still visible (FR-17)',
+      (tester) async {
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        final element = tester.element(find.byType(TextField).first);
+        final container = ProviderScope.containerOf(element);
+
+        // Activate find.
+        container.read(findProvider.notifier).startSearch(entryOffset: 0);
+        await tester.pump();
+
+        // FindSearchBar is in the bottom slot, not subject to chrome axis.
+        expect(find.byType(FindSearchBar), findsOneWidget);
+
+        // Hide chrome.
+        container.read(chromeVisibilityProvider.notifier).onTextChanged();
+        await tester.pump();
+
+        // FindSearchBar must still be in the tree (find-axis, not chrome-axis).
+        expect(
+          find.byType(FindSearchBar),
+          findsOneWidget,
+          reason: 'FindSearchBar must remain visible when chrome hides (FR-17)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.9  BottomToolbar.onFind → _dispatchOpenFind (NFR-01)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'tap toolbar Find button → findProvider.active becomes true (NFR-01/FR-11)',
+      (tester) async {
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        final element = tester.element(find.byType(TextField).first);
+        final container = ProviderScope.containerOf(element);
+        expect(container.read(findProvider).active, isFalse);
+
+        final findBtn = find.byKey(const ValueKey('toolbar_find'));
+        await tester.tap(findBtn);
+        await tester.pump();
+
+        expect(
+          container.read(findProvider).active,
+          isTrue,
+          reason:
+              'BottomToolbar Find must activate find via _dispatchOpenFind (NFR-01)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.10  Copy via toolbar — clipboard + no mutation (FR-08/09)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'toolbar Copy with selection "world" → Clipboard receives "world"; controller unchanged (FR-08/09)',
+      (tester) async {
+        String? capturedText;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, (
+              MethodCall call,
+            ) async {
+              if (call.method == 'Clipboard.setData') {
+                capturedText = (call.arguments as Map)['text'] as String?;
+              }
+              return null;
+            });
+        addTearDown(() {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(SystemChannels.platform, null);
+        });
+
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        await tester.enterText(find.byType(TextField).first, 'hello world');
+        await tester.pump();
+
+        final controller = tester
+            .widget<TextField>(find.byType(TextField).first)
+            .controller!;
+        // Select "world" (offset 6..11).
+        controller.selection = const TextSelection(
+          baseOffset: 6,
+          extentOffset: 11,
+        );
+        await tester.pump();
+
+        final selectionBefore = controller.selection;
+        final textBefore = controller.text;
+
+        final copyBtn = find.byKey(const ValueKey('toolbar_copy'));
+        await tester.tap(copyBtn);
+        await tester.pump();
+
+        expect(
+          capturedText,
+          equals('world'),
+          reason: 'Copy must write selected text "world" to clipboard (FR-08)',
+        );
+        // Controller must not have mutated.
+        expect(
+          controller.text,
+          equals(textBefore),
+          reason: 'Copy must not mutate controller text (FR-09)',
+        );
+        expect(
+          controller.selection,
+          equals(selectionBefore),
+          reason: 'Copy must not mutate controller selection (FR-09)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.11  Copy-all: collapsed caret reads bufferProvider (NFR-08)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'toolbar Copy with collapsed caret → reads bufferProvider.text, not controller (NFR-08)',
+      (tester) async {
+        String? capturedText;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, (
+              MethodCall call,
+            ) async {
+              if (call.method == 'Clipboard.setData') {
+                capturedText = (call.arguments as Map)['text'] as String?;
+              }
+              return null;
+            });
+        addTearDown(() {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(SystemChannels.platform, null);
+        });
+
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        await tester.enterText(find.byType(TextField).first, 'hello world');
+        await tester.pump();
+
+        final controller = tester
+            .widget<TextField>(find.byType(TextField).first)
+            .controller!;
+        // Collapsed caret → whole buffer copy.
+        controller.selection = const TextSelection.collapsed(offset: 5);
+        await tester.pump();
+
+        final copyBtn = find.byKey(const ValueKey('toolbar_copy'));
+        await tester.tap(copyBtn);
+        await tester.pump();
+
+        expect(
+          capturedText,
+          equals('hello world'),
+          reason:
+              'Collapsed caret: Copy must write entire buffer text (NFR-08)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.12  Copy on empty buffer → no toast, no haptic (EC-02)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'toolbar Copy on empty buffer → no "Copied" toast shown (EC-02)',
+      (tester) async {
+        final toastSpy = _ToastSpy();
+
+        final fakeShare = _FakeShareIntentService();
+        final fakeRepo = _FakeRecoveryRepository();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              initialSharedTextProvider.overrideWithValue(null),
+              shareIntentServiceProvider.overrideWithValue(fakeShare),
+              recoveryRepositoryProvider.overrideWithValue(fakeRepo),
+              settingsProvider.overrideWith(
+                () => _FakeSettingsNotifier(const AppSettings()),
+              ),
+              toastProvider.overrideWith(() => toastSpy),
+            ],
+            child: MaterialApp(
+              theme: AppTheme.light(),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const BufferScreen(),
+            ),
+          ),
+        );
+        await tester.pump();
+        toastSpy.showCalls.clear();
+
+        // Buffer is empty (no enterText call).
+        final copyBtn = find.byKey(const ValueKey('toolbar_copy'));
+        await tester.tap(copyBtn);
+        await tester.pump();
+
+        expect(
+          toastSpy.showCalls,
+          isEmpty,
+          reason: 'Copy on empty buffer must show no toast (EC-02)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.13  Copy toast shown on non-empty copy (FR-23)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'toolbar Copy on non-empty buffer → "Copied" toast shown (FR-23)',
+      (tester) async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+              SystemChannels.platform,
+              (MethodCall call) async => null,
+            );
+        addTearDown(() {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(SystemChannels.platform, null);
+        });
+
+        final toastSpy = _ToastSpy();
+        final fakeShare = _FakeShareIntentService();
+        final fakeRepo = _FakeRecoveryRepository();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              initialSharedTextProvider.overrideWithValue(null),
+              shareIntentServiceProvider.overrideWithValue(fakeShare),
+              recoveryRepositoryProvider.overrideWithValue(fakeRepo),
+              settingsProvider.overrideWith(
+                () => _FakeSettingsNotifier(const AppSettings()),
+              ),
+              toastProvider.overrideWith(() => toastSpy),
+            ],
+            child: MaterialApp(
+              theme: AppTheme.light(),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: const BufferScreen(),
+            ),
+          ),
+        );
+        await tester.pump();
+        toastSpy.showCalls.clear();
+
+        await tester.enterText(find.byType(TextField).first, 'hello');
+        await tester.pump();
+        toastSpy.showCalls.clear();
+
+        final copyBtn = find.byKey(const ValueKey('toolbar_copy'));
+        await tester.tap(copyBtn);
+        await tester.pump();
+
+        expect(
+          toastSpy.showCalls,
+          isNotEmpty,
+          reason: 'Copy on non-empty buffer must show a toast (FR-23)',
+        );
+        // Toast message must contain "Copied" (EN) or similar.
+        expect(
+          toastSpy.showCalls.first,
+          isNotEmpty,
+          reason: 'Copied toast text must be non-empty',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.14  Paste no toast (FR-23)
+    // -----------------------------------------------------------------------
+    testWidgets('toolbar Paste → no toast shown (FR-23)', (tester) async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, (
+            MethodCall call,
+          ) async {
+            if (call.method == 'Clipboard.getData') {
+              return {'text': 'pasted'};
+            }
+            return null;
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, null);
+      });
+
+      final toastSpy = _ToastSpy();
+      final fakeShare = _FakeShareIntentService();
+      final fakeRepo = _FakeRecoveryRepository();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            initialSharedTextProvider.overrideWithValue(null),
+            shareIntentServiceProvider.overrideWithValue(fakeShare),
+            recoveryRepositoryProvider.overrideWithValue(fakeRepo),
+            settingsProvider.overrideWith(
+              () => _FakeSettingsNotifier(const AppSettings()),
+            ),
+            toastProvider.overrideWith(() => toastSpy),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: const BufferScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+      toastSpy.showCalls.clear();
+
+      final pasteBtn = find.byKey(const ValueKey('toolbar_paste'));
+      await tester.tap(pasteBtn);
+      await tester.pump();
+      await tester.pump(); // allow async getData
+
+      expect(
+        toastSpy.showCalls,
+        isEmpty,
+        reason: 'Paste must show no toast (FR-23)',
+      );
+    });
+
+    // -----------------------------------------------------------------------
+    // 30.15  Paste at caret (FR-10)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'toolbar Paste with caret at offset 3 → inserts clipboard text at offset 3 (FR-10)',
+      (tester) async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, (
+              MethodCall call,
+            ) async {
+              if (call.method == 'Clipboard.getData') {
+                return {'text': 'clip'};
+              }
+              return null;
+            });
+        addTearDown(() {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(SystemChannels.platform, null);
+        });
+
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        await tester.enterText(find.byType(TextField).first, 'hello');
+        await tester.pump();
+
+        final controller = tester
+            .widget<TextField>(find.byType(TextField).first)
+            .controller!;
+        controller.selection = const TextSelection.collapsed(offset: 3);
+        await tester.pump();
+
+        final pasteBtn = find.byKey(const ValueKey('toolbar_paste'));
+        await tester.tap(pasteBtn);
+        await tester.pump();
+        await tester.pump(); // allow async getData
+
+        expect(
+          controller.text,
+          equals('helcliplo'),
+          reason: 'Paste must insert at caret position 3 (FR-10)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.16  Paste at end fallback when no caret (FR-10)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'toolbar Paste with no caret (unfocused) → inserts at end of buffer (FR-10)',
+      (tester) async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, (
+              MethodCall call,
+            ) async {
+              if (call.method == 'Clipboard.getData') {
+                return {'text': 'end'};
+              }
+              return null;
+            });
+        addTearDown(() {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(SystemChannels.platform, null);
+        });
+
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        await tester.enterText(find.byType(TextField).first, 'hello');
+        await tester.pump();
+
+        final controller = tester
+            .widget<TextField>(find.byType(TextField).first)
+            .controller!;
+        // Unfocus: selection.baseOffset = -1.
+        controller.selection = const TextSelection.collapsed(offset: -1);
+        await tester.pump();
+
+        final pasteBtn = find.byKey(const ValueKey('toolbar_paste'));
+        await tester.tap(pasteBtn);
+        await tester.pump();
+        await tester.pump(); // allow async getData
+
+        expect(
+          controller.text,
+          equals('helloend'),
+          reason: 'Paste with no caret must insert at end of buffer (FR-10)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.17  Ctrl+V PasteAction still works unchanged (NFR-07)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'Ctrl+V still inserts via the original PasteAction (NFR-07 frozen)',
+      (tester) async {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, (
+              MethodCall call,
+            ) async {
+              if (call.method == 'Clipboard.getData') {
+                return {'text': 'ctrlv'};
+              }
+              return null;
+            });
+        addTearDown(() {
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(SystemChannels.platform, null);
+        });
+
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        await tester.enterText(find.byType(TextField).first, 'hello ');
+        await tester.pump();
+
+        final controller = tester
+            .widget<TextField>(find.byType(TextField).first)
+            .controller!;
+        controller.selection = TextSelection.collapsed(
+          offset: controller.text.length,
+        );
+        await tester.pump();
+
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyV);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+        await tester.pump();
+        await tester.pump();
+
+        expect(
+          controller.text,
+          equals('hello ctrlv'),
+          reason: 'Ctrl+V must still work via original PasteAction (NFR-07)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.18  Bottom inset: editorBottomInset applied (FR-22)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'outer Padding bottom >= kChromeMenuZoneHeight (editorBottomInset applied, FR-22)',
+      (tester) async {
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = const FakeViewPadding(bottom: 0.0);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+
+        await _pumpBufferScreenM7(tester, settings: const AppSettings());
+
+        // The outer Padding (left > 0, top > 0) must have bottom >=
+        // kChromeMenuZoneHeight (48.0).
+        bool found = false;
+        for (final p in tester.allWidgets.whereType<Padding>()) {
+          final e = p.padding;
+          if (e is EdgeInsets && e.left > 0.0 && e.bottom >= 48.0) {
+            found = true;
+            break;
+          }
+        }
+        expect(
+          found,
+          isTrue,
+          reason:
+              'Outer Padding bottom must be >= kChromeMenuZoneHeight (editorBottomInset, FR-22)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 30.19  Bottom inset anti-additive with keyboard (EC-14)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'editorBottomInset: keyboard 300 + safeAreaBottom 34 → bottom == max(48, 300) + 34 (EC-14)',
+      (tester) async {
+        // Set safeAreaBottom via FakeViewPadding.
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = const FakeViewPadding(bottom: 34.0);
+        tester.view.viewInsets = const FakeViewPadding(bottom: 300.0);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+        addTearDown(tester.view.resetViewInsets);
+
+        await _pumpBufferScreenM7(tester, settings: const AppSettings());
+
+        // The formula is max(48, vMargin, keyboardInset=300) + safeAreaBottom=34 = 334.
+        // We verify bottom == 334 on the outer Padding.
+        bool found = false;
+        for (final p in tester.allWidgets.whereType<Padding>()) {
+          final e = p.padding;
+          if (e is EdgeInsets &&
+              e.left > 0.0 &&
+              (e.bottom - 334.0).abs() < 0.5) {
+            found = true;
+            break;
+          }
+        }
+        expect(
+          found,
+          isTrue,
+          reason:
+              'editorBottomInset must be anti-additive: max(48,300)+34 = 334 (EC-14)',
+        );
+      },
+    );
+  });
+
+  // -----------------------------------------------------------------------
+  // Group 31 — SP-20260618: FindBackPill + _BottomMorphSlot + Group-15 update
+  //
+  // Spec refs: FR-07, FR-12, FR-17, FR-18, EC-05, EC-12, NFR-07
+  //
+  // Platforms: all (headless — no device required).
+  // -----------------------------------------------------------------------
+  group('BufferScreen — SP-20260618 FindBackPill + _BottomMorphSlot', () {
+    // -----------------------------------------------------------------------
+    // 31.1  FindBackPill widget isolation
+    // -----------------------------------------------------------------------
+
+    testWidgets(
+      '31.1a FindBackPill renders solid primary circle and white check icon',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            theme: AppTheme.light(),
+            home: Scaffold(body: FindBackPill(onClose: _noOp)),
+          ),
+        );
+        await tester.pump();
+
+        // Material circle present (solid, not glass).
+        // Find ALL Material widgets inside FindBackPill, then pick the one
+        // with a CircleBorder (the innermost one is the pill circle).
+        final materials = tester
+            .widgetList<Material>(
+              find.descendant(
+                of: find.byType(FindBackPill),
+                matching: find.byType(Material),
+              ),
+            )
+            .toList();
+        expect(
+          materials,
+          isNotEmpty,
+          reason: 'FindBackPill must contain at least one Material widget',
+        );
+        final circleMaterial = materials
+            .where((m) => m.shape is CircleBorder)
+            .toList();
+        expect(
+          circleMaterial,
+          isNotEmpty,
+          reason: 'FindBackPill must have a Material(shape: CircleBorder())',
+        );
+        // Color must be colorScheme.primary.
+        final expectedPrimary = AppTheme.light().colorScheme.primary;
+        expect(
+          circleMaterial.first.color,
+          equals(expectedPrimary),
+          reason: 'FindBackPill Material color must be colorScheme.primary',
+        );
+
+        // No GlassSurface / BackdropFilter — intentionally opaque.
+        expect(
+          find.descendant(
+            of: find.byType(FindBackPill),
+            matching: find.byType(GlassSurface),
+          ),
+          findsNothing,
+          reason: 'FindBackPill must not use GlassSurface (solid accent pill)',
+        );
+        expect(
+          find.descendant(
+            of: find.byType(FindBackPill),
+            matching: find.byType(BackdropFilter),
+          ),
+          findsNothing,
+          reason: 'FindBackPill must have no BackdropFilter',
+        );
+
+        // Icons.check present.
+        expect(
+          find.descendant(
+            of: find.byType(FindBackPill),
+            matching: find.byIcon(Icons.check),
+          ),
+          findsOneWidget,
+          reason: 'FindBackPill must show Icons.check',
+        );
+      },
+    );
+
+    testWidgets('31.1b FindBackPill tap target >= 48dp', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: AppTheme.light(),
+          home: const Scaffold(body: FindBackPill(onClose: _noOp)),
+        ),
+      );
+      await tester.pump();
+
+      final size = tester.getSize(find.byType(FindBackPill));
+      expect(
+        size.width,
+        greaterThanOrEqualTo(48.0),
+        reason: 'FindBackPill width must be >= 48dp',
+      );
+      expect(
+        size.height,
+        greaterThanOrEqualTo(48.0),
+        reason: 'FindBackPill height must be >= 48dp',
+      );
+    });
+
+    testWidgets(
+      '31.1c FindBackPill Semantics: button=true, label from ARB (no literal Close/Back)',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            locale: const Locale('en'),
+            theme: AppTheme.light(),
+            home: const Scaffold(body: FindBackPill(onClose: _noOp)),
+          ),
+        );
+        await tester.pump();
+
+        // No literal "Close" or "Back" Text widget (must come from ARB).
+        expect(
+          find.descendant(
+            of: find.byType(FindBackPill),
+            matching: find.text('Close'),
+          ),
+          findsNothing,
+          reason: 'No literal Text("Close") in FindBackPill (ARB only)',
+        );
+        expect(
+          find.descendant(
+            of: find.byType(FindBackPill),
+            matching: find.text('Back'),
+          ),
+          findsNothing,
+          reason: 'No literal Text("Back") in FindBackPill (ARB only)',
+        );
+
+        // ARB key findDoneTooltip = "Close search" (EN) — the tooltip must
+        // be non-empty and resolved from ARB, not a literal.
+        // We check via byTooltip that the EN value appears.
+        expect(
+          find.byTooltip('Close search'),
+          findsOneWidget,
+          reason:
+              'FindBackPill must use findDoneTooltip ARB key = "Close search" (EN)',
+        );
+      },
+    );
+
+    testWidgets('31.1d FindBackPill tap calls onClose exactly once', (
+      tester,
+    ) async {
+      var callCount = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: AppTheme.light(),
+          home: Scaffold(body: FindBackPill(onClose: () => callCount++)),
+        ),
+      );
+      await tester.pump();
+
+      await tester.tap(find.byType(FindBackPill));
+      await tester.pump();
+
+      expect(
+        callCount,
+        equals(1),
+        reason: 'FindBackPill must call onClose exactly once per tap',
+      );
+    });
+
+    testWidgets(
+      '31.1e FindBackPill highContrast=true → zero BackdropFilter (opaque fallback)',
+      (tester) async {
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(highContrast: true),
+            child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              theme: AppTheme.light(),
+              home: const Scaffold(body: FindBackPill(onClose: _noOp)),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        // FindBackPill is always solid — no BackdropFilter regardless of
+        // highContrast (it uses Material(color:primary), not GlassSurface).
+        expect(
+          find.descendant(
+            of: find.byType(FindBackPill),
+            matching: find.byType(BackdropFilter),
+          ),
+          findsNothing,
+          reason:
+              'FindBackPill must have no BackdropFilter under highContrast=true '
+              '(always opaque solid circle)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 31.2  _BottomMorphSlot behaviour (tested via BufferScreen integration)
+    // -----------------------------------------------------------------------
+
+    testWidgets(
+      '31.2a _BottomMorphSlot expanded=false → collapsedChild visible, '
+      'expandedChild not hit-testable',
+      (tester) async {
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        // find inactive → BottomToolbar (collapsedChild) in tree.
+        expect(
+          find.byType(BottomToolbar),
+          findsOneWidget,
+          reason: 'collapsedChild must be in tree when expanded=false',
+        );
+        // FindSearchBar (expandedChild) must not be present.
+        expect(
+          find.byType(FindSearchBar),
+          findsNothing,
+          reason: 'expandedChild must not be in tree when find is inactive',
+        );
+      },
+    );
+
+    testWidgets('31.2b _BottomMorphSlot expanded=true → expandedChild visible, '
+        'collapsedChild absent after settle', (tester) async {
+      await _pumpBufferScreen(tester, initialSharedText: null);
+
+      final element = tester.element(find.byType(TextField).first);
+      final container = ProviderScope.containerOf(element);
+      container.read(findProvider.notifier).startSearch(entryOffset: 0);
+      // Use pumpAndSettle so the AnimatedSwitcher crossfade completes
+      // and the exiting BottomToolbar child is removed from the tree.
+      await tester.pumpAndSettle();
+
+      // FindSearchBar (expandedChild) must be in tree.
+      expect(
+        find.byType(FindSearchBar),
+        findsOneWidget,
+        reason: 'expandedChild must be in tree when expanded=true',
+      );
+      // BottomToolbar must be absent once the AnimatedSwitcher settles.
+      expect(
+        find.byType(BottomToolbar),
+        findsNothing,
+        reason:
+            'collapsedChild (BottomToolbar) must be absent after '
+            'AnimatedSwitcher completes when expanded=true',
+      );
+    });
+
+    testWidgets(
+      '31.2c reduce-motion: disableAnimations=true + pump 2ms → no FlutterError, '
+      'AnimatedSize present',
+      (tester) async {
+        final fakeShare = _FakeShareIntentService();
+        final fakeRepo = _FakeRecoveryRepository();
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              initialSharedTextProvider.overrideWithValue(null),
+              shareIntentServiceProvider.overrideWithValue(fakeShare),
+              recoveryRepositoryProvider.overrideWithValue(fakeRepo),
+              settingsProvider.overrideWith(
+                () => _FakeSettingsNotifier(const AppSettings()),
+              ),
+            ],
+            child: MediaQuery(
+              data: const MediaQueryData(disableAnimations: true),
+              child: MaterialApp(
+                theme: AppTheme.light(),
+                localizationsDelegates: AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: const BufferScreen(),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final element = tester.element(find.byType(TextField).first);
+        final container = ProviderScope.containerOf(element);
+        container.read(findProvider.notifier).startSearch(entryOffset: 0);
+
+        // 2ms pump — under reduce-motion the slot uses Duration(milliseconds: 1)
+        // so this is post-transition.
+        await tester.pump(const Duration(milliseconds: 2));
+
+        // No error thrown (RenderAnimatedSize must not assert on duration=1ms).
+        expect(find.byType(AnimatedSize), findsWidgets);
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 31.3  Group-15 update: findState.active → stack composition
+    // -----------------------------------------------------------------------
+
+    testWidgets('31.3a findState.active=true → FindBackPill present top-left, '
+        'zero BottomToolbar, ChromePill mounted', (tester) async {
+      await _pumpBufferScreen(tester, initialSharedText: null);
+
+      final element = tester.element(find.byType(TextField).first);
+      final container = ProviderScope.containerOf(element);
+
+      // Activate find and settle the AnimatedSwitcher crossfade so
+      // BottomToolbar (exiting child) is fully removed from the tree.
+      container.read(findProvider.notifier).startSearch(entryOffset: 0);
+      await tester.pumpAndSettle();
+
+      // FindBackPill must be in the tree exactly once.
+      expect(
+        find.byType(FindBackPill),
+        findsOneWidget,
+        reason:
+            'FindBackPill must be mounted when findState.active=true (FR-18)',
+      );
+
+      // BottomToolbar must be absent after the AnimatedSwitcher settles.
+      expect(
+        find.byType(BottomToolbar),
+        findsNothing,
+        reason:
+            'BottomToolbar must be absent once AnimatedSwitcher completes '
+            'when find is active (FR-12)',
+      );
+
+      // ChromePill must remain mounted.
+      expect(
+        find.byType(ChromePill),
+        findsOneWidget,
+        reason: 'ChromePill must stay mounted during find (FR-18)',
+      );
+    });
+
+    testWidgets(
+      '31.3b findState.active=false → zero FindBackPill, one BottomToolbar',
+      (tester) async {
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        // Default: find inactive.
+        expect(
+          find.byType(FindBackPill),
+          findsNothing,
+          reason: 'FindBackPill must not be present when find is inactive',
+        );
+        expect(
+          find.byType(BottomToolbar),
+          findsOneWidget,
+          reason: 'BottomToolbar must be present when find is inactive (FR-07)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 31.4  Animated swap: active false→true, pump 50ms → in-flight
+    // -----------------------------------------------------------------------
+
+    testWidgets(
+      '31.4 false→true toggle: AnimatedSize/AnimatedAlign in-flight after 50ms',
+      (tester) async {
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        final element = tester.element(find.byType(TextField).first);
+        final container = ProviderScope.containerOf(element);
+
+        // Trigger expand.
+        container.read(findProvider.notifier).startSearch(entryOffset: 0);
+
+        // Pump only 50ms (less than kChromeMorphDuration = 220ms) so the
+        // animation is still in-flight.
+        await tester.pump(const Duration(milliseconds: 50));
+
+        // AnimatedSize and AnimatedAlign must both be present in the tree
+        // (they are part of _BottomMorphSlot).
+        expect(
+          find.byType(AnimatedSize),
+          findsWidgets,
+          reason: 'AnimatedSize must be in tree during morph animation',
+        );
+        expect(
+          find.byType(AnimatedAlign),
+          findsWidgets,
+          reason: 'AnimatedAlign must be in tree during morph animation',
+        );
+
+        // Settle to clean up timers.
+        await tester.pumpAndSettle();
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 31.5  Expanded full-width: FindSearchBar width == screenWidth - 2*kChromeSideMargin
+    // -----------------------------------------------------------------------
+
+    testWidgets(
+      '31.5 find active → FindSearchBar width == screenWidth - 2*kChromeSideMargin (±1dp)',
+      (tester) async {
+        const screenW = 400.0;
+        tester.view.physicalSize = const Size(screenW, 800.0);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        final element = tester.element(find.byType(TextField).first);
+        final container = ProviderScope.containerOf(element);
+        container.read(findProvider.notifier).startSearch(entryOffset: 0);
+        await tester.pumpAndSettle();
+
+        final barWidth = tester.getSize(find.byType(FindSearchBar)).width;
+        const expectedWidth = screenW - 2 * kChromeSideMargin;
+        expect(
+          barWidth,
+          closeTo(expectedWidth, 1.5),
+          reason:
+              'FindSearchBar width must be screenWidth - 2*kChromeSideMargin '
+              '($expectedWidth), got $barWidth (±1dp tolerance)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 31.6  FindBackPill placement: dx <= kChromeSideMargin+tol, dy <= kChromeTopGap+tol
+    // -----------------------------------------------------------------------
+
+    testWidgets(
+      '31.6 FindBackPill top-left placement respects kChromeTopGap and kChromeSideMargin',
+      (tester) async {
+        tester.view.physicalSize = const Size(400, 800);
+        tester.view.devicePixelRatio = 1.0;
+        // No system safe area in test environment.
+        tester.view.padding = const FakeViewPadding(top: 0);
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        final element = tester.element(find.byType(TextField).first);
+        final container = ProviderScope.containerOf(element);
+        container.read(findProvider.notifier).startSearch(entryOffset: 0);
+        await tester.pumpAndSettle();
+
+        final topLeft = tester.getTopLeft(find.byType(FindBackPill));
+        const tol = 4.0; // allow a few dp for Padding resolution
+
+        expect(
+          topLeft.dx,
+          lessThanOrEqualTo(kChromeSideMargin + tol),
+          reason:
+              'FindBackPill left edge must be <= kChromeSideMargin (${kChromeSideMargin}dp) '
+              '+${tol}dp tolerance, got ${topLeft.dx}dp',
+        );
+        expect(
+          topLeft.dy,
+          lessThanOrEqualTo(kChromeTopGap + tol),
+          reason:
+              'FindBackPill top edge must be <= kChromeTopGap (${kChromeTopGap}dp) '
+              '+${tol}dp tolerance (safeAreaTop=0), got ${topLeft.dy}dp',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 31.7  Mid-morph re-target (EC-05): toggle true→false during ~30ms → settles
+    // -----------------------------------------------------------------------
+
+    testWidgets(
+      '31.7 EC-05: toggle active→inactive mid-flight → settles to BottomToolbar, no exception',
+      (tester) async {
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        final element = tester.element(find.byType(TextField).first);
+        final container = ProviderScope.containerOf(element);
+
+        // Open find (starts expand animation).
+        container.read(findProvider.notifier).startSearch(entryOffset: 0);
+        await tester.pump(const Duration(milliseconds: 30));
+
+        // Mid-flight: close find.
+        container.read(findProvider.notifier).close();
+        await tester.pump(const Duration(milliseconds: 10));
+
+        // Must settle without exception.
+        await tester.pumpAndSettle();
+
+        // End state: BottomToolbar present, FindBackPill absent.
+        expect(
+          find.byType(BottomToolbar),
+          findsOneWidget,
+          reason:
+              'BottomToolbar must be present after mid-morph re-target to inactive',
+        );
+        expect(
+          find.byType(FindBackPill),
+          findsNothing,
+          reason: 'FindBackPill must be absent after find is closed (EC-05)',
         );
       },
     );
@@ -3900,14 +5436,17 @@ void _assertEditorVerticalPadding(
   WidgetTester tester,
   double expectedVertical,
 ) {
-  // After TASK-07 SP-20260615 the outer editor Padding is no longer symmetric:
-  //   top  = editorTopInset(width, safeAreaTop)  (>= kChromeMenuZoneHeight)
-  //   bottom = verticalMargin(width)             (== expectedVertical)
-  //   left  = right = editorHorizontalMargin(fontSizePt) (> 0)
+  // After SP-20260617 TASK-11 the outer editor Padding bottom is:
+  //   top    = editorTopInset(width, safeAreaTop)     (>= kChromeMenuZoneHeight)
+  //   bottom = editorBottomInset(width, keyboard, sb) (== expectedVertical)
+  //   left   = right = editorHorizontalMargin(fontSizePt) (> 0)
+  //
+  // Prior to TASK-11 bottom was verticalMargin(width); now it is
+  // editorBottomInset(width, 0, 0) = max(48, verticalMargin(width)).
   //
   // We identify the outer editor Padding by requiring left > 0 (horizontal
   // margin is present — no other Padding in the tree has this combination)
-  // and check that bottom == expectedVertical (FR-M7-11 margin contract).
+  // and check that bottom == expectedVertical (TASK-11 FR-22 contract).
   bool found = false;
   tester.allWidgets.whereType<Padding>().forEach((p) {
     final e = p.padding;

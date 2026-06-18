@@ -1,6 +1,6 @@
 // VERIFY: OQ-B1 — key strings on AppSettings must be confirmed against the
 // upstream GNOME Buffer gschema before TASK-13 implements this interface.
-import 'package:buffer/domain/settings/app_settings.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
 
 /// Port (repository interface) for persisting and retrieving [AppSettings].
 ///

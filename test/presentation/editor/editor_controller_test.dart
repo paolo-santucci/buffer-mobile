@@ -7,7 +7,7 @@
 // Run `flutter test test/presentation/editor/editor_controller_test.dart` to confirm
 // they fail, then again after implementation to confirm they pass.
 
-import 'package:buffer/presentation/editor/editor_controller.dart';
+import 'package:foglietto/presentation/editor/editor_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 

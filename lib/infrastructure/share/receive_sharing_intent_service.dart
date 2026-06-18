@@ -9,7 +9,7 @@ import 'dart:async';
 
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
-import 'package:buffer/infrastructure/share/share_intent_service.dart';
+import 'package:foglietto/infrastructure/share/share_intent_service.dart';
 
 /// Concrete implementation of [ShareIntentService] backed by the
 /// `receive_sharing_intent` package.

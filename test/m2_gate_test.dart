@@ -548,7 +548,7 @@ abstract interface class BufferNotifier {
   //   lib/infrastructure/share/receive_sharing_intent_service.dart
   //
   // Imports of the buffer adapter file via the buffer package namespace:
-  //   import 'package:buffer/infrastructure/share/receive_sharing_intent_service.dart'
+  //   import 'package:foglietto/infrastructure/share/receive_sharing_intent_service.dart'
   // are NOT counted — they are not imports of the platform package itself.
   // ────────────────────────────────────────────────────────────────────────────
 

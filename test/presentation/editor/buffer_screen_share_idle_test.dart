@@ -3,10 +3,12 @@
 // Spec refs: FR-01, FR-04, FR-05, FR-09, FR-10, FR-11, FR-12, NFR-04,
 //            EC-02, EC-05, EC-06, EC-07, EC-08, EC-09, §5.1.6, §4.3, §7.2
 //
-// Three bundled edits verified here:
-//   1. ShareOverlay mount — sibling of ChromeOverlay inside !findState.active.
-//   2. enabled + onShareTap wiring via bufferProvider.text (NOT _controller.text).
-//   3. Host-owned idle-reveal Timer (1300 ms) with dispose safety.
+// SP-20260617 TASK-11: ShareOverlay + ChromeOverlay deleted in Wave 1/2.
+//   Tests retargeted to ChromePill, which owns both share + overflow buttons.
+//   Group A: ChromePill presence (replaces ShareOverlay+ChromeOverlay checks).
+//   Group B: share wiring via ChromePill share button (ios_share icon).
+//   Group C: lockstep chrome visibility via ChromePill AnimatedOpacity.
+//   Group D: idle-reveal timer — no change (doesn't reference overlay types).
 //
 // TDD discipline: these tests are written BEFORE the implementation edits.
 // They fail (red) until the three edits land in buffer_screen.dart.
@@ -22,23 +24,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/domain/buffer/buffer_notifier_impl.dart';
-import 'package:buffer/domain/buffer/buffer_provider.dart';
-import 'package:buffer/domain/buffer/buffer_state.dart';
-import 'package:buffer/domain/recovery/recovery_note.dart';
-import 'package:buffer/domain/recovery/recovery_repository.dart';
-import 'package:buffer/infrastructure/share/share_intent_service.dart';
-import 'package:buffer/infrastructure/share/share_target_service.dart';
-import 'package:buffer/l10n/app_localizations.dart';
-import 'package:buffer/presentation/editor/buffer_screen.dart';
-import 'package:buffer/presentation/editor/share_providers.dart';
-import 'package:buffer/presentation/find/find_provider.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
-import 'package:buffer/presentation/shell/chrome_reveal_controller.dart';
-import 'package:buffer/presentation/shell/share_overlay.dart';
-import 'package:buffer/presentation/shell/chrome_overlay.dart';
-import 'package:buffer/presentation/theme/app_theme.dart';
-import 'package:buffer/domain/settings/app_settings.dart';
+import 'package:foglietto/domain/buffer/buffer_notifier_impl.dart';
+import 'package:foglietto/domain/buffer/buffer_provider.dart';
+import 'package:foglietto/domain/buffer/buffer_state.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
+import 'package:foglietto/domain/recovery/recovery_repository.dart';
+import 'package:foglietto/infrastructure/share/share_intent_service.dart';
+import 'package:foglietto/infrastructure/share/share_target_service.dart';
+import 'package:foglietto/l10n/app_localizations.dart';
+import 'package:foglietto/presentation/editor/buffer_screen.dart';
+import 'package:foglietto/presentation/editor/share_providers.dart';
+import 'package:foglietto/presentation/find/find_provider.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
+import 'package:foglietto/presentation/shell/chrome_pill.dart';
+import 'package:foglietto/presentation/shell/chrome_reveal_controller.dart';
+import 'package:foglietto/presentation/theme/app_theme.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
 
 // ---------------------------------------------------------------------------
 // Test doubles
@@ -155,53 +156,66 @@ Future<void> _pump(
 
 void main() {
   // -------------------------------------------------------------------------
-  // Group A — ShareOverlay mount (EC-05, FR-01)
+  // Group A — ChromePill presence (replaces old ShareOverlay+ChromeOverlay)
+  //
+  // SP-20260617 TASK-11: ShareOverlay and ChromeOverlay are deleted in Wave
+  // 1/2 (TASK-06). ChromePill is the single top-right affordance that owns
+  // both share and overflow buttons. FR-18: ChromePill stays mounted during
+  // find (no conditional removal). EC-05 is now satisfied by ChromePill's
+  // IgnorePointer gate rather than conditional un-mounting.
   // -------------------------------------------------------------------------
-  group('TASK-09 — ShareOverlay mount', () {
+  group('TASK-09/TASK-11 — ChromePill presence', () {
     testWidgets(
-      'ShareOverlay is present in tree when find is inactive (FR-01, EC-05)',
+      'ChromePill is present in tree when find is inactive (FR-01, TASK-11)',
       (tester) async {
         await _pump(tester, initialText: 'hello');
 
         expect(
-          find.byType(ShareOverlay),
+          find.byType(ChromePill),
           findsOneWidget,
-          reason: 'ShareOverlay must be mounted when findState.active == false',
+          reason:
+              'ChromePill must be mounted when findState.active == false '
+              '(replaces old ShareOverlay check — TASK-11)',
         );
       },
     );
 
     testWidgets(
-      'ShareOverlay and ChromeOverlay are both mounted when find is inactive (FR-01)',
+      'ChromePill is the single top-right affordance (FR-01, TASK-11)',
       (tester) async {
         await _pump(tester, initialText: 'hello');
 
-        expect(find.byType(ChromeOverlay), findsOneWidget);
-        expect(find.byType(ShareOverlay), findsOneWidget);
+        // ChromePill is always present — Wave 1 deleted the twin-overlay model.
+        expect(find.byType(ChromePill), findsOneWidget);
       },
     );
 
-    testWidgets('ShareOverlay is absent when find is active (EC-05)', (
-      tester,
-    ) async {
-      await _pump(tester, initialText: 'hello');
+    testWidgets(
+      'ChromePill stays mounted during find — FR-18 (old EC-05 guard removed)',
+      (tester) async {
+        await _pump(tester, initialText: 'hello');
 
-      // Activate find via findProvider.
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(BufferScreen)),
-      );
-      container.read(findProvider.notifier).startSearch(entryOffset: 0);
-      await tester.pump();
+        // Activate find via findProvider.
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(BufferScreen)),
+        );
+        container.read(findProvider.notifier).startSearch(entryOffset: 0);
+        await tester.pump();
 
-      expect(
-        find.byType(ShareOverlay),
-        findsNothing,
-        reason: 'ShareOverlay must be hidden when find is active (EC-05)',
-      );
-    });
+        // FR-18: ChromePill stays mounted (unlike old ShareOverlay which
+        // disappeared when find was active). The IgnorePointer inside
+        // ChromePill gates pointer events; the widget stays in the tree.
+        expect(
+          find.byType(ChromePill),
+          findsOneWidget,
+          reason:
+              'ChromePill must remain mounted when find is active (FR-18 / TASK-11)',
+        );
+      },
+    );
 
     testWidgets(
-      'ChromeOverlay is also absent when find is active (EC-05 — existing guard)',
+      'ChromePill still present when find is active — EC-05 is IgnorePointer gated',
       (tester) async {
         await _pump(tester, initialText: 'hello');
 
@@ -211,24 +225,26 @@ void main() {
         container.read(findProvider.notifier).startSearch(entryOffset: 0);
         await tester.pump();
 
-        expect(find.byType(ChromeOverlay), findsNothing);
-        expect(find.byType(ShareOverlay), findsNothing);
+        // Both the old EC-05 overlays are gone; ChromePill is always present.
+        expect(find.byType(ChromePill), findsOneWidget);
       },
     );
   });
 
   // -------------------------------------------------------------------------
-  // Group B — share wiring: bufferProvider.text, enabled, onShareTap (FR-04/05)
+  // Group B — share wiring: share button inside ChromePill (FR-04/05)
+  //
+  // SP-20260617 TASK-11: Share button is now inside ChromePill (ios_share
+  // icon). The wiring is the same: button reads bufferProvider.text and
+  // delegates to shareTargetServiceProvider. onPressed is null when buffer
+  // is empty or whitespace-only (FR-03/FR-05).
   //
   // Important seam detail: the controller↔state sync means _controller.text
   // drives bufferProvider.text (via updateText in _onControllerChanged). To
   // get both in sync, tests type text via tester.enterText so the controller
-  // and provider both hold the typed value. The key assertion (FR-04) is that
-  // onShareTap reads bufferProvider.text (the provider value), not _controller
-  // .text directly — they are equal after enterText, but the canonical read
-  // path is the provider, not the controller field.
+  // and provider both hold the typed value.
   // -------------------------------------------------------------------------
-  group('TASK-09 — share wiring', () {
+  group('TASK-09/TASK-11 — share wiring (ChromePill share button)', () {
     testWidgets(
       'tap share → fake records 1 call with text == bufferProvider.text (FR-04)',
       (tester) async {
@@ -253,15 +269,23 @@ void main() {
           reason: 'bufferProvider must hold the typed text',
         );
 
-        // Tap the IconButton directly (inside ShareOverlay) to fire onShareTap.
-        final iconBtn = find.descendant(
-          of: find.byType(ShareOverlay),
+        // Tap the share IconButton inside ChromePill (ios_share icon).
+        final shareBtn = find.descendant(
+          of: find.byType(ChromePill),
+          matching: find.byIcon(Icons.ios_share),
+        );
+        final iconBtn = find.ancestor(
+          of: shareBtn,
           matching: find.byType(IconButton),
         );
-        final btn = tester.widget<IconButton>(iconBtn);
-        expect(btn.onPressed, isNotNull, reason: 'button must be enabled');
+        final btn = tester.widget<IconButton>(iconBtn.first);
+        expect(
+          btn.onPressed,
+          isNotNull,
+          reason: 'share button must be enabled',
+        );
 
-        await tester.tap(iconBtn);
+        await tester.tap(iconBtn.first);
         await tester.pump();
 
         expect(
@@ -278,7 +302,7 @@ void main() {
     );
 
     testWidgets(
-      'empty buffer "" → IconButton.onPressed == null → 0 share calls (FR-05, EC-01)',
+      'empty buffer "" → share IconButton.onPressed == null → 0 share calls (FR-05, EC-01)',
       (tester) async {
         final fake = _FakeShareTargetService();
         // Start with no text (default).
@@ -291,22 +315,26 @@ void main() {
         expect(container.read(bufferProvider).text, isEmpty);
         await tester.pump();
 
-        // Find the IconButton inside ShareOverlay.
-        final iconButton = find.descendant(
-          of: find.byType(ShareOverlay),
+        // Find the share IconButton inside ChromePill.
+        final shareIcon = find.descendant(
+          of: find.byType(ChromePill),
+          matching: find.byIcon(Icons.ios_share),
+        );
+        final iconButton = find.ancestor(
+          of: shareIcon,
           matching: find.byType(IconButton),
         );
-        final btn = tester.widget<IconButton>(iconButton);
+        final btn = tester.widget<IconButton>(iconButton.first);
         expect(btn.onPressed, isNull, reason: 'empty buffer → onPressed null');
 
-        await tester.tap(iconButton, warnIfMissed: false);
+        await tester.tap(iconButton.first, warnIfMissed: false);
         await tester.pump();
         expect(fake.capturedTexts, isEmpty);
       },
     );
 
     testWidgets(
-      'whitespace-only "   " → onPressed null → 0 share calls (OQ-03, FR-05)',
+      'whitespace-only "   " → share onPressed null → 0 share calls (OQ-03, FR-05)',
       (tester) async {
         final fake = _FakeShareTargetService();
         await _pump(tester, fakeShare: fake);
@@ -321,47 +349,65 @@ void main() {
         // Verify the provider holds the whitespace.
         expect(container.read(bufferProvider).text, equals('   '));
 
-        final iconButton = find.descendant(
-          of: find.byType(ShareOverlay),
+        final shareIcon = find.descendant(
+          of: find.byType(ChromePill),
+          matching: find.byIcon(Icons.ios_share),
+        );
+        final iconButton = find.ancestor(
+          of: shareIcon,
           matching: find.byType(IconButton),
         );
-        final btn = tester.widget<IconButton>(iconButton);
+        final btn = tester.widget<IconButton>(iconButton.first);
         expect(
           btn.onPressed,
           isNull,
           reason: 'whitespace-only → trim.isEmpty → onPressed null (OQ-03)',
         );
 
-        await tester.tap(iconButton, warnIfMissed: false);
+        await tester.tap(iconButton.first, warnIfMissed: false);
         await tester.pump();
         expect(fake.capturedTexts, isEmpty);
       },
     );
 
     testWidgets(
-      'reactive enable: empty → enabled false; type "x" → enabled true (EC-02)',
+      'reactive enable: empty → share disabled; type "x" → share enabled (EC-02)',
       (tester) async {
         await _pump(tester);
 
-        // Initially empty → disabled.
-        final iconBtnFinder = find.descendant(
-          of: find.byType(ShareOverlay),
+        // Initially empty → share button disabled.
+        final shareIcon = find.descendant(
+          of: find.byType(ChromePill),
+          matching: find.byIcon(Icons.ios_share),
+        );
+        final iconBtnFinder = find.ancestor(
+          of: shareIcon,
           matching: find.byType(IconButton),
         );
         expect(
-          tester.widget<IconButton>(iconBtnFinder).onPressed,
+          tester.widget<IconButton>(iconBtnFinder.first).onPressed,
           isNull,
-          reason: 'empty text → onPressed null',
+          reason: 'empty text → share onPressed null',
         );
 
-        // Type something to enable the button.
+        // Reveal chrome first so the pill is not IgnorePointer'd.
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(BufferScreen)),
+        );
+        container.read(chromeVisibilityProvider.notifier).reveal();
+
+        // Type something to enable the share button.
         await tester.enterText(find.byType(TextField).first, 'x');
         await tester.pump();
 
+        // Chrome hides on type; reveal again to check the button state.
+        container.read(chromeVisibilityProvider.notifier).reveal();
+        await tester.pump();
+
         expect(
-          tester.widget<IconButton>(iconBtnFinder).onPressed,
+          tester.widget<IconButton>(iconBtnFinder.first).onPressed,
           isNotNull,
-          reason: '"x" → onPressed non-null (EC-02)',
+          reason: '"x" → share onPressed non-null (EC-02)',
         );
       },
     );
@@ -369,10 +415,14 @@ void main() {
 
   // -------------------------------------------------------------------------
   // Group C — lockstep chrome visibility (FR-02)
+  //
+  // SP-20260617 TASK-11: ChromePill contains a single AnimatedOpacity that
+  // drives both share and overflow buttons together. The old twin-overlay
+  // lockstep is replaced by a single AnimatedOpacity gate inside ChromePill.
   // -------------------------------------------------------------------------
-  group('TASK-09 — lockstep chrome/share visibility', () {
+  group('TASK-09/TASK-11 — lockstep chrome visibility (ChromePill)', () {
     testWidgets(
-      'chromeVisibilityProvider false → both overlays opacity 0.0 (FR-02)',
+      'chromeVisibilityProvider false → ChromePill AnimatedOpacity 0.0 (FR-02)',
       (tester) async {
         await _pump(tester, initialText: 'hello');
 
@@ -382,28 +432,22 @@ void main() {
         container.read(chromeVisibilityProvider.notifier).onTextChanged();
         await tester.pump();
 
-        // Both overlays wrapped in AnimatedOpacity with opacity 0.0.
-        final opacities = tester
-            .widgetList<AnimatedOpacity>(find.byType(AnimatedOpacity))
-            .toList();
-
-        // Find the one that belongs to ShareOverlay.
-        final shareAO = tester
+        // ChromePill's AnimatedOpacity must be 0.0 when chrome is hidden.
+        final pillAO = tester
             .widgetList<AnimatedOpacity>(
               find.descendant(
-                of: find.byType(ShareOverlay),
+                of: find.byType(ChromePill),
                 matching: find.byType(AnimatedOpacity),
               ),
             )
             .first;
 
-        expect(shareAO.opacity, equals(0.0));
-        expect(opacities.any((ao) => ao.opacity == 0.0), isTrue);
+        expect(pillAO.opacity, equals(0.0));
       },
     );
 
     testWidgets(
-      'chromeVisibilityProvider true → ShareOverlay AnimatedOpacity 1.0 (FR-02)',
+      'chromeVisibilityProvider true → ChromePill AnimatedOpacity 1.0 (FR-02)',
       (tester) async {
         await _pump(tester, initialText: 'hello');
 
@@ -413,16 +457,16 @@ void main() {
         container.read(chromeVisibilityProvider.notifier).reveal();
         await tester.pump();
 
-        final shareAO = tester
+        final pillAO = tester
             .widgetList<AnimatedOpacity>(
               find.descendant(
-                of: find.byType(ShareOverlay),
+                of: find.byType(ChromePill),
                 matching: find.byType(AnimatedOpacity),
               ),
             )
             .first;
 
-        expect(shareAO.opacity, equals(1.0));
+        expect(pillAO.opacity, equals(1.0));
       },
     );
   });

@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:buffer/domain/buffer/buffer_notifier.dart';
-import 'package:buffer/domain/buffer/buffer_state.dart';
+import 'package:foglietto/domain/buffer/buffer_notifier.dart';
+import 'package:foglietto/domain/buffer/buffer_state.dart';
 
 /// Concrete in-memory implementation of [BufferNotifier].
 ///

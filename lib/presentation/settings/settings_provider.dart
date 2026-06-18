@@ -2,9 +2,9 @@ import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:buffer/domain/settings/app_settings.dart';
-import 'package:buffer/domain/settings/settings_repository.dart';
-import 'package:buffer/infrastructure/settings/shared_preferences_settings_repository.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
+import 'package:foglietto/domain/settings/settings_repository.dart';
+import 'package:foglietto/infrastructure/settings/shared_preferences_settings_repository.dart';
 
 // ---------------------------------------------------------------------------
 // 1. SharedPreferences seam — overridden at the ProviderScope root in main.dart

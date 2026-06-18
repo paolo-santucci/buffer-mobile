@@ -3,6 +3,13 @@
 // TASK-07 (M4): BufferScreen — find/replace integration wiring.
 // TASK-12 (M5): BufferScreen — kDebugMode /recovery entry affordance.
 // TASK-12 (M6): BufferScreen — shell integration (Stack+chrome+toast+menu+paste+Esc).
+// TASK-11 (SP-20260617 Wave 3): buffer_screen.dart Stack rewiring.
+//   - ChromeOverlay + ShareOverlay DELETED; replaced by ChromePill (FR-01).
+//   - OverflowPopover mounted on ChromePill.onOverflow (FR-04).
+//   - Bottom slot: BottomToolbar (FR-07) ↔ FindSearchBar swap (FR-12/17).
+//   - CopyAction + PasteAtEndAction wired to Actions map (FR-08/10).
+//   - editorBottomInset() applied to OUTER Padding (FR-22/EC-14).
+//   - LayerLink owned here; same instance passed to ChromePill and popover.
 //
 // Spec refs (M2): FR-M2-01, FR-M2-02, FR-M2-03, FR-M2-04, FR-M2-15,
 //                 FR-M2-16, FR-M2-17, EC-M2-01, EC-M2-03..EC-M2-05,
@@ -97,25 +104,25 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:buffer/domain/buffer/buffer_provider.dart';
-import 'package:buffer/domain/buffer/buffer_state.dart';
-import 'package:buffer/domain/find/find_engine.dart';
-import 'package:buffer/domain/find/find_state.dart';
-import 'package:buffer/domain/settings/app_settings.dart';
-import 'package:buffer/presentation/editor/editor_actions.dart';
-import 'package:buffer/presentation/editor/editor_controller.dart';
-import 'package:buffer/presentation/editor/editor_layout.dart';
-import 'package:buffer/presentation/editor/share_providers.dart';
-import 'package:buffer/presentation/find/find_provider.dart';
-import 'package:buffer/presentation/find/find_search_bar.dart';
-import 'package:buffer/l10n/app_localizations.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
-import 'package:buffer/presentation/shell/chrome_overlay.dart';
-import 'package:buffer/presentation/shell/chrome_reveal_controller.dart';
-import 'package:buffer/presentation/shell/menu_sheet.dart';
-import 'package:buffer/presentation/shell/share_overlay.dart';
-import 'package:buffer/presentation/shell/toast_controller.dart';
-import 'package:buffer/presentation/shell/toast_overlay.dart';
+import 'package:foglietto/domain/buffer/buffer_provider.dart';
+import 'package:foglietto/domain/buffer/buffer_state.dart';
+import 'package:foglietto/domain/find/find_engine.dart';
+import 'package:foglietto/domain/find/find_state.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
+import 'package:foglietto/presentation/editor/editor_actions.dart';
+import 'package:foglietto/presentation/editor/editor_controller.dart';
+import 'package:foglietto/presentation/editor/editor_layout.dart';
+import 'package:foglietto/presentation/editor/share_providers.dart';
+import 'package:foglietto/presentation/find/find_provider.dart';
+import 'package:foglietto/presentation/find/find_search_bar.dart';
+import 'package:foglietto/l10n/app_localizations.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
+import 'package:foglietto/presentation/shell/bottom_toolbar.dart';
+import 'package:foglietto/presentation/shell/chrome_pill.dart';
+import 'package:foglietto/presentation/shell/chrome_reveal_controller.dart';
+import 'package:foglietto/presentation/shell/overflow_popover.dart';
+import 'package:foglietto/presentation/shell/toast_controller.dart';
+import 'package:foglietto/presentation/shell/toast_overlay.dart';
 
 // M7 (TASK-12): Both CANON GAPs below are RESOLVED in this file.
 //   (c) Font family is now wired from settings.useMonospaceFont (FR-M7-09).
@@ -188,16 +195,19 @@ abstract interface class BufferScreenTestSeam {
 
 /// The primary buffer editing screen.
 ///
-/// Renders a full-bleed text editor wrapped in the M6 shell:
+/// Renders a full-bleed text editor wrapped in the M6+Wave3 shell:
 ///   - [Stack] hosting the editor [TextField] (fills the stack),
-///     [ChromeOverlay] (Positioned top-end), and [ToastOverlay] (Positioned
-///     top-centre). The [FindSearchBar] mounts as a Positioned top slot in
-///     the same Stack when active (EC-04 — editor size invariant).
+///     [ChromePill] (Positioned top-right), and [ToastOverlay] (Positioned
+///     top-centre). Bottom slot: [BottomToolbar] (chrome-axis) OR
+///     [FindSearchBar] (find-axis) — never both (FR-12/17).
+///   - [ChromePill] opens [OverflowPopover] on `…` tap (FR-04).
+///   - [LayerLink] owned here; same instance passes to [ChromePill] and
+///     [openOverflowPopover] so the popover tracks the pill (TASK-08).
 ///   - Auto-hiding chrome driven by three inputs: text change, user scroll
 ///     (guarded), and keyboard dismiss.
-///   - Menu sheet opened from the chrome affordance tap (FR-M6-23).
 ///   - Clipboard paste (Ctrl+V) routed through [_applyResult] (FR-M6-20).
 ///   - Esc precedence: find open → close find; else → hide chrome (FR-M6-22).
+///   - Copy/PasteAtEnd toolbar actions wired (FR-08/10, SP-20260617 TASK-11).
 ///
 /// Owns the [EditorController] and an external [ScrollController] (§5.3 "who
 /// owns scrolling" — external so chrome-reveal / scroll-to-match consumers
@@ -221,6 +231,25 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
   late final EditorController _controller;
   late final ScrollController _scrollController;
   StreamSubscription<String>? _shareSubscription;
+
+  // -------------------------------------------------------------------------
+  // SP-20260617 TASK-11: LayerLink ownership
+  //
+  // One LayerLink instance owned here (composition root). Passed to:
+  //   - ChromePill (CompositedTransformTarget anchor).
+  //   - openOverflowPopover (CompositedTransformFollower target).
+  // The same instance ensures the popover tracks the pill correctly (TASK-08).
+  // -------------------------------------------------------------------------
+
+  /// Shared LayerLink between [ChromePill] and [openOverflowPopover].
+  final LayerLink _pillLayerLink = LayerLink();
+
+  /// Programmatic dismiss callback for the currently-open [OverflowPopover].
+  ///
+  /// Null when no popover is open. Set to the [VoidCallback] returned by
+  /// [openOverflowPopover]; cleared in the wrapper that wraps it with a
+  /// setState call so [_dismissPopoverAndClear] stays symmetrical.
+  VoidCallback? _dismissPopoverRaw;
 
   // BUG-003 fix: serialises back-to-back share events so event N+1 does not
   // start until event N's save→reset→populate chain has fully completed.
@@ -266,6 +295,12 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
 
   /// Idle-reveal debounce duration (FR-09, NFR-04).
   static const Duration kIdleRevealDuration = Duration(milliseconds: 1300);
+
+  /// Duration for the bottom-slot morph animation (toolbar → search bar and
+  /// vice versa). Passed to [_BottomMorphSlot]; under reduce-motion the caller
+  /// substitutes [Duration(milliseconds: 1)] (never zero — RenderAnimatedSize
+  /// asserts on zero duration).
+  static const Duration kChromeMorphDuration = Duration(milliseconds: 220);
 
   /// Pending idle-reveal [Timer]. Cancelled and restarted on every real
   /// keystroke (EC-06). Cancelled in [dispose] to prevent post-unmount calls
@@ -915,38 +950,90 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
 
   // -------------------------------------------------------------------------
   // SP-20260615 TASK-07: Find affordance wiring (FR-09, FR-10, C3/C4, NFR-04)
+  // SP-20260617 TASK-05: _dispatchOpenFind() extraction (C7)
   // -------------------------------------------------------------------------
 
-  /// Injected into [openMenuSheet] as [onFind] so the Find / Replace tile
-  /// in [_MenuSheetContent] can open find without owning a [Ref] or calling
-  /// [startSearch] directly (single-path discipline — NFR-04).
+  /// Core find-open dispatch: dispatches [OpenFindIntent] from a context
+  /// inside the [Actions] widget tree (TASK-05 C7 extraction).
   ///
-  /// The sheet self-pops via its own `Navigator.pop` before invoking this
-  /// callback (C3 contract). We therefore defer the [OpenFindIntent] dispatch
-  /// one post-frame to ensure the sheet's pop animation has completed and the
-  /// [Actions] ancestor is still in the tree when [maybeInvoke] is called.
+  /// **Context note:** `Actions.maybeInvoke` walks the InheritedWidget tree
+  /// UPWARD from the supplied context. The [Actions] widget is a descendant
+  /// of `_BufferScreenState`, so we must dispatch from a context INSIDE it.
+  /// [_editorFocusNode.context] is the [TextField]'s element (below [Actions])
+  /// and is valid even when the editor is unfocused because [FocusNode] retains
+  /// its context until disposal.  Falls back to the state [context] if the
+  /// focus node context is unavailable.
   ///
-  /// A [mounted] guard prevents stale invocations after disposal (C4).
-  ///
-  /// **Single-path invariant (NFR-04):** this method calls NO [startSearch]
-  /// directly. It routes exclusively through the existing
-  /// [OpenFindIntent] → [_OpenFindOrRefocusAction] path, which is the sole
+  /// **Single-path invariant (NFR-01):** this method calls NO [startSearch]
+  /// directly. It routes exclusively through
+  /// [OpenFindIntent] → [_OpenFindOrRefocusAction], which is the sole
   /// [startSearch] call site in the codebase.
+  void _dispatchOpenFind() {
+    final innerContext = _editorFocusNode.context ?? context;
+    Actions.maybeInvoke(innerContext, const OpenFindIntent());
+  }
+
+  /// Find-open callback for legacy menu-sheet integration.
   ///
-  /// **Context note:** `Actions.maybeInvoke` searches the InheritedWidget tree
-  /// UPWARD from the given context; the [Actions] widget is a descendant of
-  /// `_BufferScreenState`, so we must dispatch from a context INSIDE [Actions].
-  /// We use [_editorFocusNode.context] (the [TextField]'s element, which sits
-  /// below [Actions]) when available; when the editor is unfocused the context
-  /// is still valid because [FocusNode] retains its context until disposal.
+  /// SP-20260617: The Find tile has been removed from the overflow popover
+  /// (FR-05). Find now opens exclusively via [BottomToolbar.onFind] →
+  /// [_dispatchOpenFind] (FR-07/FR-11/NFR-01). This method is retained
+  /// because TASK-05 source-scan tests assert its presence and verify that it
+  /// delegates to [_dispatchOpenFind] without calling [startSearch] directly
+  /// (NFR-01 single-path invariant proof). It is NOT called from production
+  /// code (TASK-11 replaced all call sites with BottomToolbar.onFind).
+  ///
+  /// Post-frame defer: ensures any pending overlay pop animation completes
+  /// before the [Actions] tree is queried (C3/C4 safety).
+  // ignore: unused_element — source-scan NFR-01 proof; see TASK-05 gate tests
   void _openFindFromMenu() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // Prefer the editor focus node's context (inside the Actions widget),
-      // falling back to the state context (may not reach Actions).
-      final innerContext = _editorFocusNode.context ?? context;
-      Actions.maybeInvoke(innerContext, const OpenFindIntent());
+      _dispatchOpenFind();
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // SP-20260617 TASK-11: OverflowPopover open/dismiss (FR-04, EC-16)
+  // -------------------------------------------------------------------------
+
+  /// Called when the user taps the `…` overflow button in [ChromePill].
+  ///
+  /// Opens the [OverflowPopover] anchored to [_pillLayerLink] and stores the
+  /// dismiss callback. Passing the same [LayerLink] that [ChromePill] uses as
+  /// its [CompositedTransformTarget] anchor ensures the follower tracks the
+  /// pill (TASK-08).
+  ///
+  /// EC-16: the popover is also dismissed programmatically from
+  /// [_buildActions]'s chrome-hide path (onTextChanged → dismiss).
+  void _onOverflowTap() {
+    // Dismiss any existing popover before opening a new one (idempotent).
+    _dismissPopoverRaw?.call();
+
+    final dismiss = openOverflowPopover(context, anchorLink: _pillLayerLink);
+
+    // Wrap dismiss so we can clear _dismissPopoverRaw on close.
+    void wrappedDismiss() {
+      dismiss();
+      if (mounted) {
+        setState(() {
+          _dismissPopoverRaw = null;
+        });
+      }
+    }
+
+    setState(() {
+      _dismissPopoverRaw = wrappedDismiss;
+    });
+  }
+
+  /// Dismisses the open [OverflowPopover] (if any) and clears the callback.
+  ///
+  /// Called from the chrome-hide path to satisfy EC-16 ("popover dismisses
+  /// with the pill when chrome hides").
+  void _dismissPopoverIfOpen() {
+    _dismissPopoverRaw?.call();
+    // _dismissPopoverRaw is cleared inside wrappedDismiss via setState.
   }
 
   // -------------------------------------------------------------------------
@@ -1003,13 +1090,22 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     // (k) M4: Single ref.listen for find-state → push seams + scroll-to-match.
     ref.listen<FindState>(findProvider, _applyFindToController);
 
+    // SP-20260617 TASK-11 (EC-16): Dismiss the OverflowPopover when chrome hides.
+    // When chromeVisibilityProvider transitions from true → false, any open
+    // popover must be removed. The listener fires on every transition; the
+    // dismiss is a no-op if no popover is open.
+    ref.listen<bool>(chromeVisibilityProvider, (previous, next) {
+      if (previous == true && !next) {
+        _dismissPopoverIfOpen();
+      }
+    });
+
     // Watch find state for conditional FindSearchBar mount (i).
     final findState = ref.watch(findProvider);
 
-    // SP-20260616 TASK-09 (FR-05, EC-02, OQ-03): Derive share-enabled flag.
-    // Whitespace-only text is treated as empty — share_plus throws ArgumentError
-    // on empty strings; the disabled guard prevents the call reaching the adapter.
-    final shareEnabled = ref.watch(bufferProvider).text.trim().isNotEmpty;
+    // shareEnabled used by ChromePill internally (reads bufferProvider itself);
+    // kept here for future reference but no longer passed to the pill constructor.
+    // ignore: unused_local_variable — ChromePill reads bufferProvider directly.
 
     // (g) Spell-check wiring (FR-20, FR-21): watch settingsProvider reactively.
     // settingsProvider is an AsyncNotifierProvider<SettingsNotifier, AppSettings>.
@@ -1094,6 +1190,12 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     // Used by editorTopInset(width, safeAreaTop) inside the LayoutBuilder.
     final double safeAreaTop = MediaQuery.of(context).padding.top;
 
+    // SP-20260617 TASK-11 (FR-22/EC-14): Capture the system bottom safe-area
+    // inset BEFORE the SafeArea widget. SafeArea strips padding.bottom for its
+    // descendants, so reading it here gives the raw platform inset (home
+    // indicator / gesture bar on iPhone X+). Used by editorBottomInset.
+    final double safeAreaBottom = MediaQuery.of(context).padding.bottom;
+
     // (f) Single editor TextStyle: height 1.4, fontSize from settings, family+fallback resolved.
     final editorStyle = TextStyle(
       height: 1.4,
@@ -1109,25 +1211,31 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     // the exact same widget subtree.)
     final editorField = _buildShortcuts(context, spellCheck, editorStyle);
 
-    // M6 (n): Build the Stack host — editor (bottom) + Positioned overlays.
+    // SP-20260617 TASK-11: Build the Stack host — editor (bottom) + Positioned overlays.
     //
     // Stack children (bottom→top):
-    //   1. editorField — fills the entire Stack (Positioned.fill or expands:true)
-    //   2. FindSearchBar — Positioned(top:0) when findState.active (EC-04)
-    //   3. ChromeOverlay — Positioned(top:0, right:0, from canon §Components §2)
-    //   4. ToastOverlay  — Positioned(top:16, left:0, right:0, §Components §8)
+    //   1. editorField — fills the entire Stack (Positioned.fill; bottom slot
+    //      conditional on find-axis / chrome-axis at the Padding level).
+    //   2. ChromePill  — Positioned(top:0, right:0) always mounted (FR-18).
+    //   3. Bottom slot — Positioned(bottom, left/right) — conditional:
+    //        - FindSearchBar when findState.active (find-axis, FR-12/17).
+    //        - BottomToolbar when find inactive (chrome-axis, FR-07).
+    //      Never both simultaneously (FR-12/EC-12).
+    //   4. ToastOverlay — Positioned(top:16, left:0, right:0, §Components §8)
     //
     // EC-04: The editor's render box is invariant — it always fills the Stack.
-    // Neither the FindSearchBar, ChromeOverlay, nor ToastOverlay are Column
-    // siblings; they are all Positioned overlays that do not affect layout.
-    //
-    // (i) M4: FindSearchBar is now a Positioned top slot in the Stack (not
-    // a Column sibling). When active, it overlays the editor from the top;
-    // the editor TextField (expands:true) fills the full Stack regardless.
+    // Overlays are Positioned; none are Column siblings.
 
     return Scaffold(
       // No AppBar — canon §Design ethos "no chrome at rest".
       extendBodyBehindAppBar: true,
+      // SP-20260617 TASK-11 (FR-22/EC-14): disable Scaffold's automatic
+      // keyboard-resize so editorBottomInset() can manage it manually.
+      // With resizeToAvoidBottomInset: true (default), the Scaffold zeroes
+      // out MediaQuery.viewInsets for its body, preventing editorBottomInset
+      // from seeing the keyboard height. Setting false keeps viewInsets intact
+      // so the anti-additive max formula receives the raw keyboard inset.
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         // M7 (d): Page-level pinch GestureDetector (FR-M7-05).
         //
@@ -1191,116 +1299,154 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
               // EC-M7-04: editor is still inside Positioned.fill — it never
               // becomes a Column sibling of the overlays.
               // ---------------------------------------------------------------
+              // ---------------------------------------------------------------
+              // SP-20260617 TASK-11 (FR-22/EC-14): editor fill with bottom inset.
+              //
+              // editorBottomInset replaces the old bottom: vMargin so that the
+              // last visible text row clears the bottom toolbar zone AND the
+              // system safe-area, using an anti-additive max formula (EC-14):
+              //   max(kChromeMenuZoneHeight, vMargin, keyboardInset) + safeAreaBottom
+              // The keyboard inset is read from MediaQuery here (inside SafeArea
+              // the view insets are consumed, so we use viewInsets directly).
+              // ---------------------------------------------------------------
               Positioned.fill(
-                // The find header (when active) is a Column sibling ABOVE the
-                // editor so it PUSHES the text down instead of overlaying it
-                // (upstream behaviour: the text shifts down when the search /
-                // replace bar opens). Chrome + toast remain Positioned overlays.
-                child: Column(
-                  children: [
-                    if (findState.active)
-                      FindSearchBar(
-                        onReplace: _onSearchBarReplace,
-                        focusNode: _searchFocusNode,
-                        replaceRowNotifier: _replaceRowNotifier,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // SP-20260615 TASK-07 (FR-04..FR-07, FR-06a, FR-06b,
+                    // NFR-08, NFR-10): Per-side EdgeInsets.
+                    //
+                    // <!-- CANON GAP: ui-design-bible.md §Components.3 editor
+                    //      text view does not specify exact horizontal margin
+                    //      values or a top chrome-clearance formula; the
+                    //      editorHorizontalMargin + editorTopInset derivation
+                    //      is a mobile-specific addition (OQ-14). -->
+                    final maxWidth = constraints.maxWidth;
+                    final hMargin = editorHorizontalMargin(fontSizePt);
+                    // SP-20260617 TASK-11 (FR-18): FindSearchBar is now in the
+                    // bottom slot, not the top. topInset is always editorTopInset
+                    // regardless of find state (ChromePill is always at the top).
+                    final topInset = editorTopInset(maxWidth, safeAreaTop);
+
+                    // SP-20260617 TASK-11 (FR-22/EC-14): bottom inset via
+                    // editorBottomInset — anti-additive max formula.
+                    // keyboardInset from MediaQuery.viewInsetsOf (raw, not
+                    // consumed by SafeArea above — SafeArea removes viewInsets,
+                    // not padding).
+                    // safeAreaBottom captured ABOVE the SafeArea widget (see
+                    // local variable declared before Scaffold) because SafeArea
+                    // strips padding.bottom for its descendants.
+                    final keyboardInset = MediaQuery.viewInsetsOf(
+                      context,
+                    ).bottom;
+                    final bottomInset = editorBottomInset(
+                      maxWidth,
+                      keyboardInset,
+                      safeAreaBottom,
+                    );
+
+                    final editorColumn = Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 720.0),
+                        child: editorField,
                       ),
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          // SP-20260615 TASK-07 (FR-04..FR-07, FR-06a, FR-06b,
-                          // NFR-08, NFR-10): Per-side EdgeInsets replacing the M7
-                          // vertical-only padding. The four sides are:
-                          //   left  = editorHorizontalMargin(fontSizePt) — ~2 char
-                          //   top   = editorTopInset(maxWidth, safeAreaTop)
-                          //            = max(kChromeMenuZoneHeight + safeAreaTop,
-                          //                  verticalMargin(maxWidth))
-                          //           Clears chrome + system inset; >= M7 vMargin.
-                          //   right = editorHorizontalMargin(fontSizePt) — symmetric
-                          //   bottom = verticalMargin(maxWidth) — M7 unchanged
-                          //
-                          // MUST stay on the OUTER Padding (outside RenderEditable)
-                          // so _scrollToMatch / after-Enter geometry stay valid (FR-05).
-                          //
-                          // <!-- CANON GAP: ui-design-bible.md §Components.3 editor
-                          //      text view does not specify exact horizontal margin
-                          //      values or a top chrome-clearance formula; the
-                          //      editorHorizontalMargin + editorTopInset derivation
-                          //      is a mobile-specific addition (OQ-14). -->
-                          final maxWidth = constraints.maxWidth;
-                          final vMargin = verticalMargin(maxWidth);
-                          final hMargin = editorHorizontalMargin(fontSizePt);
-                          // When find is active the search header occupies the top of
-                          // the screen (and the chrome menu is hidden), so the editor
-                          // only needs the small responsive vertical margin above it —
-                          // the header itself provides the top clearance and pushes
-                          // the text down. When find is inactive, reserve the chrome
-                          // menu zone so the first row clears the hamburger.
-                          final topInset = findState.active
-                              ? vMargin
-                              : editorTopInset(maxWidth, safeAreaTop);
-                          final editorColumn = Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(
-                                maxWidth: 720.0,
-                              ),
-                              child: editorField,
-                            ),
-                          );
-                          return Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              hMargin,
-                              topInset,
-                              hMargin,
-                              vMargin,
-                            ),
-                            child: editorColumn,
-                          );
-                        },
+                    );
+                    return Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        hMargin,
+                        topInset,
+                        hMargin,
+                        bottomInset,
                       ),
-                    ),
-                  ],
+                      child: editorColumn,
+                    );
+                  },
                 ),
               ),
 
               // ---------------------------------------------------------------
-              // ChromeOverlay: Positioned top-end (canon §Components §2).
-              // Wires onMenuTap → openMenuSheet(context) (FR-M6-23).
-              // ---------------------------------------------------------------
-              // SP-20260615 TASK-07 (FR-09/FR-10, C3/C4, NFR-04): inject
-              // _openFindFromMenu so the Find / Replace tile in the menu sheet
-              // reaches find via the existing OpenFindIntent single path.
+              // SP-20260617 TASK-11 (FR-01, FR-16, FR-18, FR-19):
+              // ChromePill — single top-right glass pill (share + overflow).
               //
-              // Hidden while find is active: the FindSearchBar (Positioned
-              // top:0, full width) places its rightmost control — the Replace
-              // toggle — under this top-end menu zone. With the chrome painted
-              // on top and hit-testable, taps on "Replace" were intercepted by
-              // the hamburger (the search bar already owns the top; Esc / the
-              // bar's own back button close find). Mounting the chrome only when
-              // find is inactive removes the collision entirely.
-              // SP-20260616 TASK-09 (FR-01, EC-05, §5.1.6):
-              // ShareOverlay and ChromeOverlay share the same guard so they
-              // enter/exit the tree in lockstep (FR-02). Both hidden while
-              // find is active — the FindSearchBar owns the top of the screen
-              // and its rightmost controls would be obscured by the overlays.
-              if (!findState.active) ...[
-                ChromeOverlay(
-                  onMenuTap: () =>
-                      openMenuSheet(context, onFind: _openFindFromMenu),
+              // ALWAYS mounted (FR-18: stays during find). Visibility is driven
+              // internally by chromeVisibilityProvider via AnimatedOpacity +
+              // IgnorePointer. The LayerLink is owned here and passed to both
+              // ChromePill (anchor) and openOverflowPopover (follower).
+              //
+              // onOverflow: opens OverflowPopover via openOverflowPopover and
+              // stores the dismiss callback. When chromeVisibilityProvider →
+              // false, we also programmatically dismiss the popover (EC-16).
+              // ---------------------------------------------------------------
+              ChromePill(layerLink: _pillLayerLink, onOverflow: _onOverflowTap),
+
+              // ---------------------------------------------------------------
+              // SP-20260618 TASK-06 (FR-07, FR-12, FR-17, EC-12):
+              // Bottom morph slot — toolbar ↔ search bar animated transition.
+              //
+              // _BottomMorphSlot animates between the two children using
+              // AnimatedSize + AnimatedSwitcher so the inactive child is not
+              // hit-testable. The slot is inset from all edges by the chrome
+              // spacing constants so it floats above the safe-area:
+              //   left/right: kChromeSideMargin
+              //   bottom: kChromeBottomGap + safeAreaBottom
+              //
+              // Reduce-motion: Duration(milliseconds: 1) instead of
+              // kChromeMorphDuration (never Duration.zero — RenderAnimatedSize
+              // asserts on zero). Computed here, passed into the widget so the
+              // widget itself has no media-query dependency.
+              // ---------------------------------------------------------------
+              Positioned(
+                left: kChromeSideMargin,
+                right: kChromeSideMargin,
+                bottom: kChromeBottomGap + safeAreaBottom,
+                child: _BottomMorphSlot(
+                  expanded: findState.active,
+                  motionDuration: MediaQuery.disableAnimationsOf(context)
+                      ? const Duration(milliseconds: 1)
+                      : kChromeMorphDuration,
+                  collapsedChild: BottomToolbar(
+                    onCopy: () => Actions.maybeInvoke(
+                      _editorFocusNode.context ?? context,
+                      const CopyIntent(),
+                    ),
+                    onPaste: () => Actions.maybeInvoke(
+                      _editorFocusNode.context ?? context,
+                      const PasteAtEndIntent(),
+                    ),
+                    onFind: _dispatchOpenFind,
+                  ),
+                  expandedChild: FindSearchBar(
+                    onReplace: _onSearchBarReplace,
+                    focusNode: _searchFocusNode,
+                    replaceRowNotifier: _replaceRowNotifier,
+                  ),
                 ),
-                // SP-20260616 TASK-09 (FR-01, FR-04, FR-05, EC-02, EC-05):
-                // Top-LEFT mirror of ChromeOverlay. enabled flag is whitespace-
-                // aware (OQ-03). onShareTap reads from bufferProvider.text (NOT
-                // _controller.text — anti-pattern) so the value is the
-                // canonical Riverpod state, not a potentially-lagging controller.
-                // The uniform kChromeMenuZoneHeight top inset already clears the
-                // top-left button — no editorHorizontalMargin change needed.
-                ShareOverlay(
-                  enabled: shareEnabled,
-                  onShareTap: () => ref
-                      .read(shareTargetServiceProvider)
-                      .shareText(ref.read(bufferProvider).text),
+              ),
+
+              // ---------------------------------------------------------------
+              // SP-20260618 TASK-06: FindBackPill (top-left, find-active only).
+              //
+              // Shown ONLY when findState.active (FR-18 ChromePill stays
+              // unconditional above). Positioned via Align + Padding so the
+              // Gate-1 assertion (Align + non-zero insets) holds; NEVER uses
+              // Positioned(top:0, left:0) for this element.
+              //
+              // onClose dispatches CloseFindIntent — the sole close() call path
+              // (NFR-07: no new findProvider.notifier.close() literal here).
+              // ---------------------------------------------------------------
+              if (findState.active)
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      top: kChromeTopGap + safeAreaTop,
+                      left: kChromeSideMargin,
+                    ),
+                    child: FindBackPill(
+                      onClose: () =>
+                          Actions.maybeInvoke(context, const CloseFindIntent()),
+                    ),
+                  ),
                 ),
-              ],
 
               // ---------------------------------------------------------------
               // ToastOverlay: Positioned top-centre (canon §Components §8).
@@ -1441,6 +1587,27 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
         DismissChromeIntent: DismissChromeAction(
           onDismiss: () =>
               ref.read(chromeVisibilityProvider.notifier).onTextChanged(),
+        ),
+        // SP-20260617 TASK-11 (FR-08/09/NFR-08): CopyAction.
+        // Reads selection → clipboard. Whole-buffer fallback via readBufferText.
+        // onCopied: show "Copied" toast + light haptic (FR-23).
+        CopyIntent: CopyAction(
+          controller: _controller,
+          readBufferText: () => ref.read(bufferProvider).text,
+          onCopied: () {
+            ref
+                .read(toastProvider.notifier)
+                .show(AppLocalizations.of(context).copiedToast);
+            HapticFeedback.lightImpact();
+          },
+        ),
+        // SP-20260617 TASK-11 (FR-10/NFR-07): PasteAtEndAction.
+        // Inserts clipboard at caret; END fallback when caret absent.
+        // Distinct from Ctrl+V PasteAction (START fallback — FROZEN, NFR-07).
+        PasteAtEndIntent: PasteAtEndAction(
+          controller: _controller,
+          apply: _applyResult,
+          onPasted: HapticFeedback.lightImpact,
         ),
       },
       child: _buildEditorField(context, spellCheck, editorStyle),
@@ -1590,5 +1757,142 @@ class _EscPrecedenceAction extends Action<_EscPrecedenceIntent> {
       // Precedence 2: reveal chrome (Esc when find closed toggles chrome).
       dismissChrome();
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SP-20260618 TASK-06: FindBackPill
+// ---------------------------------------------------------------------------
+
+/// Solid accent circle shown in the top-left corner when find is active.
+///
+/// Tapping it closes find search via [onClose] (caller wires to
+/// [CloseFindIntent] dispatch — no direct [findProvider.notifier.close()] call
+/// here, preserving the NFR-07 single call-site count).
+///
+/// Anatomy:
+///   - Solid [colorScheme.primary] circle (no glass — intentionally opaque for
+///     contrast against any editor content).
+///   - [Icons.check] tinted [colorScheme.onPrimary] (white on the blue seed).
+///   - Tap target ≥ 48 dp enforced by [IconButton]'s [constraints].
+///   - [Semantics]: button role + [findDoneTooltip] label (ARB; no literal
+///     "Close"/"Back" string). [excludeSemantics] suppresses the inner label.
+@visibleForTesting
+class FindBackPill extends StatelessWidget {
+  const FindBackPill({required this.onClose, super.key});
+
+  /// Called when the user taps the pill. Caller dispatches [CloseFindIntent].
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context);
+    return Semantics(
+      button: true,
+      label: l10n.findDoneTooltip,
+      excludeSemantics: true,
+      child: Material(
+        color: colorScheme.primary,
+        shape: const CircleBorder(),
+        child: IconButton(
+          onPressed: onClose,
+          tooltip: l10n.findDoneTooltip,
+          icon: Icon(Icons.check, color: colorScheme.onPrimary),
+          // Enforce ≥ 48 dp tap target (WCAG 2.1 AA / mobile accessibility).
+          constraints: const BoxConstraints(minWidth: 48.0, minHeight: 48.0),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SP-20260618 TASK-06: _BottomMorphSlot
+// ---------------------------------------------------------------------------
+
+/// Animated morph slot that transitions between [collapsedChild] (toolbar
+/// hugging its intrinsic width at the bottom-left) and [expandedChild]
+/// (search bar filling available width).
+///
+/// Layout strategy:
+///   - [AnimatedAlign] moves the container between [Alignment.bottomLeft]
+///     (collapsed) and [Alignment.bottomCenter] (expanded).
+///   - [AnimatedSize] grows/shrinks the bounding box smoothly.
+///   - [AnimatedSwitcher] crossfades the content and ensures only the ACTIVE
+///     child is hit-testable (the exiting child is wrapped in [IgnorePointer]).
+///
+/// [motionDuration] is supplied by the caller. Under reduce-motion the caller
+/// passes [Duration(milliseconds: 1)] — never [Duration.zero], which causes
+/// [RenderAnimatedSize] to assert.
+class _BottomMorphSlot extends StatelessWidget {
+  const _BottomMorphSlot({
+    required this.expanded,
+    required this.motionDuration,
+    required this.collapsedChild,
+    required this.expandedChild,
+  });
+
+  /// Whether the slot is in the expanded (search bar) state.
+  final bool expanded;
+
+  /// Duration for all three animated layers. Caller provides; never zero.
+  final Duration motionDuration;
+
+  /// Child shown when [expanded] is false (e.g. [BottomToolbar]).
+  final Widget collapsedChild;
+
+  /// Child shown when [expanded] is true (e.g. [FindSearchBar]).
+  final Widget expandedChild;
+
+  @override
+  Widget build(BuildContext context) {
+    // Expanded state stretches to fill the Positioned slot (left+right already
+    // inset by kChromeSideMargin at the call site, so SizedBox.expand reaches
+    // full available width). Collapsed state is intrinsic-width at bottom-left.
+    return AnimatedAlign(
+      alignment: expanded ? Alignment.bottomCenter : Alignment.bottomLeft,
+      duration: motionDuration,
+      curve: Curves.easeInOut,
+      // heightFactor: 1.0 keeps the AnimatedAlign from collapsing to zero height
+      // when the child has intrinsic size.
+      heightFactor: 1.0,
+      child: AnimatedSize(
+        duration: motionDuration,
+        curve: Curves.easeInOut,
+        alignment: Alignment.bottomLeft,
+        child: AnimatedSwitcher(
+          duration: motionDuration,
+          switchInCurve: Curves.easeInOut,
+          switchOutCurve: Curves.easeInOut,
+          // IgnorePointer on the exiting child so it is never hit-testable
+          // during the crossfade (only ONE interactive child per frame).
+          transitionBuilder: (child, animation) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          layoutBuilder: (currentChild, previousChildren) {
+            return Stack(
+              alignment: Alignment.bottomLeft,
+              children: <Widget>[
+                // Outgoing (previous) children are hit-test-blocked.
+                for (final previous in previousChildren)
+                  IgnorePointer(child: previous),
+                ?currentChild,
+              ],
+            );
+          },
+          child: expanded
+              ? SizedBox(
+                  key: const ValueKey<bool>(true),
+                  width: double.infinity,
+                  child: expandedChild,
+                )
+              : KeyedSubtree(
+                  key: const ValueKey<bool>(false),
+                  child: collapsedChild,
+                ),
+        ),
+      ),
+    );
   }
 }

@@ -27,7 +27,7 @@
 // delegate calls SharePlus.instance.share(). Tests inject a stub
 // delegate to intercept platform calls without subclassing SharePlatform.
 
-import 'package:buffer/infrastructure/share/share_target_service.dart';
+import 'package:foglietto/infrastructure/share/share_target_service.dart';
 import 'package:share_plus/share_plus.dart';
 
 Future<void> _defaultShare(String text) async {

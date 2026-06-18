@@ -21,8 +21,8 @@
 //
 // Spec refs: FR-13, FR-15, EC-07, EC-10, EC-26, NFR-09
 
-import 'package:buffer/domain/editor/line_indent.dart';
-import 'package:buffer/domain/editor/list_continuation.dart';
+import 'package:foglietto/domain/editor/line_indent.dart';
+import 'package:foglietto/domain/editor/list_continuation.dart';
 import 'package:flutter/material.dart';
 
 /// The single [TextEditingController] subclass shared by the M3 text-editor

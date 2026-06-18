@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/domain/find/find_engine.dart';
+import 'package:foglietto/domain/find/find_engine.dart';
 
 void main() {
   // ===========================================================================

@@ -1,6 +1,6 @@
 {
   "@@locale": "it",
-  "appTitle": "Buffer Mobile",
+  "appTitle": "Foglietto",
   "@appTitle": {
     "description": "Il titolo dell'applicazione visualizzato nella barra del titolo della finestra e come nome dell'app."
   },
@@ -45,6 +45,10 @@
   "findCloseTooltip": "Indietro",
   "@findCloseTooltip": {
     "description": "Tooltip per il pulsante di chiusura/indietro nella barra di ricerca."
+  },
+  "findDoneTooltip": "Chiudi ricerca",
+  "@findDoneTooltip": {
+    "description": "Tooltip per il pulsante di chiusura che chiude completamente la barra di ricerca (SP-20260618 toolbar-find-expand)."
   },
   "recoveryTitle": "Recupero",
   "@recoveryTitle": {
@@ -182,7 +186,7 @@
   "@settingsSpellCheck": {
     "description": "Etichetta per l'interruttore del controllo ortografico nella sezione Comportamento della schermata delle impostazioni."
   },
-  "aboutTitle": "Informazioni su Buffer",
+  "aboutTitle": "Informazioni su Foglietto",
   "@aboutTitle": {
     "description": "Titolo visualizzato nella barra dell'app della schermata informazioni."
   },
@@ -239,5 +243,33 @@
   "a11yZoomOut": "Riduci dimensione carattere",
   "@a11yZoomOut": {
     "description": "Etichetta di accessibilità per il pulsante di riduzione della dimensione del carattere (zoom out) nel FontSizeStepper."
+  },
+  "copyTooltip": "Copia",
+  "@copyTooltip": {
+    "description": "Tooltip per il pulsante Copia nella barra delle azioni mobile in basso a sinistra (SP-20260617 FR-26)."
+  },
+  "pasteTooltip": "Incolla",
+  "@pasteTooltip": {
+    "description": "Tooltip per il pulsante Incolla nella barra delle azioni mobile in basso a sinistra (SP-20260617 FR-26)."
+  },
+  "findTooltip": "Trova",
+  "@findTooltip": {
+    "description": "Tooltip per il pulsante Trova nella barra delle azioni mobile in basso a sinistra (SP-20260617 FR-26)."
+  },
+  "copySemantics": "Copia",
+  "@copySemantics": {
+    "description": "Etichetta semantica di accessibilità per il pulsante Copia nella barra delle azioni mobile in basso a sinistra."
+  },
+  "pasteSemantics": "Incolla",
+  "@pasteSemantics": {
+    "description": "Etichetta semantica di accessibilità per il pulsante Incolla nella barra delle azioni mobile in basso a sinistra."
+  },
+  "findSemantics": "Trova",
+  "@findSemantics": {
+    "description": "Etichetta semantica di accessibilità per il pulsante Trova nella barra delle azioni mobile in basso a sinistra."
+  },
+  "copiedToast": "Copiato",
+  "@copiedToast": {
+    "description": "Messaggio toast mostrato brevemente dopo che il testo del buffer è stato copiato negli appunti (SP-20260617 FR-26)."
   }
 }

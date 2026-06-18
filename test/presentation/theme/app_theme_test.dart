@@ -12,7 +12,8 @@
 // that primary is NOT those values — making them a regression guard that trips if
 // the old seed is ever accidentally restored.
 
-import 'package:buffer/presentation/theme/app_theme.dart';
+import 'package:foglietto/presentation/theme/app_theme.dart';
+import 'package:foglietto/presentation/theme/glass_surface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -429,5 +430,164 @@ void main() {
             'Tap targets must be ≥48dp on Android (canon §Touch-target note)',
       );
     });
+  });
+
+  // ---------------------------------------------------------------------------
+  // GlassTokens value gates (NFR-05, NFR-03 — TASK-01 / sp-20260617)
+  //
+  // These are PINNED constants — if a future change drifts the fill-alpha values
+  // by eye, these gates trip immediately, forcing a deliberate code change.
+  //
+  // Pinned values (change here + in glass_surface.dart together):
+  //   fillAlphaLight == 0.92   (≥ 0.90 NFR-05 floor)
+  //   fillAlphaDark  == 0.82   (≥ 0.80 NFR-05 floor)
+  //
+  // <!-- CANON GAP: glass surface (fill alpha light/dark, blur sigma, shadow spec, radii) -->
+  // ---------------------------------------------------------------------------
+  group('GlassTokens value gates (NFR-05 / NFR-03 — sp-20260617 TASK-01)', () {
+    testWidgets('AppTheme.light() GlassTokens.fillAlphaLight == 0.92 '
+        '(NFR-05 alpha-drift guard — pinned constant)', (tester) async {
+      late GlassTokens tokens;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Builder(
+            builder: (context) {
+              tokens = GlassTokens.of(context)!;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+
+      expect(
+        tokens.fillAlphaLight,
+        // PINNED: change this and the constant in GlassTokens together.
+        closeTo(0.92, 0.001),
+        reason:
+            'fillAlphaLight is PINNED at 0.92 (NFR-05 alpha-drift guard). '
+            'Change this test AND the constant in GlassTokens together.',
+      );
+    });
+
+    testWidgets('AppTheme.light() GlassTokens.fillAlphaDark == 0.82 '
+        '(NFR-05 alpha-drift guard — pinned constant)', (tester) async {
+      late GlassTokens tokens;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Builder(
+            builder: (context) {
+              tokens = GlassTokens.of(context)!;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+
+      expect(
+        tokens.fillAlphaDark,
+        // PINNED: change this and the constant in GlassTokens together.
+        closeTo(0.82, 0.001),
+        reason:
+            'fillAlphaDark is PINNED at 0.82 (NFR-05 alpha-drift guard). '
+            'Change this test AND the constant in GlassTokens together.',
+      );
+    });
+
+    testWidgets(
+      'AppTheme.light() GlassTokens.blurSigma > 0 and borderWidth > 0 (NFR-03)',
+      (tester) async {
+        late GlassTokens tokens;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.light(),
+            home: Builder(
+              builder: (context) {
+                tokens = GlassTokens.of(context)!;
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        );
+
+        expect(
+          tokens.blurSigma,
+          greaterThan(0),
+          reason: 'blurSigma must be a positive named token (NFR-03)',
+        );
+        expect(
+          tokens.borderWidth,
+          greaterThan(0),
+          reason: 'borderWidth must be a positive named token (NFR-03)',
+        );
+      },
+    );
+
+    testWidgets(
+      'AppTheme.light() GlassTokens.pillRadius and popoverRadius are non-null '
+      '(NFR-03)',
+      (tester) async {
+        late GlassTokens tokens;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.light(),
+            home: Builder(
+              builder: (context) {
+                tokens = GlassTokens.of(context)!;
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        );
+
+        // pillRadius and popoverRadius are BorderRadius (non-nullable) — this test
+        // guards that they are non-default/non-zero; actual values come from tokens.
+        expect(
+          tokens.pillRadius,
+          isNotNull,
+          reason: 'pillRadius must be a non-null named token (NFR-03)',
+        );
+        expect(
+          tokens.popoverRadius,
+          isNotNull,
+          reason: 'popoverRadius must be a non-null named token (NFR-03)',
+        );
+      },
+    );
+
+    testWidgets(
+      'AppTheme.dark() GlassTokens is registered and accessible (NFR-03)',
+      (tester) async {
+        late GlassTokens? tokens;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.dark(),
+            home: Builder(
+              builder: (context) {
+                tokens = GlassTokens.of(context);
+                return const SizedBox.shrink();
+              },
+            ),
+          ),
+        );
+
+        expect(
+          tokens,
+          isNotNull,
+          reason: 'GlassTokens must be registered in AppTheme.dark() (NFR-03)',
+        );
+        expect(
+          tokens!.fillAlphaDark,
+          greaterThanOrEqualTo(0.80),
+          reason: 'fillAlphaDark >= 0.80 per NFR-05 in dark theme',
+        );
+      },
+    );
   });
 }

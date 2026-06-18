@@ -141,7 +141,7 @@ void main() {
         //   import 'package:receive_sharing_intent/...'
         // This is distinct from imports of the buffer adapter file
         // (receive_sharing_intent_service.dart) which appear as
-        //   import 'package:buffer/infrastructure/share/...'
+        //   import 'package:foglietto/infrastructure/share/...'
         // and must NOT be counted here.
         final packageImportPattern = RegExp(
           r'''import\s+['"]package:receive_sharing_intent/''',

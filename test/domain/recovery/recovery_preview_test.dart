@@ -1,4 +1,4 @@
-import 'package:buffer/domain/recovery/recovery_preview.dart';
+import 'package:foglietto/domain/recovery/recovery_preview.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

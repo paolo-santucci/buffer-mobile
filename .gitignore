@@ -50,3 +50,10 @@ app.*.map.json
 .claude/
 STATUS.yaml
 CLAUDE.md
+
+# Signing keys — never commit; provisioned via CI secrets
+*.keystore
+*.jks
+
+# Stray local build output (space-suffixed copy not covered by /android/build/)
+/android/build 1/

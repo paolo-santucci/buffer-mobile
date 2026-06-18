@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:buffer/domain/recovery/recovery_filename.dart';
-import 'package:buffer/domain/recovery/recovery_note.dart';
-import 'package:buffer/domain/recovery/recovery_preview.dart';
-import 'package:buffer/domain/recovery/recovery_repository.dart';
-import 'package:buffer/infrastructure/paths/sandbox_path_provider.dart';
+import 'package:foglietto/domain/recovery/recovery_filename.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
+import 'package:foglietto/domain/recovery/recovery_preview.dart';
+import 'package:foglietto/domain/recovery/recovery_repository.dart';
+import 'package:foglietto/infrastructure/paths/sandbox_path_provider.dart';
 import 'package:path/path.dart' as p;
 
 /// Produces UTC ISO-8601 timestamps. Injectable for deterministic tests.

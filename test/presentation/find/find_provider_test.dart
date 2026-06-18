@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/domain/buffer/buffer_provider.dart';
-import 'package:buffer/domain/buffer/buffer_notifier_impl.dart';
-import 'package:buffer/domain/find/find_engine.dart';
-import 'package:buffer/presentation/find/find_provider.dart';
+import 'package:foglietto/domain/buffer/buffer_provider.dart';
+import 'package:foglietto/domain/buffer/buffer_notifier_impl.dart';
+import 'package:foglietto/domain/find/find_engine.dart';
+import 'package:foglietto/presentation/find/find_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Helpers

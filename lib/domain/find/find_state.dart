@@ -1,4 +1,4 @@
-import 'package:buffer/domain/find/find_engine.dart';
+import 'package:foglietto/domain/find/find_engine.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'find_state.freezed.dart';

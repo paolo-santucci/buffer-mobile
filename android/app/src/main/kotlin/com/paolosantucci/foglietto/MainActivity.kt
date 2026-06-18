@@ -1,4 +1,4 @@
-package com.paolosantucci.buffer
+package com.paolosantucci.foglietto
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -1,5 +1,5 @@
-import 'package:buffer/domain/settings/app_settings.dart';
-import 'package:buffer/domain/settings/settings_repository.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
+import 'package:foglietto/domain/settings/settings_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// [SettingsRepository] implementation backed by [SharedPreferences].

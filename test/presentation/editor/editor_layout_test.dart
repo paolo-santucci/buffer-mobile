@@ -13,7 +13,21 @@
 
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/presentation/editor/editor_layout.dart';
+import 'package:foglietto/presentation/editor/editor_layout.dart';
+
+// ---------------------------------------------------------------------------
+// Helpers — baseline computation mirrors the pre-bump formula so each G5 test
+// expresses the postcondition as `baseline + kChromeTopGap`.
+// ---------------------------------------------------------------------------
+
+/// Baseline for editorTopInset before the kChromeTopGap bump.
+///
+/// `max( kChromeMenuZoneHeight + safeAreaTop , verticalMargin(width) )`
+double _topBaseline(double width, double safeAreaTop) {
+  final chromeFloor = kChromeMenuZoneHeight + safeAreaTop;
+  final m7Vertical = verticalMargin(width);
+  return chromeFloor > m7Vertical ? chromeFloor : m7Vertical;
+}
 
 void main() {
   group('verticalMargin', () {
@@ -117,14 +131,126 @@ void main() {
   });
 
   // ===========================================================================
+  // editorBottomInset — bottom chrome-zone + keyboard + safe-area floor (C4)
+  // Spec §FR-22: max(kChromeMenuZoneHeight, verticalMargin(width), keyboardInset)
+  //              + safeAreaBottom
+  //
+  // Anti-additive contract: result must NEVER equal kChromeMenuZoneHeight +
+  // keyboardInset when keyboardInset dominates.
+  // ===========================================================================
+  group('editorBottomInset', () {
+    test(
+      'given_width400_keyboard0_safeArea34_when_toolbarDominates_then_result_equals_kChromeMenuZoneHeight_plus_safeAreaBottom',
+      () {
+        // kChromeMenuZoneHeight(48) > verticalMargin(400)=10, keyboard=0
+        // result = max(48, 10, 0) + 34 = 48 + 34 = 82
+        final result = editorBottomInset(400.0, 0.0, 34.0);
+        expect(result, equals(kChromeMenuZoneHeight + 34.0));
+      },
+    );
+
+    test(
+      'given_width400_keyboard300_safeArea34_when_keyboardDominates_then_result_equals_keyboard_plus_safeAreaBottom_not_additive',
+      () {
+        // keyboard(300) > kChromeMenuZoneHeight(48) > verticalMargin(400)=10
+        // result = max(48, 10, 300) + 34 = 300 + 34 = 334
+        // Anti-additive: must NOT be 48 + 300 + 34 = 382
+        final result = editorBottomInset(400.0, 300.0, 34.0);
+        expect(result, equals(300.0 + 34.0));
+      },
+    );
+
+    test(
+      'given_keyboardInset_equals_kChromeMenuZoneHeight_when_tie_then_result_equals_kChromeMenuZoneHeight_plus_safeAreaBottom_once',
+      () {
+        // keyboard == kChromeMenuZoneHeight(48): max(48,10,48)=48, result=48+safeAreaBottom
+        // Must NOT be 48+48+safeAreaBottom (additive double-count)
+        final result = editorBottomInset(400.0, kChromeMenuZoneHeight, 20.0);
+        expect(result, equals(kChromeMenuZoneHeight + 20.0));
+      },
+    );
+
+    test(
+      'given_increasing_keyboardInsets_and_safeAreaBottoms_when_called_then_results_are_non_decreasing',
+      () {
+        // monotone in keyboardInset [0, 48, 100, 300] (w=400, sab=0)
+        final kValues = [0.0, 48.0, 100.0, 300.0];
+        for (var i = 0; i < kValues.length - 1; i++) {
+          final r1 = editorBottomInset(400.0, kValues[i], 0.0);
+          final r2 = editorBottomInset(400.0, kValues[i + 1], 0.0);
+          expect(
+            r1,
+            lessThanOrEqualTo(r2),
+            reason:
+                'editorBottomInset(400, ${kValues[i]}, 0) should be <= editorBottomInset(400, ${kValues[i + 1]}, 0)',
+          );
+        }
+        // monotone in safeAreaBottom [0, 20, 34, 44] (w=400, ki=0)
+        final sabValues = [0.0, 20.0, 34.0, 44.0];
+        for (var i = 0; i < sabValues.length - 1; i++) {
+          final r1 = editorBottomInset(400.0, 0.0, sabValues[i]);
+          final r2 = editorBottomInset(400.0, 0.0, sabValues[i + 1]);
+          expect(
+            r1,
+            lessThanOrEqualTo(r2),
+            reason:
+                'editorBottomInset(400, 0, ${sabValues[i]}) should be <= editorBottomInset(400, 0, ${sabValues[i + 1]})',
+          );
+        }
+      },
+    );
+
+    test(
+      'given_all_input_combos_when_called_then_result_is_always_gte_kChromeMenuZoneHeight_plus_safeAreaBottom',
+      () {
+        // floor: for all combos result >= kChromeMenuZoneHeight + safeAreaBottom
+        for (final w in [320.0, 400.0, 800.0]) {
+          for (final ki in [0.0, 48.0, 300.0]) {
+            for (final sab in [0.0, 20.0, 34.0]) {
+              final result = editorBottomInset(w, ki, sab);
+              expect(
+                result,
+                greaterThanOrEqualTo(kChromeMenuZoneHeight + sab),
+                reason:
+                    'editorBottomInset($w, $ki, $sab)=$result must be >= kChromeMenuZoneHeight+$sab=${kChromeMenuZoneHeight + sab}',
+              );
+            }
+          }
+        }
+      },
+    );
+
+    test(
+      'given_width400_keyboard300_safeArea0_when_called_then_result_strictly_less_than_kChromeMenuZoneHeight_plus_keyboard',
+      () {
+        // never-additive: result < kChromeMenuZoneHeight + keyboardInset
+        final result = editorBottomInset(400.0, 300.0, 0.0);
+        expect(result, lessThan(kChromeMenuZoneHeight + 300.0));
+      },
+    );
+
+    test(
+      'given_editorTopInset_called_between_editorBottomInset_calls_when_purity_checked_then_editorBottomInset_result_unchanged',
+      () {
+        // purity: calling editorTopInset must not affect editorBottomInset (no shared mutable state)
+        final before = editorBottomInset(400.0, 100.0, 34.0);
+        editorTopInset(400.0, 24.0);
+        final after = editorBottomInset(400.0, 100.0, 34.0);
+        expect(after, equals(before));
+      },
+    );
+  });
+
+  // ===========================================================================
   // editorTopInset — chrome-zone + safe-area floor (C2b)
   // Spec §5.1 C2b: max(kChromeMenuZoneHeight + safeAreaTop, verticalMargin(width))
   // ===========================================================================
   group('editorTopInset', () {
-    test('given_width400_safeArea24_when_called_then_result_closeTo_72', () {
-      // kChromeMenuZoneHeight(48) + safeAreaTop(24) = 72, dominates verticalMargin(400)=10
+    test('given_width400_safeArea24_when_called_then_result_closeTo_88', () {
+      // baseline: kChromeMenuZoneHeight(48) + safeAreaTop(24) = 72, dominates verticalMargin(400)=10
+      // G5 bump: 72 + kChromeTopGap(16) = 88
       final result = editorTopInset(400.0, 24.0);
-      expect(result, closeTo(72.0, 0.5));
+      expect(result, closeTo(88.0, 0.5));
     });
 
     test(
@@ -195,6 +321,120 @@ void main() {
         editorHorizontalMargin(14.0);
         final after = editorTopInset(400.0, 0.0);
         expect(after, equals(before));
+      },
+    );
+  });
+
+  // ===========================================================================
+  // G5 — chrome-spacing constants + inset bumps
+  // spec §TASK-01
+  // ===========================================================================
+  group('G5 chrome-spacing constants', () {
+    test(
+      'given_three_chrome_constants_when_read_then_each_equals_16_and_all_distinct',
+      () {
+        // Three separate named const doubles — not aliases.
+        expect(kChromeTopGap, equals(16.0));
+        expect(kChromeBottomGap, equals(16.0));
+        expect(kChromeSideMargin, equals(16.0));
+        // Confirm they are independently named by comparing against a literal
+        // (no runtime alias equality test needed — they must simply all be 16.0).
+      },
+    );
+  });
+
+  group('G5 editorTopInset bump', () {
+    test(
+      'given_width400_safeAreaTop0_when_called_then_result_equals_baseline_plus_kChromeTopGap',
+      () {
+        const w = 400.0;
+        const sat = 0.0;
+        final baseline = _topBaseline(w, sat);
+        expect(editorTopInset(w, sat), equals(baseline + kChromeTopGap));
+      },
+    );
+
+    test(
+      'given_width400_safeAreaTop44_when_called_then_result_equals_baseline_plus_kChromeTopGap',
+      () {
+        const w = 400.0;
+        const sat = 44.0;
+        final baseline = _topBaseline(w, sat);
+        expect(editorTopInset(w, sat), equals(baseline + kChromeTopGap));
+      },
+    );
+
+    test(
+      'given_width800_safeAreaTop59_when_called_then_result_equals_baseline_plus_kChromeTopGap',
+      () {
+        const w = 800.0;
+        const sat = 59.0;
+        final baseline = _topBaseline(w, sat);
+        expect(editorTopInset(w, sat), equals(baseline + kChromeTopGap));
+      },
+    );
+
+    test(
+      'given_safeAreaTops_0_20_44_59_at_width400_when_called_then_results_strictly_increasing',
+      () {
+        // kChromeTopGap is additive on all results so monotonicity is preserved.
+        final results = [
+          0.0,
+          20.0,
+          44.0,
+          59.0,
+        ].map((sat) => editorTopInset(400.0, sat)).toList();
+        for (var i = 0; i < results.length - 1; i++) {
+          expect(
+            results[i],
+            lessThan(results[i + 1]),
+            reason:
+                'editorTopInset(400, sat[$i])=${results[i]} should be < editorTopInset(400, sat[${i + 1}])=${results[i + 1]}',
+          );
+        }
+      },
+    );
+
+    test(
+      'given_EC01_width400_safeAreaTop0_when_called_then_result_gte_kChromeMenuZoneHeight_plus_kChromeTopGap',
+      () {
+        // EC-01 no-notch floor: result >= 48 + 16 = 64.
+        final result = editorTopInset(400.0, 0.0);
+        expect(
+          result,
+          greaterThanOrEqualTo(kChromeMenuZoneHeight + kChromeTopGap),
+        );
+      },
+    );
+  });
+
+  group('G5 editorBottomInset kChromeBottomGap absorbed', () {
+    test(
+      'given_NFR02_width400_keyboard300_safeAreaBottom34_when_called_then_result_equals_334_and_not_334_plus_kChromeBottomGap',
+      () {
+        // kChromeBottomGap(16) is a term inside max — dominated by keyboard(300).
+        // Anti-additive: result must be 334.0, not 334.0 + 16.0 = 350.0.
+        final result = editorBottomInset(400.0, 300.0, 34.0);
+        expect(result, equals(334.0));
+        expect(result, isNot(equals(334.0 + kChromeBottomGap)));
+      },
+    );
+
+    test(
+      'given_FR04neg_width400_keyboard0_safeAreaBottom34_when_called_then_result_gte_kChromeBottomGap_plus_safeAreaBottom',
+      () {
+        // kChromeBottomGap as explicit term inside max: result >= 16 + 34 = 50.
+        // But kChromeMenuZoneHeight(48) already dominates, so result = 82.
+        // Key contract: the constant has an auditable home inside the max.
+        // Also verify no double-count: result must not equal old_baseline + kChromeBottomGap.
+        // old_baseline (pre-kChromeBottomGap-term) = max(48, 10, 0) + 34 = 82.
+        // Since kChromeBottomGap < kChromeMenuZoneHeight, the result is the same (82).
+        final result = editorBottomInset(400.0, 0.0, 34.0);
+        expect(result, greaterThanOrEqualTo(kChromeBottomGap + 34.0));
+        // No double-count: result equals the single-dominant baseline, not baseline + kChromeBottomGap.
+        const oldBaseline =
+            82.0; // max(48,10,0)+34 pre-term (same value post-term)
+        expect(result, isNot(equals(oldBaseline + kChromeBottomGap)));
       },
     );
   });

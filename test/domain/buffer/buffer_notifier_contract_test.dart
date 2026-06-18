@@ -1,5 +1,5 @@
-import 'package:buffer/domain/buffer/buffer_notifier.dart';
-import 'package:buffer/domain/buffer/buffer_state.dart';
+import 'package:foglietto/domain/buffer/buffer_notifier.dart';
+import 'package:foglietto/domain/buffer/buffer_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // ---------------------------------------------------------------------------

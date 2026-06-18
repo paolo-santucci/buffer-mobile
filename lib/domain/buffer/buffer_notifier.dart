@@ -1,4 +1,4 @@
-import 'package:buffer/domain/buffer/buffer_state.dart';
+import 'package:foglietto/domain/buffer/buffer_state.dart';
 
 /// Abstract contract for the single in-memory buffer.
 ///

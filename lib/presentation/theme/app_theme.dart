@@ -19,6 +19,7 @@
 //   #fff     → Color(0xFFFFFFFF)  — theme swatch / --view-bg-color light
 //   #202020  → Color(0xFF202020)  — theme swatch / --view-bg-color dark
 
+import 'package:foglietto/presentation/theme/glass_surface.dart';
 import 'package:flutter/material.dart';
 
 class AppTheme {
@@ -113,6 +114,9 @@ class AppTheme {
       brightness: Brightness.light,
       textTheme: _buildTextTheme(colorScheme.onSurface),
       materialTapTargetSize: MaterialTapTargetSize.padded,
+      // GlassTokens: single source of truth for glass-surface values (C1b, NFR-03).
+      // <!-- CANON GAP: glass surface (fill alpha light/dark, blur sigma, shadow spec, radii) -->
+      extensions: const <ThemeExtension<dynamic>>[kDefaultGlassTokens],
     );
   }
 
@@ -151,6 +155,9 @@ class AppTheme {
       brightness: Brightness.dark,
       textTheme: _buildTextTheme(colorScheme.onSurface),
       materialTapTargetSize: MaterialTapTargetSize.padded,
+      // GlassTokens: single source of truth for glass-surface values (C1b, NFR-03).
+      // <!-- CANON GAP: glass surface (fill alpha light/dark, blur sigma, shadow spec, radii) -->
+      extensions: const <ThemeExtension<dynamic>>[kDefaultGlassTokens],
     );
   }
 

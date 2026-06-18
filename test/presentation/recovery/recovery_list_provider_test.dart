@@ -20,10 +20,10 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/domain/recovery/recovery_note.dart';
-import 'package:buffer/domain/recovery/recovery_repository.dart';
-import 'package:buffer/presentation/editor/share_providers.dart';
-import 'package:buffer/presentation/recovery/recovery_list_provider.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
+import 'package:foglietto/domain/recovery/recovery_repository.dart';
+import 'package:foglietto/presentation/editor/share_providers.dart';
+import 'package:foglietto/presentation/recovery/recovery_list_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Test double

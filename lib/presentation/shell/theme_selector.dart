@@ -28,9 +28,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:buffer/domain/settings/app_settings.dart';
-import 'package:buffer/l10n/app_localizations.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
+import 'package:foglietto/l10n/app_localizations.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
 
 // ---------------------------------------------------------------------------
 // Canon literal fills — the ONLY hard-coded colour values permitted.

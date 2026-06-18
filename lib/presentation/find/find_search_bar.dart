@@ -1,28 +1,34 @@
 // TASK-08 (M4): FindSearchBar — mobile search-bar widget.
+// TASK-09 (Wave 2): Container restyled to GlassSurface(pillRadius).
 //
-// Spec refs: FR-12, FR-15, FR-18, FR-19, FR-20; NFR-06, NFR-07
+// Spec refs: FR-12, FR-13, FR-15, FR-18, FR-19, FR-20; NFR-06, NFR-07
 // Canon ref: .claude/docs/canon/ui-design-bible.md Component 4
 //            "Search header bar" mobile adaptation.
 //
 // Anatomy (Component 4 mobile — upstream GNOME Buffer search bar):
-//   A surface-coloured HEADER BAND (hairline bottom divider) wrapping:
+//   A GlassSurface pill container (TASK-09) wrapping:
 //   Row 1: [back] [filled rounded search pill + leading glyph] [count 0.58]
 //          [prev] [next] [replace toggle]
 //   Row 2 (AnimatedCrossFade, hidden by default):
 //          [aligned filled rounded replace pill] [accent-filled Replace button]
 //
-// The band sits ABOVE the editor (a Column sibling in buffer_screen.dart), so
-// opening search / replace shifts the editor text DOWN rather than hiding it.
+// Positioning (top → bottom) and the toolbar↔find-pill swap belong to TASK-11.
+// Only the container surface treatment changes in TASK-09.
 //
 // All user-facing strings via AppLocalizations — no literal Text('...') in this file.
+// <!-- CANON GAP: bottom find pill anatomy — the ui-design-bible.md does not define
+//      the anatomy of the bottom find pill (exact padding, inner field radii, button
+//      layout). Container binds to surface/outlineVariant/onSurfaceVariant tokens
+//      via GlassSurface; per-pill internals deferred to TASK-11 refinement. -->
 // <!-- CANON GAP: OQ-06 — search-highlight colour (primaryContainer/secondaryContainer)
 //      is resolved theme-driven; not a gap owned by this widget. See TASK-05. -->
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:buffer/l10n/app_localizations.dart';
-import 'package:buffer/presentation/find/find_provider.dart';
+import 'package:foglietto/l10n/app_localizations.dart';
+import 'package:foglietto/presentation/find/find_provider.dart';
+import 'package:foglietto/presentation/theme/glass_surface.dart';
 
 /// Mobile search-bar widget for find/replace (FR-18 / UI bible Component 4).
 ///
@@ -141,10 +147,6 @@ class _FindSearchBarState extends ConsumerState<FindSearchBar> {
     } else {
       setState(() => _replaceVisibleInternal = !_replaceVisibleInternal);
     }
-  }
-
-  void _onClose() {
-    ref.read(findProvider.notifier).close();
   }
 
   void _onReplaceTermChanged(String value) {
@@ -291,19 +293,12 @@ class _FindSearchBarState extends ConsumerState<FindSearchBar> {
       ),
     );
 
-    // ── Row 1: back | search pill (+ count) | prev | next | replace toggle ──
-    // Leading column = back button (48) + 4dp gap. Trailing cluster = three
-    // 48dp icon buttons. The replace row mirrors both widths exactly.
+    // ── Row 1: search pill (+ count) | prev | next | replace toggle ──
+    // No leading column — the back affordance is delivered by FindBackPill
+    // (a separate top-left widget, later task). Trailing cluster = three
+    // 48dp icon buttons. The replace row mirrors the trailing width exactly.
     final searchRow = Row(
       children: [
-        // Close / back affordance (FR-20).
-        _iconBtn(
-          icon: Icons.arrow_back,
-          tooltip: l10n.findCloseTooltip,
-          onPressed: _onClose,
-        ),
-        const SizedBox(width: 4.0),
-
         // Search pill, filling available space (filled rounded entry).
         Expanded(
           child: TextField(
@@ -357,19 +352,15 @@ class _FindSearchBarState extends ConsumerState<FindSearchBar> {
     );
 
     // ── Row 2: replace pill + Replace button (revealed via crossfade) ──
-    // Mirrors the search row's leading column (48dp spacer + 4dp gap) and
-    // trailing cluster width so the replace pill is exactly as wide as the
-    // search pill. The Replace button is boxed to the trailing-cluster width.
+    // No leading spacer — search row has no leading column after back-cell
+    // removal. Trailing cluster width mirrors the search row's trailing cluster
+    // so the replace pill is exactly as wide as the search pill.
     final replaceRow = Padding(
       padding: const EdgeInsets.only(top: 8.0),
       child: Row(
         children: [
-          // Spacer matching the back-button column on the search row.
-          const SizedBox(width: _kIconBtnSize),
-          const SizedBox(width: 4.0),
-
           // Replace pill — same width as the search pill (equal leading +
-          // trailing on both rows).
+          // trailing on both rows; no leading spacer needed).
           Expanded(
             child: TextField(
               controller: _replaceController,
@@ -419,40 +410,39 @@ class _FindSearchBarState extends ConsumerState<FindSearchBar> {
       ),
     );
 
-    // Header band: a surface-coloured bar with a hairline bottom divider,
-    // sitting above the editor (the editor is pushed down by this bar's height —
-    // see buffer_screen.dart). Replaces the former transparent overlay so the
-    // text shifts down rather than hiding behind the find controls.
-    return Material(
-      color: theme.colorScheme.surface,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(color: theme.colorScheme.outlineVariant),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(4.0, 8.0, 8.0, 8.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              searchRow,
+    // Glass pill container (TASK-09 / FR-19).
+    //
+    // Replaces the former flat Material+DecoratedBox header band with the
+    // shared GlassSurface primitive. The surface treatment (blur + fill +
+    // hairline border + shadow) is inherited from GlassSurface; the bottom
+    // divider is dropped — the pill shape provides visual separation.
+    //
+    // Positioning (top → bottom move) and the toolbar↔find-pill swap are
+    // TASK-11 and are NOT done here.
+    //
+    // <!-- CANON GAP: bottom find pill anatomy -->
+    final tokens = GlassTokens.of(context) ?? kDefaultGlassTokens;
+    return GlassSurface(
+      borderRadius: tokens.searchBarRadius,
+      padding: const EdgeInsets.fromLTRB(4.0, 8.0, 8.0, 8.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          searchRow,
 
-              // AnimatedCrossFade reveals / hides the replace row (FR-18 /
-              // bible Motion). firstChild = empty, secondChild = replaceRow.
-              // Reduce-motion → 1ms duration → perceptually instant switch.
-              AnimatedCrossFade(
-                firstChild: const SizedBox.shrink(),
-                secondChild: replaceRow,
-                crossFadeState: _replaceVisible
-                    ? CrossFadeState.showSecond
-                    : CrossFadeState.showFirst,
-                duration: duration,
-              ),
-            ],
+          // AnimatedCrossFade reveals / hides the replace row (FR-18 /
+          // bible Motion). firstChild = empty, secondChild = replaceRow.
+          // Reduce-motion → 1ms duration → perceptually instant switch.
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: replaceRow,
+            crossFadeState: _replaceVisible
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: duration,
           ),
-        ),
+        ],
       ),
     );
   }

@@ -26,7 +26,7 @@
 //            FR-21, §5.3 intents (M4)
 //            FR-M6-20, FR-M6-21, FR-M6-22, EC-11, §5.1-g (M6)
 
-import 'package:buffer/presentation/editor/editor_controller.dart';
+import 'package:foglietto/presentation/editor/editor_controller.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -535,4 +535,199 @@ class DismissChromeAction extends Action<DismissChromeIntent> {
 
   @override
   void invoke(DismissChromeIntent intent) => onDismiss();
+}
+
+// ---------------------------------------------------------------------------
+// SP-20260617 TASK-03 — CopyIntent / CopyAction (FR-08, FR-09, NFR-08)
+// ---------------------------------------------------------------------------
+// CopyAction reads the current selection from the controller and writes to
+// the system clipboard via Clipboard.setData.  When the selection is
+// collapsed or baseOffset == -1 (no focus), the payload is the whole-buffer
+// text returned by the [readBufferText] callback — never controller.text,
+// which may lag one frame behind the Riverpod bufferProvider state (NFR-08).
+//
+// Contract invariants:
+//   EC-10 — this action NEVER mutates controller.value, selection, or composing.
+//   apply/_applyResult — NEVER called from this action (read-only, C2).
+//   onCopied — fires only when the written payload is non-empty.
+//
+// Provider wiring of [readBufferText] and [onCopied] is deferred to Wave 3
+// (TASK-11); this is a pure code seam with zero widget dependencies.
+// ---------------------------------------------------------------------------
+
+/// Fired by the Copy toolbar button (§5.1-g, FR-08, FR-09).
+///
+/// The paired [CopyAction] reads the selection and writes to the clipboard.
+/// When the selection is collapsed, the whole buffer is copied.
+@immutable
+class CopyIntent extends Intent {
+  const CopyIntent();
+}
+
+/// Handles [CopyIntent].
+///
+/// Reads the controller's current selection and writes the selected text (or
+/// the entire buffer when there is no selection) to the system clipboard.
+///
+/// **Whole-buffer path (OQ-09):** when the selection is collapsed
+/// (`selection.isCollapsed == true`) or the controller has no focus
+/// (`baseOffset == -1`), the payload is `readBufferText()`.  This callback
+/// must return the authoritative buffer content directly from the Riverpod
+/// [bufferProvider], not from `controller.text`, which may lag one frame
+/// (NFR-08).
+///
+/// **Selection path:** when a non-collapsed range is selected, the payload is
+/// `controller.value.text.substring(start, end)`.
+///
+/// **onCopied:** the supplied [VoidCallback] is invoked after
+/// [Clipboard.setData] **only** when the written payload is non-empty.
+/// Provider wiring is the caller's responsibility (TASK-11, Wave 3).
+///
+/// PURE READ: this action never mutates [controller.value], [.selection], or
+/// [.composing] (EC-10 invariant).  It does not call [apply] or
+/// `_applyResult`.
+class CopyAction extends Action<CopyIntent> {
+  /// Creates a [CopyAction].
+  ///
+  /// [controller]     — the single [EditorController] instance; its
+  ///                    [value.text] and [value.selection] are read.
+  /// [readBufferText] — callback that returns the authoritative buffer text
+  ///                    (wired to [bufferProvider] in TASK-11); used as the
+  ///                    whole-buffer payload to avoid the one-frame lag of
+  ///                    [controller.text] (NFR-08).
+  /// [onCopied]       — callback invoked after a non-empty payload is written
+  ///                    to the clipboard (wired to a toast/haptic in TASK-11).
+  CopyAction({
+    required this.controller,
+    required this.readBufferText,
+    required this.onCopied,
+  });
+
+  /// The single unified [EditorController].
+  final EditorController controller;
+
+  /// Returns the authoritative buffer text (bypasses the controller lag).
+  final String Function() readBufferText;
+
+  /// Invoked after a non-empty clipboard write (toast / haptic hook).
+  final VoidCallback onCopied;
+
+  @override
+  Object? invoke(CopyIntent intent) {
+    final value = controller.value;
+    final selection = value.selection;
+
+    final String payload;
+    if (selection.isCollapsed || selection.baseOffset == -1) {
+      // No selection (collapsed caret or unfocused): copy the whole buffer.
+      payload = readBufferText();
+    } else {
+      // Range selected: copy only the selected substring.
+      final start = selection.start;
+      final end = selection.end;
+      payload = value.text.substring(start, end);
+    }
+
+    Clipboard.setData(ClipboardData(text: payload));
+    if (payload.isNotEmpty) onCopied();
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SP-20260617 TASK-04 — PasteAtEndIntent / PasteAtEndAction (FR-10, NFR-07)
+// ---------------------------------------------------------------------------
+// PasteAtEndAction mirrors the existing [PasteAction] shape but resolves an
+// absent caret (baseOffset == -1) to END rather than to the START (offset 0).
+// It routes through the same [EditorApplyCallback] path so it inherits the
+// echo-guard + BUG-004 equality short-circuit from [BufferScreen._applyResult].
+//
+// The existing Ctrl+V [PasteAction] (START fallback) is FROZEN (NFR-07) —
+// this is a distinct, independently-registered sibling.  Both can coexist in
+// the same Actions widget without cross-contamination.
+//
+// Contract invariants:
+//   null / empty clipboard — no-op; [apply] and [onPasted] are NOT called.
+//   apply — always called through [EditorApplyCallback]; never direct mutation.
+//   onPasted — fires only on a successful (non-empty) paste.
+// ---------------------------------------------------------------------------
+
+/// Fired by the Paste toolbar button (§5.1-g, FR-10).
+///
+/// The paired [PasteAtEndAction] reads the clipboard and inserts the text at
+/// the current caret, falling back to END when there is no caret (contrast
+/// with [PasteAction] which falls back to the START / offset 0).
+@immutable
+class PasteAtEndIntent extends Intent {
+  const PasteAtEndIntent();
+}
+
+/// Handles [PasteAtEndIntent].
+///
+/// Reads [Clipboard.getData] (platform channel, stubbed in tests) and inserts
+/// the clipboard text at the current caret offset via [apply].
+///
+/// **Insert semantics — END fallback:** the insert offset is
+/// `controller.selection.baseOffset`.  When `baseOffset < 0` (no focus /
+/// unset), the offset resolves to `controller.value.text.length` (end of
+/// buffer), not 0 — this is the key behavioral difference from [PasteAction].
+/// When `baseOffset >= 0`, it is clamped to `[0, text.length]`.
+///
+/// **No-op cases (EC-15b):** if [Clipboard.getData] returns null or the
+/// returned text is empty, [apply] and [onPasted] are NOT called and the
+/// controller is left unchanged — no exception, no empty insert.
+///
+/// Routes through [apply] (the same [EditorApplyCallback] path as
+/// [EditorIndentAction] and [PasteAction]) so the atomic rewrite inherits
+/// the re-entrancy echo-guard and BUG-004 equality short-circuit from
+/// [BufferScreen._applyResult].
+///
+/// PURE DELEGATION: this action does NOT mutate the controller directly.
+class PasteAtEndAction extends Action<PasteAtEndIntent> {
+  /// Creates a [PasteAtEndAction].
+  ///
+  /// [controller] — the single [EditorController] instance, used to read
+  ///                the current text and caret offset.
+  /// [apply]      — the BufferScreen-supplied callback that applies the
+  ///                paste result atomically under a re-entrancy guard.
+  /// [onPasted]   — callback invoked after a successful (non-empty) paste
+  ///                (wired to a haptic / toast in TASK-11).
+  PasteAtEndAction({
+    required this.controller,
+    required this.apply,
+    required this.onPasted,
+  });
+
+  /// The single unified [EditorController].
+  final EditorController controller;
+
+  /// The apply callback supplied by [BufferScreen].
+  final EditorApplyCallback apply;
+
+  /// Invoked after a successful paste (haptic / toast hook).
+  final VoidCallback onPasted;
+
+  @override
+  Object? invoke(PasteAtEndIntent intent) {
+    Clipboard.getData(Clipboard.kTextPlain).then((data) {
+      final clipText = data?.text;
+      if (clipText == null || clipText.isEmpty) return; // EC-15b no-op
+
+      final text = controller.value.text;
+      final base = controller.value.selection.baseOffset;
+      // END fallback: unset caret (base < 0) resolves to end of text.
+      final offset = base < 0 ? text.length : base.clamp(0, text.length);
+
+      final newText =
+          text.substring(0, offset) + clipText + text.substring(offset);
+      final newOffset = offset + clipText.length;
+
+      apply((
+        text: newText,
+        selection: TextSelection.collapsed(offset: newOffset),
+      ));
+      onPasted();
+    });
+    return null;
+  }
 }

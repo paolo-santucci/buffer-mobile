@@ -21,9 +21,9 @@
 
 import 'dart:io';
 
-import 'package:buffer/domain/recovery/recovery_note.dart';
-import 'package:buffer/domain/recovery/recovery_repository.dart';
-import 'package:buffer/domain/recovery/save_buffer_to_recovery.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
+import 'package:foglietto/domain/recovery/recovery_repository.dart';
+import 'package:foglietto/domain/recovery/save_buffer_to_recovery.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // ---------------------------------------------------------------------------

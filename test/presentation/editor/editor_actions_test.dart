@@ -9,8 +9,8 @@
 //            FR-21, §5.3 intents (M4)
 //            FR-M6-20, FR-M6-21, FR-M6-22, EC-11, §5.1-g (M6)
 
-import 'package:buffer/presentation/editor/editor_actions.dart';
-import 'package:buffer/presentation/editor/editor_controller.dart';
+import 'package:foglietto/presentation/editor/editor_actions.dart';
+import 'package:foglietto/presentation/editor/editor_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1140,6 +1140,544 @@ void main() {
       action.invoke(const DismissChromeIntent());
       expect(dismissed, isTrue);
     });
+  });
+
+  // =========================================================================
+  // SP-20260617 TASK-03 — CopyIntent / CopyAction (FR-08, FR-09, NFR-08)
+  // =========================================================================
+  //
+  // CopyAction({controller, readBufferText, onCopied}) reads the selection
+  // from the controller and writes to the clipboard via Clipboard.setData.
+  // When the selection is collapsed (or baseOffset == -1), the whole-buffer
+  // payload comes from readBufferText() — never from controller.text (NFR-08,
+  // controller lags one frame). onCopied() fires only on non-empty payload.
+  // This action NEVER mutates controller.value, .selection, or .composing
+  // (EC-10) and NEVER calls apply/_applyResult.
+  //
+  // Clipboard.setData is stubbed via the same MethodChannel('flutter/platform')
+  // pattern already used above (SystemChannels.platform).
+
+  /// Stubs Clipboard.setData; captures the last written text.
+  /// Returns a teardown + the captured-text accessor via a closure pair.
+  ({void Function() teardown, String? Function() lastWritten})
+  stubClipboardWrite() {
+    String? lastText;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (
+          MethodCall call,
+        ) async {
+          if (call.method == 'Clipboard.setData') {
+            lastText = (call.arguments as Map)['text'] as String?;
+            return null;
+          }
+          if (call.method == 'Clipboard.getData') {
+            return null;
+          }
+          return null;
+        });
+    return (
+      teardown: () => TestDefaultBinaryMessengerBinding
+          .instance
+          .defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null),
+      lastWritten: () => lastText,
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // CopyIntent — type identity
+  // -------------------------------------------------------------------------
+  group('CopyIntent — type identity (TASK-03)', () {
+    test('CopyIntent is a concrete Intent subclass', () {
+      expect(const CopyIntent(), isA<Intent>());
+    });
+
+    test('CopyIntent const constructor produces identical instances', () {
+      expect(identical(const CopyIntent(), const CopyIntent()), isTrue);
+    });
+
+    test('CopyIntent is distinct from all existing intent runtime types', () {
+      expect(
+        const CopyIntent().runtimeType,
+        isNot(equals(const PasteIntent().runtimeType)),
+      );
+      expect(
+        const CopyIntent().runtimeType,
+        isNot(equals(const PasteAtEndIntent().runtimeType)),
+      );
+      expect(
+        const CopyIntent().runtimeType,
+        isNot(equals(const CloseFindIntent().runtimeType)),
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // CopyAction — selection range present → copy selection text
+  // -------------------------------------------------------------------------
+  group('CopyAction — selection range (TASK-03, FR-08)', () {
+    testWidgets(
+      'selection (6,11) on "hello world" → setData("world"); onCopied once',
+      (tester) async {
+        final stub = stubClipboardWrite();
+        addTearDown(stub.teardown);
+
+        final controller = _FakeController(text: 'hello world');
+        controller.selection = const TextSelection(
+          baseOffset: 6,
+          extentOffset: 11,
+        );
+
+        int copiedCount = 0;
+        final action = CopyAction(
+          controller: controller,
+          readBufferText: () => 'hello world',
+          onCopied: () => copiedCount++,
+        );
+
+        action.invoke(const CopyIntent());
+        await tester.pump();
+
+        expect(stub.lastWritten(), 'world');
+        expect(copiedCount, 1);
+      },
+    );
+
+    testWidgets('Clipboard.setData called exactly once per invoke', (
+      tester,
+    ) async {
+      final stub = stubClipboardWrite();
+      addTearDown(stub.teardown);
+
+      final controller = _FakeController(text: 'abcdef');
+      controller.selection = const TextSelection(
+        baseOffset: 0,
+        extentOffset: 3,
+      );
+
+      int copiedCount = 0;
+      final action = CopyAction(
+        controller: controller,
+        readBufferText: () => 'abcdef',
+        onCopied: () => copiedCount++,
+      );
+
+      action.invoke(const CopyIntent());
+      await tester.pump();
+
+      expect(stub.lastWritten(), 'abc');
+      expect(copiedCount, 1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // CopyAction — collapsed caret → copy-all via readBufferText() (OQ-09)
+  // -------------------------------------------------------------------------
+  group('CopyAction — collapsed caret copy-all (TASK-03, OQ-09)', () {
+    testWidgets(
+      'collapsed caret@3 on "hello" → setData(readBufferText()=="hello"); onCopied once',
+      (tester) async {
+        final stub = stubClipboardWrite();
+        addTearDown(stub.teardown);
+
+        final controller = _FakeController(text: 'stale');
+        controller.selection = const TextSelection.collapsed(offset: 3);
+
+        int copiedCount = 0;
+        final action = CopyAction(
+          controller: controller,
+          readBufferText: () =>
+              'hello', // readBufferText returns authoritative text
+          onCopied: () => copiedCount++,
+        );
+
+        action.invoke(const CopyIntent());
+        await tester.pump();
+
+        expect(stub.lastWritten(), 'hello');
+        expect(copiedCount, 1);
+      },
+    );
+
+    testWidgets(
+      'unfocused (baseOffset==-1) → setData(readBufferText()), NOT ""; onCopied once',
+      (tester) async {
+        final stub = stubClipboardWrite();
+        addTearDown(stub.teardown);
+
+        final controller = _FakeController(text: 'some text');
+        controller.selection = const TextSelection.collapsed(offset: -1);
+
+        int copiedCount = 0;
+        final action = CopyAction(
+          controller: controller,
+          readBufferText: () => 'some text',
+          onCopied: () => copiedCount++,
+        );
+
+        action.invoke(const CopyIntent());
+        await tester.pump();
+
+        expect(stub.lastWritten(), 'some text');
+        expect(copiedCount, 1);
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // CopyAction — empty buffer → setData("") no-op; onCopied NOT called
+  // -------------------------------------------------------------------------
+  group('CopyAction — empty buffer (TASK-03)', () {
+    testWidgets(
+      'readBufferText()=="" no selection → setData(""); onCopied NOT called; no throw',
+      (tester) async {
+        final stub = stubClipboardWrite();
+        addTearDown(stub.teardown);
+
+        final controller = _FakeController(text: '');
+        controller.selection = const TextSelection.collapsed(offset: 0);
+
+        int copiedCount = 0;
+        final action = CopyAction(
+          controller: controller,
+          readBufferText: () => '',
+          onCopied: () => copiedCount++,
+        );
+
+        // Must not throw.
+        action.invoke(const CopyIntent());
+        await tester.pump();
+
+        expect(
+          copiedCount,
+          0,
+          reason: 'onCopied must NOT fire on empty payload',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // CopyAction — EC-10 no-mutation: controller.value byte-identical after invoke
+  // -------------------------------------------------------------------------
+  group('CopyAction — EC-10 no controller mutation (TASK-03)', () {
+    testWidgets(
+      'controller.value unchanged after invoke — text, selection, composing all byte-identical',
+      (tester) async {
+        final stub = stubClipboardWrite();
+        addTearDown(stub.teardown);
+
+        final controller = _FakeController(text: 'hello world');
+        controller.selection = const TextSelection(
+          baseOffset: 6,
+          extentOffset: 11,
+        );
+
+        final valueBefore = controller.value;
+
+        final action = CopyAction(
+          controller: controller,
+          readBufferText: () => 'hello world',
+          onCopied: () {},
+        );
+
+        action.invoke(const CopyIntent());
+        await tester.pump();
+
+        expect(
+          controller.value.text,
+          valueBefore.text,
+          reason: 'EC-10: text must not change',
+        );
+        expect(
+          controller.value.selection,
+          valueBefore.selection,
+          reason: 'EC-10: selection must not change',
+        );
+        expect(
+          controller.value.composing,
+          valueBefore.composing,
+          reason: 'EC-10: composing must not change',
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // CopyAction — NFR-08 lag: readBufferText() wins over controller.text
+  // -------------------------------------------------------------------------
+  group('CopyAction — NFR-08 readBufferText wins over controller.text (TASK-03)', () {
+    testWidgets(
+      'readBufferText()=="latest" while controller.text=="stale" → copied payload "latest"',
+      (tester) async {
+        final stub = stubClipboardWrite();
+        addTearDown(stub.teardown);
+
+        // Simulate a one-frame-lag: controller.text is stale, readBufferText() is authoritative.
+        final controller = _FakeController(text: 'stale');
+        controller.selection = const TextSelection.collapsed(offset: 0);
+
+        final action = CopyAction(
+          controller: controller,
+          readBufferText: () => 'latest',
+          onCopied: () {},
+        );
+
+        action.invoke(const CopyIntent());
+        await tester.pump();
+
+        expect(
+          stub.lastWritten(),
+          'latest',
+          reason:
+              'NFR-08: whole-buffer payload must come from readBufferText(), not controller.text',
+        );
+      },
+    );
+  });
+
+  // =========================================================================
+  // SP-20260617 TASK-04 — PasteAtEndIntent / PasteAtEndAction (FR-10, NFR-07)
+  // =========================================================================
+  //
+  // PasteAtEndAction({controller, apply, onPasted}) mirrors PasteAction but
+  // resolves an absent caret (baseOffset == -1) to END not START.
+  // Routes through the same apply/EditorApplyCallback path, inheriting the
+  // echo-guard + BUG-004 equality short-circuit.
+  // Null or empty clipboard → no-op, onPasted NOT called.
+  // The existing Ctrl+V PasteAction (START fallback) is FROZEN (NFR-07).
+
+  // -------------------------------------------------------------------------
+  // PasteAtEndIntent — type identity
+  // -------------------------------------------------------------------------
+  group('PasteAtEndIntent — type identity (TASK-04)', () {
+    test('PasteAtEndIntent is a concrete Intent subclass', () {
+      expect(const PasteAtEndIntent(), isA<Intent>());
+    });
+
+    test('PasteAtEndIntent const constructor produces identical instances', () {
+      expect(
+        identical(const PasteAtEndIntent(), const PasteAtEndIntent()),
+        isTrue,
+      );
+    });
+
+    test(
+      'PasteAtEndIntent is distinct from PasteIntent and all prior intent runtime types',
+      () {
+        expect(
+          const PasteAtEndIntent().runtimeType,
+          isNot(equals(const PasteIntent().runtimeType)),
+        );
+        expect(
+          const PasteAtEndIntent().runtimeType,
+          isNot(equals(const CopyIntent().runtimeType)),
+        );
+        expect(
+          const PasteAtEndIntent().runtimeType,
+          isNot(equals(const CloseFindIntent().runtimeType)),
+        );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // PasteAtEndAction — clipboard has data → insert at caret (normal path)
+  // -------------------------------------------------------------------------
+  group(
+    'PasteAtEndAction — clipboard has data, caret present (TASK-04, FR-10)',
+    () {
+      testWidgets(
+        'clip "clip", text "hello" caret@3 → apply((text:"helcliplo", sel:collapsed@7)); onPasted once',
+        (tester) async {
+          final teardown = stubClipboard('clip');
+          addTearDown(teardown);
+
+          final controller = _FakeController(text: 'hello');
+          controller.selection = const TextSelection.collapsed(offset: 3);
+
+          ({String text, TextSelection selection})? applied;
+          int pastedCount = 0;
+          final action = PasteAtEndAction(
+            controller: controller,
+            apply: (r) => applied = r,
+            onPasted: () => pastedCount++,
+          );
+
+          action.invoke(const PasteAtEndIntent());
+          await tester.pump();
+
+          expect(applied, isNotNull);
+          expect(applied!.text, 'helcliplo');
+          expect(applied!.selection.baseOffset, 7); // 3 + 'clip'.length
+          expect(applied!.selection.isCollapsed, isTrue);
+          expect(pastedCount, 1);
+        },
+      );
+    },
+  );
+
+  // -------------------------------------------------------------------------
+  // PasteAtEndAction — END fallback when baseOffset == -1
+  // -------------------------------------------------------------------------
+  group('PasteAtEndAction — END fallback (TASK-04, FR-10)', () {
+    testWidgets(
+      'clip "clip", baseOffset==-1 → apply((text:"hello"+"clip", sel:collapsed@len)); onPasted once',
+      (tester) async {
+        final teardown = stubClipboard('clip');
+        addTearDown(teardown);
+
+        final controller = _FakeController(text: 'hello');
+        controller.selection = const TextSelection.collapsed(offset: -1);
+
+        ({String text, TextSelection selection})? applied;
+        int pastedCount = 0;
+        final action = PasteAtEndAction(
+          controller: controller,
+          apply: (r) => applied = r,
+          onPasted: () => pastedCount++,
+        );
+
+        action.invoke(const PasteAtEndIntent());
+        await tester.pump();
+
+        expect(applied, isNotNull);
+        expect(applied!.text, 'helloclip');
+        expect(
+          applied!.selection.baseOffset,
+          9,
+          reason: 'END fallback: offset = text.length (5) + clip.length (4)',
+        );
+        expect(applied!.selection.isCollapsed, isTrue);
+        expect(pastedCount, 1);
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // PasteAtEndAction — empty / null clipboard → no-op, onPasted NOT called
+  // -------------------------------------------------------------------------
+  group('PasteAtEndAction — empty/null clipboard no-op (TASK-04, EC-15b)', () {
+    testWidgets(
+      'empty-string clipboard → apply NOT called; onPasted NOT called; controller unchanged',
+      (tester) async {
+        final teardown = stubClipboard('');
+        addTearDown(teardown);
+
+        final controller = _FakeController(text: 'original');
+        controller.selection = const TextSelection.collapsed(offset: 3);
+
+        ({String text, TextSelection selection})? applied;
+        int pastedCount = 0;
+        final action = PasteAtEndAction(
+          controller: controller,
+          apply: (r) => applied = r,
+          onPasted: () => pastedCount++,
+        );
+
+        action.invoke(const PasteAtEndIntent());
+        await tester.pump();
+
+        expect(applied, isNull, reason: 'no-op: apply must not be called');
+        expect(pastedCount, 0, reason: 'no-op: onPasted must not be called');
+      },
+    );
+
+    testWidgets('null clipboard → apply NOT called; onPasted NOT called', (
+      tester,
+    ) async {
+      final teardown = stubClipboard(null);
+      addTearDown(teardown);
+
+      final controller = _FakeController(text: 'original');
+      controller.selection = const TextSelection.collapsed(offset: 3);
+
+      ({String text, TextSelection selection})? applied;
+      int pastedCount = 0;
+      final action = PasteAtEndAction(
+        controller: controller,
+        apply: (r) => applied = r,
+        onPasted: () => pastedCount++,
+      );
+
+      action.invoke(const PasteAtEndIntent());
+      await tester.pump();
+
+      expect(applied, isNull, reason: 'no-op: apply must not be called');
+      expect(pastedCount, 0, reason: 'no-op: onPasted must not be called');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // PasteAtEndAction — independence: PasteIntent still routes to PasteAction
+  //   (START fallback); PasteAtEndIntent routes to PasteAtEndAction (END
+  //   fallback). No cross-contamination (NFR-07).
+  // -------------------------------------------------------------------------
+  group('PasteAtEndAction — independence from PasteAction (TASK-04, NFR-07)', () {
+    testWidgets(
+      'PasteIntent→PasteAction START fallback; PasteAtEndIntent→PasteAtEndAction END fallback',
+      (tester) async {
+        final teardown = stubClipboard('clip');
+        addTearDown(teardown);
+
+        final controller = _FakeController(text: 'hello');
+        controller.selection = const TextSelection.collapsed(offset: -1);
+
+        ({String text, TextSelection selection})? pasteApplied;
+        ({String text, TextSelection selection})? pasteAtEndApplied;
+
+        final actions = <Type, Action<Intent>>{
+          PasteIntent: PasteAction(
+            controller: controller,
+            apply: (r) => pasteApplied = r,
+          ),
+          PasteAtEndIntent: PasteAtEndAction(
+            controller: controller,
+            apply: (r) => pasteAtEndApplied = r,
+            onPasted: () {},
+          ),
+        };
+
+        // Invoke PasteIntent directly on PasteAction (START fallback at -1 → clamps to 0)
+        (actions[PasteIntent]! as PasteAction).invoke(const PasteIntent());
+        await tester.pump();
+
+        expect(
+          pasteApplied,
+          isNotNull,
+          reason: 'PasteIntent must route to PasteAction',
+        );
+        // PasteAction: START fallback clamps -1 to 0; inserts "clip" at 0 → "cliphello", offset=4
+        expect(
+          pasteApplied!.selection.baseOffset,
+          4,
+          reason: 'PasteAction: START fallback clamps -1 to 0',
+        );
+
+        // Invoke PasteAtEndIntent on PasteAtEndAction (END fallback)
+        (actions[PasteAtEndIntent]! as PasteAtEndAction).invoke(
+          const PasteAtEndIntent(),
+        );
+        await tester.pump();
+
+        expect(
+          pasteAtEndApplied,
+          isNotNull,
+          reason: 'PasteAtEndIntent must route to PasteAtEndAction',
+        );
+        expect(
+          pasteAtEndApplied!.selection.baseOffset,
+          9, // 5 (text.length) + 4 ('clip'.length)
+          reason: 'PasteAtEndAction: END fallback resolves -1 to text.length',
+        );
+        expect(
+          pasteApplied!.selection.baseOffset,
+          isNot(equals(pasteAtEndApplied!.selection.baseOffset)),
+          reason:
+              'The two actions must produce different offsets — no cross-contamination',
+        );
+      },
+    );
   });
 
   // =========================================================================

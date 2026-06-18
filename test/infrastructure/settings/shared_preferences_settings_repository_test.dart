@@ -59,8 +59,8 @@
 
 // ignore_for_file: prefer_const_constructors
 
-import 'package:buffer/domain/settings/app_settings.dart';
-import 'package:buffer/infrastructure/settings/shared_preferences_settings_repository.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
+import 'package:foglietto/infrastructure/settings/shared_preferences_settings_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

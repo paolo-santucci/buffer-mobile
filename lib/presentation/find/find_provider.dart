@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:buffer/domain/buffer/buffer_provider.dart';
-import 'package:buffer/domain/buffer/buffer_state.dart';
-import 'package:buffer/domain/find/find_engine.dart';
-import 'package:buffer/domain/find/find_state.dart';
+import 'package:foglietto/domain/buffer/buffer_provider.dart';
+import 'package:foglietto/domain/buffer/buffer_state.dart';
+import 'package:foglietto/domain/find/find_engine.dart';
+import 'package:foglietto/domain/find/find_state.dart';
 
 /// Non-auto-disposed find/replace state provider (FR-04 / EC-17).
 ///

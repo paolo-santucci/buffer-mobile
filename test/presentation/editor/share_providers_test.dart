@@ -15,13 +15,13 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:buffer/domain/recovery/recovery_note.dart';
-import 'package:buffer/domain/recovery/recovery_repository.dart';
-import 'package:buffer/domain/recovery/save_buffer_to_recovery.dart';
-import 'package:buffer/infrastructure/share/share_intent_service.dart';
-import 'package:buffer/infrastructure/share/share_plus_service.dart';
-import 'package:buffer/infrastructure/share/share_target_service.dart';
-import 'package:buffer/presentation/editor/share_providers.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
+import 'package:foglietto/domain/recovery/recovery_repository.dart';
+import 'package:foglietto/domain/recovery/save_buffer_to_recovery.dart';
+import 'package:foglietto/infrastructure/share/share_intent_service.dart';
+import 'package:foglietto/infrastructure/share/share_plus_service.dart';
+import 'package:foglietto/infrastructure/share/share_target_service.dart';
+import 'package:foglietto/presentation/editor/share_providers.dart';
 
 // ---------------------------------------------------------------------------
 // Test doubles

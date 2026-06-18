@@ -53,9 +53,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:buffer/domain/recovery/save_buffer_to_recovery.dart';
-import 'package:buffer/infrastructure/paths/sandbox_path_provider.dart';
-import 'package:buffer/infrastructure/recovery/file_recovery_repository.dart';
+import 'package:foglietto/domain/recovery/save_buffer_to_recovery.dart';
+import 'package:foglietto/infrastructure/paths/sandbox_path_provider.dart';
+import 'package:foglietto/infrastructure/recovery/file_recovery_repository.dart';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Constants

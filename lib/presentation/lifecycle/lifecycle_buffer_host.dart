@@ -25,10 +25,10 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:buffer/domain/buffer/buffer_provider.dart';
-import 'package:buffer/domain/settings/app_settings.dart';
-import 'package:buffer/presentation/editor/share_providers.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
+import 'package:foglietto/domain/buffer/buffer_provider.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
+import 'package:foglietto/presentation/editor/share_providers.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
 
 /// A non-visual host widget that:
 ///

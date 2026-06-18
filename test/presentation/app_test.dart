@@ -27,18 +27,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:buffer/domain/recovery/recovery_note.dart';
-import 'package:buffer/domain/recovery/recovery_repository.dart';
-import 'package:buffer/domain/settings/app_settings.dart';
-import 'package:buffer/infrastructure/share/share_intent_service.dart';
-import 'package:buffer/presentation/about/about_screen.dart';
-import 'package:buffer/presentation/app.dart';
-import 'package:buffer/presentation/editor/buffer_screen.dart';
-import 'package:buffer/presentation/editor/share_providers.dart';
-import 'package:buffer/presentation/lifecycle/lifecycle_buffer_host.dart';
-import 'package:buffer/presentation/recovery/recovery_screen.dart';
-import 'package:buffer/presentation/settings/settings_provider.dart';
-import 'package:buffer/presentation/settings/settings_screen.dart';
+import 'package:foglietto/domain/recovery/recovery_note.dart';
+import 'package:foglietto/domain/recovery/recovery_repository.dart';
+import 'package:foglietto/domain/settings/app_settings.dart';
+import 'package:foglietto/infrastructure/share/share_intent_service.dart';
+import 'package:foglietto/presentation/about/about_screen.dart';
+import 'package:foglietto/presentation/app.dart';
+import 'package:foglietto/presentation/editor/buffer_screen.dart';
+import 'package:foglietto/presentation/editor/share_providers.dart';
+import 'package:foglietto/presentation/lifecycle/lifecycle_buffer_host.dart';
+import 'package:foglietto/presentation/recovery/recovery_screen.dart';
+import 'package:foglietto/presentation/settings/settings_provider.dart';
+import 'package:foglietto/presentation/settings/settings_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Test doubles

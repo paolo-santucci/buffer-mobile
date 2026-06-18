@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Buffer Mobile';
+  String get appTitle => 'Foglietto';
 
   @override
   String get findHintText => 'Search';
@@ -36,6 +36,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get findCloseTooltip => 'Back';
+
+  @override
+  String get findDoneTooltip => 'Close search';
 
   @override
   String get recoveryTitle => 'Recovery';
@@ -144,7 +147,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSpellCheck => 'Check spelling';
 
   @override
-  String get aboutTitle => 'About Buffer';
+  String get aboutTitle => 'About Foglietto';
 
   @override
   String get aboutDeveloper => 'Paolo Santucci';
@@ -183,4 +186,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get a11yZoomOut => 'Decrease font size';
+
+  @override
+  String get copyTooltip => 'Copy';
+
+  @override
+  String get pasteTooltip => 'Paste';
+
+  @override
+  String get findTooltip => 'Find';
+
+  @override
+  String get copySemantics => 'Copy';
+
+  @override
+  String get pasteSemantics => 'Paste';
+
+  @override
+  String get findSemantics => 'Find';
+
+  @override
+  String get copiedToast => 'Copied';
 }
