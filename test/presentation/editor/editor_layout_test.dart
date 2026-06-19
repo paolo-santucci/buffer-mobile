@@ -408,6 +408,88 @@ void main() {
     );
   });
 
+  // ===========================================================================
+  // chromeSlotBottomInset — bottom inset for the floating chrome slot (T-01)
+  //
+  // Anti-additive contract (mirror of editorBottomInset):
+  //   chromeSlotBottomInset(keyboardInset, safeAreaBottom)
+  //     = max(kChromeBottomGap, keyboardInset) + safeAreaBottom
+  //
+  // kChromeBottomGap and keyboardInset are mutually exclusive (composed via
+  // max, NEVER +). Only safeAreaBottom is genuinely additive.
+  // ===========================================================================
+  group('chromeSlotBottomInset', () {
+    test(
+      'anti-additive: keyboard(200) dominates → result == 224.0, NOT kChromeBottomGap + 200 + 24',
+      () {
+        // max(kChromeBottomGap(16), 200) + 24 = 200 + 24 = 224.0
+        // Must NOT be 16 + 200 + 24 = 240.0
+        final result = chromeSlotBottomInset(200.0, 24.0);
+        expect(result, equals(224.0));
+        expect(result, isNot(equals(kChromeBottomGap + 200.0 + 24.0)));
+      },
+    );
+
+    test(
+      'tie-not-doubled: keyboard == kChromeBottomGap → result == kChromeBottomGap + 24, never doubled',
+      () {
+        // max(kChromeBottomGap, kChromeBottomGap) + 24 = kChromeBottomGap + 24
+        // Must NOT be kChromeBottomGap + kChromeBottomGap + 24
+        final result = chromeSlotBottomInset(kChromeBottomGap, 24.0);
+        expect(result, equals(kChromeBottomGap + 24.0));
+        expect(
+          result,
+          isNot(equals(kChromeBottomGap + kChromeBottomGap + 24.0)),
+        );
+      },
+    );
+
+    test(
+      'keyboard-0-resting: keyboard == 0 → result == kChromeBottomGap + 24 (gap dominates)',
+      () {
+        // max(kChromeBottomGap(16), 0) + 24 = 16 + 24 = 40.0
+        final result = chromeSlotBottomInset(0.0, 24.0);
+        expect(result, equals(kChromeBottomGap + 24.0));
+      },
+    );
+
+    test(
+      'monotonic non-decreasing in keyboardInset [0→200] and safeAreaBottom [0→48]; purity: same args → identical result',
+      () {
+        // monotonic in keyboardInset
+        final kValues = [0.0, kChromeBottomGap, 50.0, 100.0, 200.0];
+        for (var i = 0; i < kValues.length - 1; i++) {
+          final r1 = chromeSlotBottomInset(kValues[i], 0.0);
+          final r2 = chromeSlotBottomInset(kValues[i + 1], 0.0);
+          expect(
+            r1,
+            lessThanOrEqualTo(r2),
+            reason:
+                'chromeSlotBottomInset(${kValues[i]}, 0) should be <= chromeSlotBottomInset(${kValues[i + 1]}, 0)',
+          );
+        }
+        // monotonic in safeAreaBottom
+        final sabValues = [0.0, 12.0, 24.0, 34.0, 48.0];
+        for (var i = 0; i < sabValues.length - 1; i++) {
+          final r1 = chromeSlotBottomInset(0.0, sabValues[i]);
+          final r2 = chromeSlotBottomInset(0.0, sabValues[i + 1]);
+          expect(
+            r1,
+            lessThanOrEqualTo(r2),
+            reason:
+                'chromeSlotBottomInset(0, ${sabValues[i]}) should be <= chromeSlotBottomInset(0, ${sabValues[i + 1]})',
+          );
+        }
+        // purity: identical args → identical result
+        const ki = 150.0;
+        const sab = 24.0;
+        final first = chromeSlotBottomInset(ki, sab);
+        final second = chromeSlotBottomInset(ki, sab);
+        expect(second, equals(first));
+      },
+    );
+  });
+
   group('G5 editorBottomInset kChromeBottomGap absorbed', () {
     test(
       'given_NFR02_width400_keyboard300_safeAreaBottom34_when_called_then_result_equals_334_and_not_334_plus_kChromeBottomGap',

@@ -135,6 +135,60 @@ class _AnchorHostScreenState extends State<_AnchorHostScreen> {
 }
 
 // ---------------------------------------------------------------------------
+// Spy host screen: captures the returned dismiss and the onDismissed spy
+// counter so tests can drive idempotent-dismiss assertions (T-03 / BUG-B).
+// ---------------------------------------------------------------------------
+
+class _SpyHostScreen extends StatefulWidget {
+  const _SpyHostScreen({required this.onDismissedCallCount});
+
+  /// Updated in-place by the host whenever onDismissed fires.
+  final List<int> onDismissedCallCount;
+
+  @override
+  State<_SpyHostScreen> createState() => _SpyHostScreenState();
+}
+
+class _SpyHostScreenState extends State<_SpyHostScreen> {
+  final LayerLink _link = LayerLink();
+
+  /// The funnel returned by openOverflowPopover — held so tests can call it.
+  VoidCallback? returnedDismiss;
+
+  void _openPopover() {
+    returnedDismiss = openOverflowPopover(
+      context,
+      anchorLink: _link,
+      onDismissed: () => widget.onDismissedCallCount.add(1),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Align(
+        alignment: Alignment.topRight,
+        child: Padding(
+          padding: const EdgeInsets.only(top: 8.0, right: 8.0),
+          child: CompositedTransformTarget(
+            link: _link,
+            child: SizedBox(
+              width: 80,
+              height: 48,
+              child: ElevatedButton(
+                key: const Key('spy_btn'),
+                onPressed: _openPopover,
+                child: const Text('...'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Harness builder (OQ-12: must use MaterialApp for real Overlay/Navigator).
 // ---------------------------------------------------------------------------
 
@@ -163,6 +217,23 @@ Widget _buildApp({AppSettings initial = const AppSettings()}) {
 Future<void> _openPopover(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('anchor_btn')));
   await tester.pumpAndSettle();
+}
+
+Widget _buildSpyApp(_SpyHostScreen spyHost) {
+  return ProviderScope(
+    overrides: [settingsProvider.overrideWith(() => _FakeSettingsNotifier())],
+    child: MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      routes: {
+        '/': (_) => spyHost,
+        '/settings': (_) => const _StubSettings(),
+        '/about': (_) => const _StubAbout(),
+        '/recovery': (_) => const _StubRecovery(),
+      },
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -512,6 +583,124 @@ void main() {
           topLeft.x,
           greaterThan(0),
           reason: 'GlassSurface borderRadius must be the popoverRadius token',
+        );
+      },
+    );
+  });
+
+  // =========================================================================
+  // 7. idempotent dismiss + onDismissed funnel (BUG-B / T-03)
+  //
+  // Contract file B: the returned dismiss is a guarded funnel that:
+  //   (a) is safe to call multiple times (entry.mounted guard — no double-remove);
+  //   (b) fires onDismissed exactly ONCE per open, regardless of how many times
+  //       the returned dismiss is called;
+  //   (c) funnels through onDismissed on barrier tap too (outside-tap path).
+  // =========================================================================
+  group('OverflowPopover — idempotent dismiss + onDismissed funnel (BUG-B)', () {
+    testWidgets(
+      'given_returned_dismiss_called_twice_then_no_exception_and_onDismissed_fires_once',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final callCount = <int>[];
+        final spyHost = _SpyHostScreen(onDismissedCallCount: callCount);
+
+        await tester.pumpWidget(_buildSpyApp(spyHost));
+
+        // Open the popover via the spy button.
+        await tester.tap(find.byKey(const Key('spy_btn')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byType(OverflowPopover),
+          findsOneWidget,
+          reason: 'Popover must be open after tapping spy_btn',
+        );
+
+        // Grab the returned dismiss from the state.
+        final hostState = tester.state<_SpyHostScreenState>(
+          find.byType(_SpyHostScreen),
+        );
+        final dismiss = hostState.returnedDismiss!;
+
+        // First call — removes the entry, fires onDismissed once.
+        dismiss();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byType(OverflowPopover),
+          findsNothing,
+          reason: 'Popover must be gone after first dismiss call',
+        );
+        expect(
+          callCount.length,
+          equals(1),
+          reason: 'onDismissed must fire exactly once on first dismiss',
+        );
+
+        // Second call — must NOT throw and must NOT fire onDismissed again.
+        dismiss();
+        await tester.pumpAndSettle();
+
+        expect(
+          callCount.length,
+          equals(1),
+          reason: 'onDismissed must NOT fire a second time (idempotent guard)',
+        );
+      },
+    );
+
+    testWidgets(
+      'given_barrier_tapped_then_returned_dismiss_is_safe_no_op_and_onDismissed_fires_once',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 1200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final callCount = <int>[];
+        final spyHost = _SpyHostScreen(onDismissedCallCount: callCount);
+
+        await tester.pumpWidget(_buildSpyApp(spyHost));
+
+        // Open the popover.
+        await tester.tap(find.byKey(const Key('spy_btn')));
+        await tester.pumpAndSettle();
+
+        final hostState = tester.state<_SpyHostScreenState>(
+          find.byType(_SpyHostScreen),
+        );
+        final dismiss = hostState.returnedDismiss!;
+
+        // Dismiss via barrier (outside-tap).
+        await tester.tapAt(const Offset(20, 1100));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byType(OverflowPopover),
+          findsNothing,
+          reason: 'Popover dismissed by barrier tap',
+        );
+        expect(
+          callCount.length,
+          equals(1),
+          reason: 'onDismissed must fire once when barrier is tapped',
+        );
+
+        // Now call the returned dismiss — must be a safe no-op (no exception,
+        // no second onDismissed invocation).
+        dismiss();
+        await tester.pumpAndSettle();
+
+        expect(
+          callCount.length,
+          equals(1),
+          reason:
+              'onDismissed must NOT fire again after barrier already dismissed',
         );
       },
     );

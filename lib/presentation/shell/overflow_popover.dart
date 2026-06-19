@@ -51,23 +51,37 @@ const double kPopoverGap = 8.0;
 /// [CompositedTransformTarget]. The popover is positioned below the pill's
 /// bottom-right corner.
 ///
-/// The returned [VoidCallback] dismisses the popover programmatically (used
-/// by callers that need to close it, e.g. on chrome-hide, EC-16).
+/// Returns an **idempotent** dismiss callback — safe to call multiple times.
+/// All internal dismissal paths (outside-tap barrier, the 3 menu tiles) AND
+/// the returned callback funnel through ONE closure that:
+///   1. Removes the [OverlayEntry] **guarded** — a `bool` latch ensures
+///      `entry.remove()` is called at most once, avoiding the Flutter
+///      `assert(_overlay != null, 'An OverlayEntry should be removed only
+///      once.')` on the second call.
+///   2. Invokes [onDismissed] exactly once per open, on EVERY dismissal
+///      path (barrier, menu tile, or programmatic caller).
 ///
-/// The [onFind] parameter is kept for signature parity with the former
-/// [openMenuSheet] but is **not** used — the Find/Replace tile is absent from
-/// the popover (FR-05). Pass null or omit.
+/// [onDismissed] is fired AFTER the guarded removal. Use it to clear the
+/// host's programmatic-dismiss latch on every path (BUG-B fix).
+///
+/// [onFind] is kept for API symmetry with the former [openMenuSheet] but is
+/// **not** used — the Find/Replace tile is absent from the popover (FR-05).
 VoidCallback openOverflowPopover(
   BuildContext context, {
   required LayerLink anchorLink,
+  VoidCallback? onDismissed,
   // ignore: avoid_unused_constructor_parameters — kept for API symmetry;
   // Find tile absent from popover per FR-05.
   VoidCallback? onFind,
 }) {
   late OverlayEntry entry;
+  var dismissed = false;
 
   void dismiss() {
+    if (dismissed) return;
+    dismissed = true;
     entry.remove();
+    onDismissed?.call();
   }
 
   entry = OverlayEntry(

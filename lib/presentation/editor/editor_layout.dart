@@ -159,6 +159,29 @@ double editorBottomInset(
       safeAreaBottom;
 }
 
+/// Bottom inset (logical px) for the floating bottom morph slot's Positioned
+/// (toolbar / find+replace box). Lifts the slot above the soft keyboard.
+///
+/// Anti-additive (mirror of [editorBottomInset]): keyboard inset and the resting
+/// chrome gap are mutually exclusive — compose with `max(...)`, NEVER `+`. Only
+/// [safeAreaBottom] is genuinely additive.
+///
+/// ```
+/// chromeSlotBottomInset(keyboardInset, safeAreaBottom)
+///   = max(kChromeBottomGap, keyboardInset) + safeAreaBottom
+/// ```
+///
+/// Observable contract:
+///   - `keyboardInset == 0` → result == `kChromeBottomGap + safeAreaBottom` (resting).
+///   - `keyboardInset == kChromeBottomGap` (tie) → NOT doubled; == `kChromeBottomGap + safeAreaBottom`.
+///   - keyboard dominates → result == `keyboardInset + safeAreaBottom`
+///     (NEVER `kChromeBottomGap + keyboardInset + safeAreaBottom`).
+///   - Monotonic non-decreasing in both [keyboardInset] and [safeAreaBottom].
+///   - Pure: identical args → identical result; no Flutter dependency.
+double chromeSlotBottomInset(double keyboardInset, double safeAreaBottom) {
+  return max(kChromeBottomGap, keyboardInset) + safeAreaBottom;
+}
+
 /// Static top inset (logical px) for the editor's OUTER `Padding` (spec §5.1 C2b).
 ///
 /// Guarantees the first visible text row clears the M6 chrome menu button

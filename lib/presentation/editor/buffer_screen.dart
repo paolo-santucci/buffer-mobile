@@ -1007,33 +1007,39 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
   /// EC-16: the popover is also dismissed programmatically from
   /// [_buildActions]'s chrome-hide path (onTextChanged → dismiss).
   void _onOverflowTap() {
-    // Dismiss any existing popover before opening a new one (idempotent).
+    // Dismiss any existing popover before opening a new one. The funnel is
+    // idempotent (guarded by a bool latch), so this is always a safe no-op
+    // when nothing is open or when the entry is already removed.
     _dismissPopoverRaw?.call();
 
-    final dismiss = openOverflowPopover(context, anchorLink: _pillLayerLink);
-
-    // Wrap dismiss so we can clear _dismissPopoverRaw on close.
-    void wrappedDismiss() {
-      dismiss();
-      if (mounted) {
-        setState(() {
-          _dismissPopoverRaw = null;
-        });
-      }
-    }
+    // Pass onDismissed so the funnel clears _dismissPopoverRaw on EVERY
+    // dismissal path — barrier, menu tiles, and programmatic (EC-16).
+    // The returned callback IS the funnel; store it directly (no double-wrap).
+    final dismiss = openOverflowPopover(
+      context,
+      anchorLink: _pillLayerLink,
+      onDismissed: () {
+        if (mounted) {
+          setState(() {
+            _dismissPopoverRaw = null;
+          });
+        }
+      },
+    );
 
     setState(() {
-      _dismissPopoverRaw = wrappedDismiss;
+      _dismissPopoverRaw = dismiss;
     });
   }
 
   /// Dismisses the open [OverflowPopover] (if any) and clears the callback.
   ///
   /// Called from the chrome-hide path to satisfy EC-16 ("popover dismisses
-  /// with the pill when chrome hides").
+  /// with the pill when chrome hides"). The funnel is idempotent — safe to
+  /// call when nothing is open.
   void _dismissPopoverIfOpen() {
     _dismissPopoverRaw?.call();
-    // _dismissPopoverRaw is cleared inside wrappedDismiss via setState.
+    // _dismissPopoverRaw is cleared via onDismissed inside the funnel.
   }
 
   // -------------------------------------------------------------------------
@@ -1196,6 +1202,14 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     // indicator / gesture bar on iPhone X+). Used by editorBottomInset.
     final double safeAreaBottom = MediaQuery.of(context).padding.bottom;
 
+    // BUG-A (T-02): Hoist the keyboard inset to build() scope so the bottom
+    // morph slot Positioned can consume it via chromeSlotBottomInset.
+    // MediaQuery.viewInsetsOf is safe to call here (ABOVE SafeArea) because
+    // SafeArea strips padding, not viewInsets — viewInsets is the raw inset
+    // representing the keyboard. The LayoutBuilder below reads this local
+    // for editorBottomInset (no behavioural change there).
+    final double keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+
     // (f) Single editor TextStyle: height 1.4, fontSize from settings, family+fallback resolved.
     final editorStyle = TextStyle(
       height: 1.4,
@@ -1329,15 +1343,11 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
 
                     // SP-20260617 TASK-11 (FR-22/EC-14): bottom inset via
                     // editorBottomInset — anti-additive max formula.
-                    // keyboardInset from MediaQuery.viewInsetsOf (raw, not
-                    // consumed by SafeArea above — SafeArea removes viewInsets,
-                    // not padding).
+                    // keyboardInset is hoisted to build() scope (BUG-A T-02)
+                    // so the bottom morph slot Positioned can share it.
                     // safeAreaBottom captured ABOVE the SafeArea widget (see
                     // local variable declared before Scaffold) because SafeArea
                     // strips padding.bottom for its descendants.
-                    final keyboardInset = MediaQuery.viewInsetsOf(
-                      context,
-                    ).bottom;
                     final bottomInset = editorBottomInset(
                       maxWidth,
                       keyboardInset,
@@ -1385,9 +1395,12 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
               // _BottomMorphSlot animates between the two children using
               // AnimatedSize + AnimatedSwitcher so the inactive child is not
               // hit-testable. The slot is inset from all edges by the chrome
-              // spacing constants so it floats above the safe-area:
+              // spacing constants so it floats above the safe-area and the
+              // soft keyboard:
               //   left/right: kChromeSideMargin
-              //   bottom: kChromeBottomGap + safeAreaBottom
+              //   bottom: chromeSlotBottomInset(keyboardInset, safeAreaBottom)
+              //           = max(kChromeBottomGap, keyboardInset) + safeAreaBottom
+              //           (anti-additive — BUG-A fix, T-02)
               //
               // Reduce-motion: Duration(milliseconds: 1) instead of
               // kChromeMorphDuration (never Duration.zero — RenderAnimatedSize
@@ -1397,7 +1410,7 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
               Positioned(
                 left: kChromeSideMargin,
                 right: kChromeSideMargin,
-                bottom: kChromeBottomGap + safeAreaBottom,
+                bottom: chromeSlotBottomInset(keyboardInset, safeAreaBottom),
                 child: _BottomMorphSlot(
                   expanded: findState.active,
                   motionDuration: MediaQuery.disableAnimationsOf(context)

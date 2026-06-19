@@ -5275,6 +5275,114 @@ void main() {
     // 31.7  Mid-morph re-target (EC-05): toggle true→false during ~30ms → settles
     // -----------------------------------------------------------------------
 
+    // -----------------------------------------------------------------------
+    // 31.8  Bottom morph slot Positioned lifts with keyboard (BUG A, T-02)
+    //
+    // Asserts that the Positioned wrapping _BottomMorphSlot (identified by
+    // left == kChromeSideMargin AND right == kChromeSideMargin) uses
+    // chromeSlotBottomInset(keyboardInset, safeAreaBottom) for its bottom,
+    // NOT the bare kChromeBottomGap + safeAreaBottom constant.
+    //
+    // Case A (keyboard active): viewInsets.bottom=300, padding.bottom=24
+    //   expected bottom == chromeSlotBottomInset(300, 24) == max(16, 300) + 24 = 324.0
+    // Case B (keyboard hidden): viewInsets.bottom=0, padding.bottom=24
+    //   expected bottom == chromeSlotBottomInset(0, 24) == max(16, 0) + 24 = 40.0
+    //
+    // FakeViewPadding note: DPR must be 1.0 so physical-px == logical-px.
+    // -----------------------------------------------------------------------
+    testWidgets(
+      '31.8a bottom morph slot Positioned.bottom == chromeSlotBottomInset(300, 24) '
+      'when keyboard is up (BUG A / T-02)',
+      (tester) async {
+        tester.view.devicePixelRatio = 1.0;
+        // padding.bottom = safe-area bottom (24 logical px).
+        tester.view.padding = const FakeViewPadding(bottom: 24.0);
+        // viewInsets.bottom = keyboard height (300 logical px).
+        tester.view.viewInsets = const FakeViewPadding(bottom: 300.0);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+        addTearDown(tester.view.resetViewInsets);
+
+        // Use 800×1200 so the bottom sheet / slot fits without overflow.
+        tester.view.physicalSize = const Size(800, 1200);
+        addTearDown(tester.view.resetPhysicalSize);
+
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        // Find the Positioned that wraps the bottom morph slot.
+        // Discriminant: left == kChromeSideMargin AND right == kChromeSideMargin
+        // (ChromePill has only top+right; Positioned.fill has neither).
+        Positioned? morphSlotPositioned;
+        for (final w in tester.widgetList<Positioned>(
+          find.byType(Positioned),
+        )) {
+          if (w.left == kChromeSideMargin && w.right == kChromeSideMargin) {
+            morphSlotPositioned = w;
+            break;
+          }
+        }
+        expect(
+          morphSlotPositioned,
+          isNotNull,
+          reason:
+              'Expected a Positioned with left==$kChromeSideMargin and '
+              'right==$kChromeSideMargin (bottom morph slot)',
+        );
+        const expectedBottom = 324.0; // chromeSlotBottomInset(300, 24)
+        expect(
+          morphSlotPositioned!.bottom,
+          closeTo(expectedBottom, 0.5),
+          reason:
+              'Bottom morph slot Positioned.bottom must be '
+              'chromeSlotBottomInset(300, 24) = $expectedBottom '
+              '(keyboard lift, BUG A / T-02)',
+        );
+      },
+    );
+
+    testWidgets(
+      '31.8b bottom morph slot Positioned.bottom == chromeSlotBottomInset(0, 24) '
+      'when keyboard is hidden (resting — unchanged from before)',
+      (tester) async {
+        tester.view.devicePixelRatio = 1.0;
+        // padding.bottom = safe-area bottom (24 logical px), no keyboard.
+        tester.view.padding = const FakeViewPadding(bottom: 24.0);
+        tester.view.viewInsets = const FakeViewPadding(bottom: 0.0);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+        addTearDown(tester.view.resetViewInsets);
+
+        await _pumpBufferScreen(tester, initialSharedText: null);
+
+        Positioned? morphSlotPositioned;
+        for (final w in tester.widgetList<Positioned>(
+          find.byType(Positioned),
+        )) {
+          if (w.left == kChromeSideMargin && w.right == kChromeSideMargin) {
+            morphSlotPositioned = w;
+            break;
+          }
+        }
+        expect(
+          morphSlotPositioned,
+          isNotNull,
+          reason:
+              'Expected a Positioned with left==$kChromeSideMargin and '
+              'right==$kChromeSideMargin (bottom morph slot)',
+        );
+        // chromeSlotBottomInset(0, 24) == max(kChromeBottomGap=16, 0) + 24 = 40.0
+        final expectedBottom = kChromeBottomGap + 24.0;
+        expect(
+          morphSlotPositioned!.bottom,
+          closeTo(expectedBottom, 0.5),
+          reason:
+              'Bottom morph slot Positioned.bottom must be '
+              'kChromeBottomGap + safeAreaBottom = $expectedBottom '
+              'when keyboard is hidden (resting state, BUG A / T-02)',
+        );
+      },
+    );
+
     testWidgets(
       '31.7 EC-05: toggle active→inactive mid-flight → settles to BottomToolbar, no exception',
       (tester) async {
