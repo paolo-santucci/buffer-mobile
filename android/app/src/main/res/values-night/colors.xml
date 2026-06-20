@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- Launch (splash) screen background — dark theme. -->
-    <color name="launch_background">#FF330A3C</color>
-</resources>

@@ -5,17 +5,11 @@
 *.swp
 .DS_Store
 .atom/
-.build/
 .buildlog/
 .history
 .svn/
-.swiftpm/
-migrate_working_dir/
 
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
+# IntelliJ / Android Studio
 .idea/
 
 # The .vscode folder contains launch configuration and tasks you configure in
@@ -23,37 +17,36 @@ migrate_working_dir/
 # is commented out by default.
 #.vscode/
 
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/android/build/
-/coverage/
+# Gradle
+.gradle/
+build/
+**/build/
+local.properties
 
-# Symbolication related
-app.*.symbols
+# Kotlin/Native
+.kotlin/
 
-# Obfuscation related
-app.*.map.json
+# Xcode
+xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# Built XCFramework artifact — produced by Gradle at
+# shared/build/XCFrameworks/release/shared.xcframework; never committed
+*.xcframework
 
-# Editor / personal tooling
+# SwiftPM
+Pods/
+.swiftpm/
+iosApp/SharedPackage/.build/
+
+# Secrets — never commit; provisioned via CI secrets
+*.keystore
+*.jks
+
+# Project-local (gitignored by design — not carried by clones)
 .obsidian/
 .claude/
 STATUS.yaml
 CLAUDE.md
-
-# Signing keys — never commit; provisioned via CI secrets
-*.keystore
-*.jks
-
-# Stray local build output (space-suffixed copy not covered by /android/build/)
-/android/build 1/

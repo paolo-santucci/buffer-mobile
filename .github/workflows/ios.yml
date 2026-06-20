@@ -2,13 +2,19 @@ name: iOS
 
 on:
   push:
-    branches: [main]
+    branches: [main, kmp-rewrite]
     tags: ['v*']
   pull_request:
-    branches: [main]
+    branches: [main, kmp-rewrite]
   workflow_dispatch:
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # build_ios — runs on every push / PR (including kmp-rewrite, non-tag).
+  # Proves MC-02: the Gradle Kotlin/Native toolchain can assemble the shared
+  # XCFramework, and xcodebuild can archive the native iosApp shell against it
+  # without signing. No IPA export and no TestFlight upload here.
+  # ---------------------------------------------------------------------------
   build_ios:
     # macos-26 ships Xcode 26 (iOS 26 SDK). Apple requires the iOS 26 SDK for
     # all App Store uploads as of mid-2026 — macos-15 (Xcode 16 / iOS 18 SDK)
@@ -26,23 +32,58 @@ jobs:
         with:
           xcode-version: '26'
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      # Temurin JDK 17 is required by the Kotlin/Native Gradle toolchain that
+      # assembles the shared XCFramework. cache: gradle caches ~/.gradle on the
+      # macOS runner keyed on the wrapper properties file.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          flutter-version: '3.44.2'
-          channel: stable
-          cache: 'pub'
+          distribution: temurin
+          java-version: 17
+          cache: gradle
 
-      - name: Install dependencies
-        run: flutter pub get
+      # Assemble the shared Kotlin Multiplatform XCFramework.
+      # Fixed contract (TASK-02 / §5.1.1):
+      #   task  → :shared:assembleSharedReleaseXCFramework
+      #   output → shared/build/XCFrameworks/release/shared.xcframework
+      # The iosApp SPM binaryTarget points at that exact path.
+      - name: Assemble shared XCFramework
+        run: ./gradlew :shared:assembleSharedReleaseXCFramework --no-daemon
 
-      - name: Build iOS (no code sign)
-        run: flutter build ios --no-codesign --build-name=1.0.0
+      # Smoke-archive the iosApp native shell without code signing.
+      # This validates that SPM resolves the local binaryTarget, the Swift
+      # sources compile, and the asset catalog (AppIcon, LaunchBackground)
+      # is intact — the full build chain minus signing (MC-02).
+      # NSUnbufferedIO suppresses Xcode's default output buffering so log
+      # lines appear immediately in the CI log.
+      - name: Archive iosApp (no code sign)
+        env:
+          NSUnbufferedIO: YES
+        run: |
+          xcodebuild \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/iosApp.xcarchive" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            archive
 
+  # ---------------------------------------------------------------------------
+  # deploy_testflight — gated to v* tags only.
+  # Full signing + export + TestFlight upload via xcrun altool.
+  # The signing spine (steps 2–6 in assessment §3) is preserved VERBATIM from
+  # the pre-KMP ios.yml; only the Flutter build steps and the Ruby xcodeproj
+  # Runner-target patch and the actool-workaround rm step are removed — those
+  # Flutter coupling points disappear because xcodebuild archives the native
+  # iosApp target directly, so actool runs correctly on its own (R-07 landmine
+  # structurally gone per assessment §6).
+  # ---------------------------------------------------------------------------
   deploy_testflight:
     # macos-26 ships Xcode 26 (iOS 26 SDK). Apple requires the iOS 26 SDK for
-    # all App Store uploads as of mid-2026 — macos-15 (Xcode 16 / iOS 18 SDK)
-    # causes a 409 rejection from altool even when signing succeeds.
+    # all App Store uploads as of mid-2026.
     runs-on: macos-26
     if: startsWith(github.ref, 'refs/tags/v')
 
@@ -50,22 +91,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Belt-and-suspenders Xcode selection: ensures Xcode 26 is active even if
-      # the runner image ships multiple Xcode versions.
+      # Belt-and-suspenders Xcode selection.
       - name: Select Xcode 26
         uses: maxim-lobanov/setup-xcode@v1
         with:
           xcode-version: '26'
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+      # Temurin JDK 17 for the Gradle/Kotlin/Native XCFramework assembly step.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          flutter-version: '3.44.2'
-          channel: stable
-          cache: 'pub'
-
-      - name: Install dependencies
-        run: flutter pub get
+          distribution: temurin
+          java-version: 17
+          cache: gradle
 
       # -----------------------------------------------------------------------
       # Decode signing materials from GitHub Secrets onto the ephemeral runner
@@ -142,103 +180,54 @@ jobs:
         env:
           IOS_DEVELOPMENT_TEAM_ID: ${{ secrets.IOS_DEVELOPMENT_TEAM_ID }}
         run: |
+          # Template is now at the repo root (relocated from ios/ in TASK-03).
           sed \
             -e "s|__TEAM_ID__|$IOS_DEVELOPMENT_TEAM_ID|g" \
             -e "s|__PROFILE_UUID__|$PROFILE_UUID|g" \
-            ios/ExportOptions.plist.template \
+            ExportOptions.plist.template \
             > "$RUNNER_TEMP/ExportOptions.plist"
 
       # -----------------------------------------------------------------------
-      # Build flow: Flutter compiles the Dart side without signing (which also
-      # runs `pod install`), then a Ruby script patches signing settings into
-      # ONLY the Runner native target, then xcodebuild archives without any
-      # CLI signing overrides. This avoids two pitfalls:
+      # Build flow (KMP / native):
+      #   1. Assemble the shared XCFramework via Gradle Kotlin/Native.
+      #   2. Archive the native iosApp Xcode project directly via xcodebuild,
+      #      passing signing identity + team + profile as CLI overrides on the
+      #      iosApp target (no CocoaPods targets to avoid, no xcodeproj Ruby
+      #      patch needed — CLI overrides are safe on a single-target project).
+      #   3. Export the IPA from the archive.
       #
-      #  1. `flutter build ipa` aborts in pre-flight when the committed pbxproj
-      #     has CODE_SIGN_IDENTITY = "iPhone Developer" (development cert)
-      #     while we're trying to sign with a Distribution cert.
-      #  2. xcodebuild CLI signing args (e.g. PROVISIONING_PROFILE_SPECIFIER)
-      #     apply to every target in the workspace, which makes CocoaPods
-      #     static-library targets fail with "does not support provisioning
-      #     profiles".
-      #
-      # Setting signing in the pbxproj for the Runner target only — using the
-      # xcodeproj Ruby gem (bundled with CocoaPods, pre-installed on the
-      # runner) — keeps Pods unsigned and Runner manually signed.
+      # This replaces the Flutter → Ruby xcodeproj patch → rm Runner.app →
+      # xcodebuild chain. The actool / CFBundleIconName landmine (R-07) is
+      # structurally gone: xcodebuild archive on the native iosApp target runs
+      # actool directly with no prior Flutter pre-build artifact to skip it.
       # -----------------------------------------------------------------------
 
-      - name: Build iOS bundle (no signing)
-        run: |
-          flutter build ios \
-            --release \
-            --no-codesign \
-            --build-name=1.0.0 \
-            --build-number="$GITHUB_RUN_NUMBER"
+      - name: Assemble shared XCFramework
+        run: ./gradlew :shared:assembleSharedReleaseXCFramework --no-daemon
 
-      - name: Configure Runner target signing (workspace only)
+      - name: Archive iosApp
         env:
           IOS_DEVELOPMENT_TEAM_ID: ${{ secrets.IOS_DEVELOPMENT_TEAM_ID }}
-        run: |
-          ruby <<'RUBY'
-          require 'xcodeproj'
-
-          project = Xcodeproj::Project.open('ios/Runner.xcodeproj')
-          runner = project.targets.find { |t| t.name == 'Runner' }
-          raise 'Runner target not found in ios/Runner.xcodeproj' unless runner
-
-          team    = ENV.fetch('IOS_DEVELOPMENT_TEAM_ID')
-          profile = ENV.fetch('PROFILE_UUID')
-
-          runner.build_configurations.each do |config|
-            settings = config.build_settings
-            settings['CODE_SIGN_STYLE']                   = 'Manual'
-            settings['DEVELOPMENT_TEAM']                  = team
-            settings['PROVISIONING_PROFILE_SPECIFIER']    = profile
-            settings['CODE_SIGN_IDENTITY']                = 'Apple Distribution'
-            settings['CODE_SIGN_IDENTITY[sdk=iphoneos*]'] = 'Apple Distribution'
-            puts "Patched Runner.#{config.name}: manual signing via team #{team}"
-          end
-
-          project.save
-          RUBY
-
-      # -----------------------------------------------------------------------
-      # Wipe only the pre-built Flutter app bundle so that xcodebuild archive
-      # triggers a clean actool + Info.plist compile pass from scratch.
-      #
-      # Why: `flutter build ios --no-codesign` populates build/ios/iphoneos/
-      # Runner.app. When xcodebuild archive subsequently runs the Flutter Run
-      # Script phase (xcode_backend.sh), it finds an existing bundle and may
-      # skip recompiling the asset catalog, producing an archive with a
-      # CFBundleIconName-less Info.plist and no 120x120 icon entry — exactly
-      # the two altool errors reported. Removing the pre-built app forces
-      # actool to recompile from the source asset catalog, producing a
-      # correctly-structured bundle.
-      #
-      # The flutter build step above must remain because it:
-      #   - resolves and installs CocoaPods (`pod install`)
-      #   - writes Generated.xcconfig with FLUTTER_BUILD_NAME / FLUTTER_BUILD_NUMBER
-      # Only the compiled app artifact is removed here, not the derived sources.
-      # -----------------------------------------------------------------------
-
-      - name: Remove pre-built app bundle before archive
-        run: rm -rf build/ios/iphoneos/Runner.app
-
-      - name: Archive with xcodebuild
+          NSUnbufferedIO: YES
         run: |
           xcodebuild \
-            -workspace ios/Runner.xcworkspace \
-            -scheme Runner \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            -archivePath "$RUNNER_TEMP/iosApp.xcarchive" \
+            MARKETING_VERSION=1.0.0 \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
             archive
 
       - name: Export IPA
         run: |
           xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/Runner.xcarchive" \
+            -archivePath "$RUNNER_TEMP/iosApp.xcarchive" \
             -exportPath "$RUNNER_TEMP/ipa" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
 
@@ -257,7 +246,7 @@ jobs:
           WORK="$RUNNER_TEMP/ipa-inspect"
           mkdir -p "$WORK"
           unzip -q "$IPA" -d "$WORK"
-          APP="$WORK/Payload/Runner.app"
+          APP="$WORK/Payload/iosApp.app"
           FAIL=0
 
           echo "===== AppIcon / Assets.car presence ====="
