@@ -133,12 +133,18 @@ class _ChromePillState extends ConsumerState<ChromePill> {
     final shareEnabled = bufferText.trim().isNotEmpty;
 
     // Safe-area top: float the pill below the notch/status-bar (FR-01, EC-09).
-    // kChromeTopGap is the breathing gap above the pill (16dp);
+    // kChromePillTopGap (= kChromeTopGap/3 ≈ 5.333dp) pulls the pill closer to
+    // the top edge than the old kChromeTopGap (16dp) — Fix 1 (TASK-05, FR-01).
+    // The find-back-pill in buffer_screen.dart keeps kChromeTopGap (FR-03).
     // safeAreaTop ensures the pill never overlaps the system status bar.
+    //
+    // <!-- CANON GAP: pill top-offset value not in ui-design-bible.md anatomy;
+    //      kChromePillTopGap = kChromeTopGap/3 derived from spec §4 Fix 1 —
+    //      routed to next /canon-bootstrap pass (OQ-02). -->
     final safeAreaTop = MediaQuery.paddingOf(context).top;
 
     return Positioned(
-      top: kChromeTopGap + safeAreaTop,
+      top: kChromePillTopGap + safeAreaTop,
       right: kChromeSideMargin,
       child: AnimatedOpacity(
         opacity: visible ? 1.0 : 0.0,

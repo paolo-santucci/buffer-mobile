@@ -78,6 +78,37 @@ const double kChromeBottomGap = 16.0;
 const double kChromeSideMargin = 16.0;
 
 // ---------------------------------------------------------------------------
+// SP-20260620 TASK-01 additions
+// ---------------------------------------------------------------------------
+
+/// Top offset for the chrome pill from the top edge of the screen (Fix 1).
+///
+/// Decoupled from [kChromeTopGap] so the pill can hug the top edge more closely
+/// without pulling the editor text down. Value = [kChromeTopGap] / 3 ≈ 5.333dp.
+/// Consumed by `chrome_pill.dart`'s `Positioned.top` (TASK-05).
+const double kChromePillTopGap = kChromeTopGap / 3;
+
+/// Minimum clearance from `safeAreaTop` to the first editor text row (Fix 3).
+///
+/// Replaces the old `kChromeMenuZoneHeight` (48dp) floor inside [editorTopInset]:
+/// a pill-height/2 gap is sufficient to clear the pill without the old 48dp
+/// chrome-zone reservation that pushed text far down.
+/// Value = [kChromeMenuZoneHeight] / 2 = 24.0dp.
+const double kEditorTopClearance = kChromeMenuZoneHeight / 2;
+
+/// Anti-additive gap between the floating bottom toolbar and the keyboard top
+/// (Fix 5). Folds inside [chromeSlotBottomInset]'s `max(...)` argument so it
+/// is never summed with [kChromeBottomGap] (NFR-02 / FR-14).
+const double kToolbarKeyboardGap = 8.0;
+
+/// Intrinsic height of the iOS keyboard accessory bar (Fix 6).
+///
+/// Used both as the widget's preferred height and as the `iosAccessoryHeight`
+/// argument passed to [chromeSlotBottomInset] when the accessory bar is visible.
+/// Equals the ≥48dp Material / HIG tap-target minimum.
+const double kKeyboardAccessoryBarHeight = 48.0;
+
+// ---------------------------------------------------------------------------
 // Functions
 // ---------------------------------------------------------------------------
 
@@ -160,52 +191,62 @@ double editorBottomInset(
 }
 
 /// Bottom inset (logical px) for the floating bottom morph slot's Positioned
-/// (toolbar / find+replace box). Lifts the slot above the soft keyboard.
+/// (toolbar / find+replace box). Lifts the slot above the soft keyboard, the
+/// iOS keyboard accessory bar, and the resting chrome gap.
 ///
-/// Anti-additive (mirror of [editorBottomInset]): keyboard inset and the resting
-/// chrome gap are mutually exclusive — compose with `max(...)`, NEVER `+`. Only
-/// [safeAreaBottom] is genuinely additive.
+/// Anti-additive: [keyboardInset] + [iosAccessoryHeight] + [kToolbarKeyboardGap]
+/// fold inside `max(...)` with [kChromeBottomGap] — only [safeAreaBottom] is
+/// additive outside the max (FR-14, NFR-02).
 ///
 /// ```
-/// chromeSlotBottomInset(keyboardInset, safeAreaBottom)
-///   = max(kChromeBottomGap, keyboardInset) + safeAreaBottom
+/// chromeSlotBottomInset(keyboardInset, safeAreaBottom, iosAccessoryHeight)
+///   = max(kChromeBottomGap,
+///          keyboardInset + iosAccessoryHeight + kToolbarKeyboardGap)
+///     + safeAreaBottom
 /// ```
 ///
 /// Observable contract:
-///   - `keyboardInset == 0` → result == `kChromeBottomGap + safeAreaBottom` (resting).
-///   - `keyboardInset == kChromeBottomGap` (tie) → NOT doubled; == `kChromeBottomGap + safeAreaBottom`.
-///   - keyboard dominates → result == `keyboardInset + safeAreaBottom`
-///     (NEVER `kChromeBottomGap + keyboardInset + safeAreaBottom`).
-///   - Monotonic non-decreasing in both [keyboardInset] and [safeAreaBottom].
+///   - `keyboardInset == 0, iosAccessoryHeight == 0` → max picks [kChromeBottomGap]
+///     (resting gap; the gap + gap folds: 0+0+8 < 16).
+///   - `keyboardInset == 300, iosAccessoryHeight == 0` → 308 > 16 → 308 + sab.
+///   - `keyboardInset == 300, iosAccessoryHeight == 48` → 356 > 16 → 356 + sab.
+///   - Tie (inner sum == [kChromeBottomGap]) → NOT doubled; == `kChromeBottomGap + sab`.
+///   - Monotonic non-decreasing in all three inputs.
 ///   - Pure: identical args → identical result; no Flutter dependency.
-double chromeSlotBottomInset(double keyboardInset, double safeAreaBottom) {
-  return max(kChromeBottomGap, keyboardInset) + safeAreaBottom;
+double chromeSlotBottomInset(
+  double keyboardInset,
+  double safeAreaBottom,
+  double iosAccessoryHeight,
+) {
+  return max(
+        kChromeBottomGap,
+        keyboardInset + iosAccessoryHeight + kToolbarKeyboardGap,
+      ) +
+      safeAreaBottom;
 }
 
-/// Static top inset (logical px) for the editor's OUTER `Padding` (spec §5.1 C2b).
+/// Static top inset (logical px) for the editor's OUTER `Padding` (spec FR-09).
 ///
-/// Guarantees the first visible text row clears the M6 chrome menu button
-/// (which sits at `top:0`) plus the system top safe-area, and is never less
-/// than the M7 responsive vertical margin (FR-06b floor), plus an explicit
-/// breathing gap [kChromeTopGap] above the text:
+/// Raises the first visible text row closer to the top of the screen by dropping
+/// the old 48dp `kChromeMenuZoneHeight` floor and the trailing `+ kChromeTopGap`
+/// bump. The pill now uses `kChromePillTopGap` (≈5.3dp) for its own offset; the
+/// editor only needs a small safe-area clearance to clear the pill:
 ///
 /// ```
 /// editorTopInset(width, safeAreaTop)
-///   = max( kChromeMenuZoneHeight + safeAreaTop , verticalMargin(width) )
-///     + kChromeTopGap
+///   = max( safeAreaTop + kEditorTopClearance , verticalMargin(width) )
 /// ```
 ///
 /// Intentionally does NOT depend on chrome visibility (OQ-16 decision): the
-/// reservation is unconditional so the first text row never jumps when the
-/// M6 chrome auto-hides/re-shows (stable baseline over reclaimed space).
+/// reservation is unconditional so the first text row never jumps when chrome
+/// auto-hides/re-shows (stable baseline over reclaimed space).
 ///
 /// Observable contract:
-///   - `result >= verticalMargin(width) + kChromeTopGap` always (FR-06b floor).
-///   - `result >= kChromeMenuZoneHeight + safeAreaTop + kChromeTopGap` always (NFR-10).
-///   - Monotonic strictly increasing in [safeAreaTop] (bump is additive).
-///   - `safeAreaTop == 0` still reserves at least `kChromeMenuZoneHeight + kChromeTopGap`.
+///   - `result >= verticalMargin(width)` always (FR-10 responsive-floor KEPT).
+///   - `result >= safeAreaTop + kEditorTopClearance` always (safe-area clearance).
+///   - Monotonic non-decreasing in [safeAreaTop].
+///   - `safeAreaTop == 0` → result == max(kEditorTopClearance, verticalMargin(width)).
+///   - Lower than old formula (FR-09: text is visibly higher).
 double editorTopInset(double width, double safeAreaTop) {
-  final chromeFloor = kChromeMenuZoneHeight + safeAreaTop;
-  final m7Vertical = verticalMargin(width);
-  return max(chromeFloor, m7Vertical) + kChromeTopGap;
+  return max(safeAreaTop + kEditorTopClearance, verticalMargin(width));
 }

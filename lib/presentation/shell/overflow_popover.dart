@@ -1,22 +1,34 @@
-// OverflowPopover — anchored glass popover bubble (TASK-07, Wave 2)
+// OverflowPopover — anchored glass popover bubble with morph open/dismiss
 //
-// Spec refs: FR-04, FR-05, FR-06, FR-19
-// Plan refs: TASK-07, sp-20260617-liquid-glass-floating-chrome-plan.md
+// Spec refs: FR-04, FR-05, FR-06, FR-07, FR-08, FR-19, NFR-06, NFR-07
+// Plan refs: TASK-04 (Wave 1 morph rewrite),
+//            sp-20260620-ui-chrome-morph-transparency-spacing-plan.md
+//            TASK-07 (original), sp-20260617-liquid-glass-floating-chrome-plan.md
 //
 // Component C6: a CompositedTransformFollower hosted in an OverlayEntry,
-// wrapping the menu body in GlassSurface(popoverRadius).
+// wrapping the menu body in GlassSurface(popoverRadius) with a scale+fade morph.
 //
-// The pill → popover trigger is wired in TASK-11 (Wave 3). This file delivers
-// the popover widget + open/dismiss/entry behaviour in isolation.
+// The pill → popover trigger is wired in buffer_screen.dart (TASK-07/Wave 3).
+// This file delivers the popover widget + open/dismiss/entry behaviour in
+// isolation.
 //
 // Navigation pattern (Ref-free, reused from menu_sheet.dart):
 //   - Pop the overlay entry (dismiss the popover).
 //   - Then pushNamed via the hostContext captured at open time.
 //   This preserves the pop-then-pushNamed nav seam from the former bottom-sheet.
 //
-// Outside-tap dismiss (FR-06 / EC-15):
+// Outside-tap dismiss (FR-07 / EC-15):
 //   An opaque full-screen GestureDetector is stacked BEHIND the follower.
-//   Tapping the barrier removes the OverlayEntry and selects nothing.
+//   Tapping the barrier triggers the async dismiss funnel.
+//
+// Morph (FR-04/FR-05):
+//   _MorphedBubble drives a single AnimationController: ScaleTransition
+//   (alignment: topRight) wrapping FadeTransition wrapping _PopoverBubble.
+//   On open: forward(). On dismiss: reverseOut() → awaits completion → remove.
+//
+// <!-- CANON GAP: morph-motion exception for off-anatomy popover;
+//      per spec §4 CANON PARTIAL / OQ-03. The scale+fade morph is a deliberate
+//      exception to the bible §Motion crossfade-only ethos. -->
 //
 // <!-- CANON GAP: anchored popover bubble anatomy + outside-tap-dismiss rule
 //      ui-design-bible.md does not define the anatomy or dismiss behaviour for
@@ -32,37 +44,47 @@ import 'package:foglietto/presentation/theme/glass_surface.dart';
 import 'package:foglietto/presentation/typography/font_size_stepper.dart';
 
 // ---------------------------------------------------------------------------
+// Private constants
+// ---------------------------------------------------------------------------
+
+/// Morph animation duration for the scale+fade open/dismiss.
+///
+/// Under reduce-motion (MediaQuery.disableAnimations) the controller uses
+/// Duration.zero so the popover opens and dismisses instantly.
+const Duration _kMorphDuration = Duration(milliseconds: 180);
+
+// ---------------------------------------------------------------------------
 // Public constants
 // ---------------------------------------------------------------------------
 
 /// Vertical gap (logical px) between the anchor widget and the popover top.
 ///
-/// C6 anchor geometry: followerAnchor = topRight, targetAnchor = bottomRight,
-/// offset = Offset(0, kPopoverGap).
-const double kPopoverGap = 8.0;
+/// TASK-04: Gap is now 0.0 — the morph grows FROM the pill's top-right corner.
+/// Kept as a named constant for source-scan compatibility and potential future use.
+const double kPopoverGap = 0.0;
 
 // ---------------------------------------------------------------------------
 // openOverflowPopover — public entry point
 // ---------------------------------------------------------------------------
 
-/// Opens the overflow menu as a floating anchored popover bubble.
+/// Opens the overflow menu as a floating anchored popover bubble with a
+/// scale+fade morph that grows out of the pill's top-right corner.
 ///
 /// [anchorLink] must be the [LayerLink] attached to the pill's
-/// [CompositedTransformTarget]. The popover is positioned below the pill's
-/// bottom-right corner.
+/// [CompositedTransformTarget]. The popover morphs from the pill's top-right.
 ///
 /// Returns an **idempotent** dismiss callback — safe to call multiple times.
 /// All internal dismissal paths (outside-tap barrier, the 3 menu tiles) AND
-/// the returned callback funnel through ONE closure that:
-///   1. Removes the [OverlayEntry] **guarded** — a `bool` latch ensures
-///      `entry.remove()` is called at most once, avoiding the Flutter
-///      `assert(_overlay != null, 'An OverlayEntry should be removed only
-///      once.')` on the second call.
-///   2. Invokes [onDismissed] exactly once per open, on EVERY dismissal
-///      path (barrier, menu tile, or programmatic caller).
+/// the returned callback funnel through ONE async closure that:
+///   1. Reverse-animates (collapses back into pill corner) before removal.
+///   2. Removes the [OverlayEntry] **guarded** — a `bool` latch ensures
+///      `entry.remove()` is called at most once.
+///   3. Invokes [onDismissed] exactly once per open, on EVERY dismissal path.
 ///
-/// [onDismissed] is fired AFTER the guarded removal. Use it to clear the
-/// host's programmatic-dismiss latch on every path (BUG-B fix).
+/// The returned [VoidCallback] is fire-and-forget; the async reverse runs
+/// internally without blocking the caller.
+///
+/// [onDismissed] is fired AFTER guarded removal (BUG-B fix from qp-20260619).
 ///
 /// [onFind] is kept for API symmetry with the former [openMenuSheet] but is
 /// **not** used — the Find/Replace tile is absent from the popover (FR-05).
@@ -75,20 +97,31 @@ VoidCallback openOverflowPopover(
   VoidCallback? onFind,
 }) {
   late OverlayEntry entry;
-  var dismissed = false;
+  var dismissing = false;
 
-  void dismiss() {
-    if (dismissed) return;
-    dismissed = true;
-    entry.remove();
+  // Morph bubble key — used by dismiss() to call reverseOut() on the morph state.
+  final morphKey = GlobalKey<_MorphedBubbleState>();
+
+  // Async dismiss funnel — all paths route through here.
+  // Fire-and-forget from the public VoidCallback; the async reverse runs on the
+  // animation ticker without blocking.
+  Future<void> dismissAsync() async {
+    if (dismissing) return;
+    dismissing = true;
+    await morphKey.currentState?.reverseOut();
+    if (entry.mounted) entry.remove();
     onDismissed?.call();
   }
+
+  // Fire-and-forget wrapper — the public VoidCallback signature stays unchanged.
+  void dismiss() => dismissAsync();
 
   entry = OverlayEntry(
     builder: (overlayContext) => _PopoverOverlayContent(
       anchorLink: anchorLink,
       hostContext: context,
       onDismiss: dismiss,
+      morphKey: morphKey,
     ),
   );
 
@@ -107,7 +140,7 @@ VoidCallback openOverflowPopover(
 ///
 /// Stacks:
 ///   1. Full-screen transparent GestureDetector (barrier — behind the bubble).
-///   2. CompositedTransformFollower → GlassSurface → menu body.
+///   2. CompositedTransformFollower → _MorphedBubble → GlassSurface → menu body.
 ///
 /// Tests locate the popover via `find.byType(OverflowPopover)` (OQ-12).
 class OverflowPopover extends StatelessWidget {
@@ -115,6 +148,7 @@ class OverflowPopover extends StatelessWidget {
     required this.anchorLink,
     required this.hostContext,
     required this.onDismiss,
+    required this.morphBubble,
     super.key,
   });
 
@@ -127,8 +161,13 @@ class OverflowPopover extends StatelessWidget {
   /// resolve via the app's root Navigator (pop-then-pushNamed seam).
   final BuildContext hostContext;
 
-  /// Callback invoked to remove this OverlayEntry.
+  /// Callback invoked to start the async dismiss sequence.
   final VoidCallback onDismiss;
+
+  /// The morph bubble widget (already keyed by the overlay content).
+  /// Passed as a pre-built child to avoid exposing the private State type in
+  /// the public constructor (library_private_types_in_public_api).
+  final Widget morphBubble;
 
   @override
   Widget build(BuildContext context) {
@@ -143,7 +182,7 @@ class OverflowPopover extends StatelessWidget {
         children: [
           // -----------------------------------------------------------------
           // Barrier — full-screen, opaque GestureDetector behind the bubble.
-          // Intercepts outside taps and dismisses the popover (FR-06/EC-15).
+          // Intercepts outside taps and triggers the async dismiss (FR-07/EC-15).
           // behavior: HitTestBehavior.opaque ensures the barrier catches taps
           // even when the underlying content is transparent.
           // -----------------------------------------------------------------
@@ -157,20 +196,21 @@ class OverflowPopover extends StatelessWidget {
 
           // -----------------------------------------------------------------
           // Bubble — anchored to the pill via CompositedTransformFollower.
-          // targetAnchor: bottomRight  → follower origin at the anchor's
-          //   bottom-right corner.
-          // followerAnchor: topRight   → bubble's top-right aligns to origin.
-          // offset: Offset(0, kPopoverGap) → drop the bubble by kPopoverGap.
+          //
+          // TASK-04 MORPH ANCHOR (FR-04):
+          //   targetAnchor: topRight  → follower origin at pill's top-right.
+          //   followerAnchor: topRight → bubble's top-right aligns to origin.
+          //   offset: Offset.zero → no gap; morph grows from pill's corner.
+          //
+          // (Old: targetAnchor=bottomRight, followerAnchor=topRight,
+          //        offset=Offset(0, kPopoverGap=8) — bubble dropped 8dp below)
           // -----------------------------------------------------------------
           CompositedTransformFollower(
             link: anchorLink,
-            targetAnchor: Alignment.bottomRight,
+            targetAnchor: Alignment.topRight,
             followerAnchor: Alignment.topRight,
-            offset: const Offset(0, kPopoverGap),
-            child: _PopoverBubble(
-              hostContext: hostContext,
-              onDismiss: onDismiss,
-            ),
+            offset: Offset.zero,
+            child: morphBubble,
           ),
         ],
       ),
@@ -179,19 +219,30 @@ class OverflowPopover extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// _PopoverOverlayContent — wires OverflowPopover into the OverlayEntry
+// _PopoverOverlayContent — wires OverflowPopover into the OverlayEntry.
+//
+// Holds the GlobalKey<_MorphedBubbleState> internally so the private type
+// never appears in OverflowPopover's public constructor
+// (library_private_types_in_public_api guard).
 // ---------------------------------------------------------------------------
 
 class _PopoverOverlayContent extends StatelessWidget {
-  const _PopoverOverlayContent({
+  // GlobalKey<_MorphedBubbleState> is mutable — const constructor is impossible.
+  // ignore: prefer_const_constructors_in_immutables
+  _PopoverOverlayContent({
     required this.anchorLink,
     required this.hostContext,
     required this.onDismiss,
+    required this.morphKey,
   });
 
   final LayerLink anchorLink;
   final BuildContext hostContext;
   final VoidCallback onDismiss;
+
+  // Received from openOverflowPopover — the dismiss funnel holds this key
+  // to call reverseOut() before removing the entry.
+  final GlobalKey<_MorphedBubbleState> morphKey;
 
   @override
   Widget build(BuildContext context) {
@@ -199,6 +250,100 @@ class _PopoverOverlayContent extends StatelessWidget {
       anchorLink: anchorLink,
       hostContext: hostContext,
       onDismiss: onDismiss,
+      morphBubble: _MorphedBubble(
+        key: morphKey,
+        hostContext: hostContext,
+        onDismiss: onDismiss,
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// _MorphedBubble — scale+fade morph wrapper for _PopoverBubble
+//
+// CANON GAP: morph-motion exception for off-anatomy popover;
+// per spec §4 CANON PARTIAL / OQ-03. The scale+fade morph is a deliberate
+// exception to the bible §Motion crossfade-only ethos.
+// ---------------------------------------------------------------------------
+
+class _MorphedBubble extends StatefulWidget {
+  const _MorphedBubble({
+    super.key,
+    required this.hostContext,
+    required this.onDismiss,
+  });
+
+  final BuildContext hostContext;
+  final VoidCallback onDismiss;
+
+  @override
+  State<_MorphedBubble> createState() => _MorphedBubbleState();
+}
+
+class _MorphedBubbleState extends State<_MorphedBubble>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  bool _forwardStarted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Create with default duration; didChangeDependencies updates it before
+    // the first build (called immediately after initState completes).
+    _controller = AnimationController(vsync: this, duration: _kMorphDuration);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // MediaQuery is available here (not in initState).
+    // Duration.zero under reduce-motion (disableAnimations) — guard/latch unchanged.
+    final disableAnimations =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    _controller.duration = disableAnimations ? Duration.zero : _kMorphDuration;
+
+    // Forward immediately on first mount — morph open (FR-04).
+    if (!_forwardStarted) {
+      _forwardStarted = true;
+      _controller.forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Reverses the morph animation and returns a Future that completes when
+  /// the controller reaches the dismissed state (value == 0.0).
+  ///
+  /// Called by the dismiss funnel in [openOverflowPopover] before removing
+  /// the OverlayEntry (FR-05 — collapse before remove).
+  Future<void> reverseOut() => _controller.reverse();
+
+  @override
+  Widget build(BuildContext context) {
+    // CurvedAnimation applies easeOutCubic on the forward pass.
+    // On reverse the curve is automatically inverted.
+    final curved = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+
+    // ScaleTransition grows/collapses from the pill's top-right corner.
+    // FadeTransition fades the bubble in/out on the same controller value.
+    return ScaleTransition(
+      alignment: Alignment.topRight,
+      scale: curved,
+      child: FadeTransition(
+        opacity: _controller,
+        child: _PopoverBubble(
+          hostContext: widget.hostContext,
+          onDismiss: widget.onDismiss,
+        ),
+      ),
     );
   }
 }

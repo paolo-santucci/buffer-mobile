@@ -51,6 +51,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart'
+    show debugDefaultTargetPlatformOverride;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
@@ -75,6 +77,7 @@ import 'package:foglietto/presentation/shell/chrome_pill.dart';
 import 'package:foglietto/presentation/shell/chrome_reveal_controller.dart';
 import 'package:foglietto/presentation/shell/bottom_toolbar.dart';
 import 'package:foglietto/presentation/shell/overflow_popover.dart';
+import 'package:foglietto/presentation/shell/keyboard_accessory_bar.dart';
 import 'package:foglietto/presentation/shell/toast_controller.dart';
 import 'package:foglietto/presentation/shell/toast_overlay.dart';
 import 'package:foglietto/presentation/theme/app_theme.dart';
@@ -3449,32 +3452,41 @@ void main() {
 
     // -----------------------------------------------------------------------
     // 29.4  First-row clears chrome (FR-06a / NFR-10):
-    //        padding.top=24 → outer Padding top >= 72.0  (48+24)
-    // -----------------------------------------------------------------------
-    testWidgets('padding.top=24 → outer Padding top >= 72.0 (FR-06a/NFR-10)', (
-      tester,
-    ) async {
-      // FakeViewPadding values are in physical pixels; DPR must be 1.0 so
-      // that logical-pixel conversion gives the intended value.
-      tester.view.devicePixelRatio = 1.0;
-      tester.view.padding = const FakeViewPadding(top: 24.0);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      addTearDown(tester.view.resetPadding);
-      await _pumpBufferScreenM7(tester, settings: const AppSettings());
-      final topInset = _outerPaddingTop(tester);
-      expect(
-        topInset,
-        greaterThanOrEqualTo(72.0),
-        reason:
-            'top inset must be >= kChromeMenuZoneHeight(48) + safeAreaTop(24) = 72 (FR-06a/NFR-10)',
-      );
-    });
-
-    // -----------------------------------------------------------------------
-    // 29.5  Zero safe-area boundary: padding.top=0 → outer Padding top >= 48.0
+    //        SP-20260620 TASK-01 revised editorTopInset to
+    //        max(safeAreaTop + kEditorTopClearance, verticalMargin(width)).
+    //        padding.top=24 → outer Padding top >= 24+24=48
+    //        (old floor was kChromeMenuZoneHeight=48 + safeAreaTop=24 = 72).
     // -----------------------------------------------------------------------
     testWidgets(
-      'padding.top=0 → outer Padding top >= 48.0 (chrome zone reserved)',
+      'padding.top=24 → outer Padding top >= kEditorTopClearance+24=48 (FR-09/SP-20260620)',
+      (tester) async {
+        // FakeViewPadding values are in physical pixels; DPR must be 1.0 so
+        // that logical-pixel conversion gives the intended value.
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.padding = const FakeViewPadding(top: 24.0);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        addTearDown(tester.view.resetPadding);
+        await _pumpBufferScreenM7(tester, settings: const AppSettings());
+        final topInset = _outerPaddingTop(tester);
+        // New formula: max(safeAreaTop + kEditorTopClearance, verticalMargin(width))
+        // = max(24+24, 36) = 48 at the 800dp-wide default test viewport.
+        expect(
+          topInset,
+          greaterThanOrEqualTo(kEditorTopClearance + 24.0),
+          reason:
+              'top inset must be >= kEditorTopClearance(24) + safeAreaTop(24) = 48 '
+              '(SP-20260620 TASK-01 revised editorTopInset, FR-09)',
+        );
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 29.5  Zero safe-area boundary: padding.top=0 → outer Padding top >= kEditorTopClearance.
+    //        SP-20260620 TASK-01 revised floor from kChromeMenuZoneHeight(48)
+    //        to kEditorTopClearance(24) — text starts higher (Fix 3/FR-09).
+    // -----------------------------------------------------------------------
+    testWidgets(
+      'padding.top=0 → outer Padding top >= kEditorTopClearance=24 (SP-20260620 Fix 3/FR-09)',
       (tester) async {
         tester.view.devicePixelRatio = 1.0;
         tester.view.padding = const FakeViewPadding(top: 0.0);
@@ -3482,11 +3494,14 @@ void main() {
         addTearDown(tester.view.resetPadding);
         await _pumpBufferScreenM7(tester, settings: const AppSettings());
         final topInset = _outerPaddingTop(tester);
+        // New floor: max(0 + kEditorTopClearance, verticalMargin(width)).
+        // At 800dp-wide default: max(24, 36) = 36 (verticalMargin dominates).
         expect(
           topInset,
-          greaterThanOrEqualTo(48.0),
+          greaterThanOrEqualTo(kEditorTopClearance),
           reason:
-              'top inset must be >= kChromeMenuZoneHeight(48) even when safe-area is 0 (NFR-10)',
+              'top inset must be >= kEditorTopClearance(24) even when safe-area is 0 '
+              '(SP-20260620 TASK-01 revised editorTopInset floor, FR-09)',
         );
       },
     );
@@ -3527,10 +3542,13 @@ void main() {
     );
 
     // -----------------------------------------------------------------------
-    // 29.7  Tiny screen (EC-13): 320x480, padding.top=44 → top >= 92.0
+    // 29.7  Tiny screen (EC-13): 320x480, padding.top=44
+    //        SP-20260620 TASK-01 revised floor: top >= kEditorTopClearance+44=68
+    //        (old expectation was >= kChromeMenuZoneHeight(48)+44=92).
     // -----------------------------------------------------------------------
     testWidgets(
-      'tiny screen 320×480 padding.top=44 → outer top >= 92.0 and TextField non-zero height (EC-13)',
+      'tiny screen 320×480 padding.top=44 → outer top >= kEditorTopClearance+44=68 '
+      'and TextField non-zero height (EC-13 / SP-20260620 Fix 3)',
       (tester) async {
         tester.view.physicalSize = const Size(320.0, 480.0);
         tester.view.devicePixelRatio = 1.0;
@@ -3542,11 +3560,13 @@ void main() {
         await _pumpBufferScreenM7(tester, settings: const AppSettings());
 
         final topInset = _outerPaddingTop(tester);
+        // New floor: max(44 + kEditorTopClearance(24), verticalMargin(320)=10) = 68.
         expect(
           topInset,
-          greaterThanOrEqualTo(92.0),
+          greaterThanOrEqualTo(kEditorTopClearance + 44.0),
           reason:
-              'tiny screen: top >= kChromeMenuZoneHeight(48) + safeAreaTop(44) = 92 (EC-13)',
+              'tiny screen: top >= kEditorTopClearance(24) + safeAreaTop(44) = 68 '
+              '(SP-20260620 TASK-01 revised editorTopInset, FR-09)',
         );
 
         // TextField must still be present and have a positive height.
@@ -3561,10 +3581,14 @@ void main() {
     // -----------------------------------------------------------------------
     // 29.8  Rotation (EC-14):
     //        portrait padding.top=30 → landscape padding.top=0,
-    //        topInset shrinks, both >= 48.
+    //        topInset shrinks. SP-20260620 TASK-01 revised floor:
+    //          portrait  >= kEditorTopClearance(24) + 30 = 54
+    //          landscape >= kEditorTopClearance(24) + 0  = 24
+    //        (old expectation was both >= 48 = kChromeMenuZoneHeight).
     // -----------------------------------------------------------------------
     testWidgets(
-      'rotation: portrait top=30 >= 48; landscape top=0 >= 48, and landscape < portrait (EC-14)',
+      'rotation: portrait top=30 >= kEditorTopClearance+30=54; '
+      'landscape top=0 >= kEditorTopClearance=24, landscape < portrait (EC-14 / SP-20260620 Fix 3)',
       (tester) async {
         // Portrait.
         tester.view.physicalSize = const Size(400.0, 800.0);
@@ -3576,10 +3600,13 @@ void main() {
 
         await _pumpBufferScreenM7(tester, settings: const AppSettings());
         final topPortrait = _outerPaddingTop(tester);
+        // max(30+24, verticalMargin(400)=10) = 54
         expect(
           topPortrait,
-          greaterThanOrEqualTo(48.0),
-          reason: 'portrait must reserve at least 48dp',
+          greaterThanOrEqualTo(kEditorTopClearance + 30.0),
+          reason:
+              'portrait must reserve >= kEditorTopClearance(24)+safeAreaTop(30)=54dp '
+              '(SP-20260620 TASK-01 revised editorTopInset, FR-09)',
         );
 
         // Landscape.
@@ -3588,10 +3615,13 @@ void main() {
         await tester.pump();
 
         final topLandscape = _outerPaddingTop(tester);
+        // max(0+24, verticalMargin(800)=36) = 36
         expect(
           topLandscape,
-          greaterThanOrEqualTo(48.0),
-          reason: 'landscape must still reserve kChromeMenuZoneHeight=48dp',
+          greaterThanOrEqualTo(kEditorTopClearance),
+          reason:
+              'landscape must still reserve >= kEditorTopClearance(24)dp '
+              '(SP-20260620 revised floor, FR-09)',
         );
         expect(
           topLandscape,
@@ -5280,69 +5310,85 @@ void main() {
     //
     // Asserts that the Positioned wrapping _BottomMorphSlot (identified by
     // left == kChromeSideMargin AND right == kChromeSideMargin) uses
-    // chromeSlotBottomInset(keyboardInset, safeAreaBottom) for its bottom,
-    // NOT the bare kChromeBottomGap + safeAreaBottom constant.
+    // chromeSlotBottomInset(keyboardInset, safeAreaBottom, iosAccessoryH) for
+    // its bottom, NOT the bare kChromeBottomGap + safeAreaBottom constant.
+    //
+    // Tests run on Android (debugDefaultTargetPlatformOverride=android) so
+    // iosAccessoryH == 0 and the formula reduces to:
+    //   max(kChromeBottomGap, keyboardInset + 0 + kToolbarKeyboardGap) + safeAreaBottom
     //
     // Case A (keyboard active): viewInsets.bottom=300, padding.bottom=24
-    //   expected bottom == chromeSlotBottomInset(300, 24) == max(16, 300) + 24 = 324.0
+    //   expected bottom == chromeSlotBottomInset(300, 24, 0)
+    //                   == max(16, 300+0+8) + 24 == 308 + 24 == 332.0
+    //                   == keyboardInset + kToolbarKeyboardGap + safeAreaBottom
     // Case B (keyboard hidden): viewInsets.bottom=0, padding.bottom=24
-    //   expected bottom == chromeSlotBottomInset(0, 24) == max(16, 0) + 24 = 40.0
+    //   expected bottom == chromeSlotBottomInset(0, 24, 0)
+    //                   == max(16, 0+0+8) + 24 == 16 + 24 == 40.0
     //
     // FakeViewPadding note: DPR must be 1.0 so physical-px == logical-px.
     // -----------------------------------------------------------------------
     testWidgets(
-      '31.8a bottom morph slot Positioned.bottom == chromeSlotBottomInset(300, 24) '
-      'when keyboard is up (BUG A / T-02)',
+      '31.8a bottom morph slot Positioned.bottom == chromeSlotBottomInset(300, 24, 0) '
+      '== 332.0 when keyboard is up (SP-20260620 TASK-07)',
       (tester) async {
-        tester.view.devicePixelRatio = 1.0;
-        // padding.bottom = safe-area bottom (24 logical px).
-        tester.view.padding = const FakeViewPadding(bottom: 24.0);
-        // viewInsets.bottom = keyboard height (300 logical px).
-        tester.view.viewInsets = const FakeViewPadding(bottom: 300.0);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        addTearDown(tester.view.resetPadding);
-        addTearDown(tester.view.resetViewInsets);
+        // Run as Android so iosAccessoryH == 0.0 (accessory bar absent).
+        // Reset MUST be in a finally block so _verifyInvariants sees null.
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        try {
+          tester.view.devicePixelRatio = 1.0;
+          // padding.bottom = safe-area bottom (24 logical px).
+          tester.view.padding = const FakeViewPadding(bottom: 24.0);
+          // viewInsets.bottom = keyboard height (300 logical px).
+          tester.view.viewInsets = const FakeViewPadding(bottom: 300.0);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.view.resetPadding);
+          addTearDown(tester.view.resetViewInsets);
 
-        // Use 800×1200 so the bottom sheet / slot fits without overflow.
-        tester.view.physicalSize = const Size(800, 1200);
-        addTearDown(tester.view.resetPhysicalSize);
+          // Use 800×1200 so the bottom sheet / slot fits without overflow.
+          tester.view.physicalSize = const Size(800, 1200);
+          addTearDown(tester.view.resetPhysicalSize);
 
-        await _pumpBufferScreen(tester, initialSharedText: null);
+          await _pumpBufferScreen(tester, initialSharedText: null);
 
-        // Find the Positioned that wraps the bottom morph slot.
-        // Discriminant: left == kChromeSideMargin AND right == kChromeSideMargin
-        // (ChromePill has only top+right; Positioned.fill has neither).
-        Positioned? morphSlotPositioned;
-        for (final w in tester.widgetList<Positioned>(
-          find.byType(Positioned),
-        )) {
-          if (w.left == kChromeSideMargin && w.right == kChromeSideMargin) {
-            morphSlotPositioned = w;
-            break;
+          // Find the Positioned that wraps the bottom morph slot.
+          // Discriminant: left == kChromeSideMargin AND right == kChromeSideMargin
+          // (ChromePill has only top+right; Positioned.fill has neither).
+          Positioned? morphSlotPositioned;
+          for (final w in tester.widgetList<Positioned>(
+            find.byType(Positioned),
+          )) {
+            if (w.left == kChromeSideMargin && w.right == kChromeSideMargin) {
+              morphSlotPositioned = w;
+              break;
+            }
           }
+          expect(
+            morphSlotPositioned,
+            isNotNull,
+            reason:
+                'Expected a Positioned with left==$kChromeSideMargin and '
+                'right==$kChromeSideMargin (bottom morph slot)',
+          );
+          // chromeSlotBottomInset(300, 24, 0) == max(16, 300+0+8) + 24 == 332.0
+          // == keyboardInset(300) + kToolbarKeyboardGap(8) + safeAreaBottom(24)
+          const expectedBottom = 332.0;
+          expect(
+            morphSlotPositioned!.bottom,
+            closeTo(expectedBottom, 0.5),
+            reason:
+                'Bottom morph slot Positioned.bottom must be '
+                'chromeSlotBottomInset(300, 24, 0) = $expectedBottom '
+                '(keyboard lift + kToolbarKeyboardGap, SP-20260620 TASK-07)',
+          );
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
         }
-        expect(
-          morphSlotPositioned,
-          isNotNull,
-          reason:
-              'Expected a Positioned with left==$kChromeSideMargin and '
-              'right==$kChromeSideMargin (bottom morph slot)',
-        );
-        const expectedBottom = 324.0; // chromeSlotBottomInset(300, 24)
-        expect(
-          morphSlotPositioned!.bottom,
-          closeTo(expectedBottom, 0.5),
-          reason:
-              'Bottom morph slot Positioned.bottom must be '
-              'chromeSlotBottomInset(300, 24) = $expectedBottom '
-              '(keyboard lift, BUG A / T-02)',
-        );
       },
     );
 
     testWidgets(
-      '31.8b bottom morph slot Positioned.bottom == chromeSlotBottomInset(0, 24) '
-      'when keyboard is hidden (resting — unchanged from before)',
+      '31.8b bottom morph slot Positioned.bottom == chromeSlotBottomInset(0, 24, 0) '
+      '== 40.0 when keyboard is hidden (resting — SP-20260620 3rd-arg compile-enforced)',
       (tester) async {
         tester.view.devicePixelRatio = 1.0;
         // padding.bottom = safe-area bottom (24 logical px), no keyboard.
@@ -5370,7 +5416,8 @@ void main() {
               'Expected a Positioned with left==$kChromeSideMargin and '
               'right==$kChromeSideMargin (bottom morph slot)',
         );
-        // chromeSlotBottomInset(0, 24) == max(kChromeBottomGap=16, 0) + 24 = 40.0
+        // chromeSlotBottomInset(0, 24, 0) == max(kChromeBottomGap=16, 0+0+8) + 24 = 40.0
+        // (kToolbarKeyboardGap=8 is inside the max, does not dominate over kChromeBottomGap=16)
         final expectedBottom = kChromeBottomGap + 24.0;
         expect(
           morphSlotPositioned!.bottom,
@@ -5378,7 +5425,7 @@ void main() {
           reason:
               'Bottom morph slot Positioned.bottom must be '
               'kChromeBottomGap + safeAreaBottom = $expectedBottom '
-              'when keyboard is hidden (resting state, BUG A / T-02)',
+              'when keyboard is hidden (resting state, SP-20260620 TASK-07)',
         );
       },
     );
@@ -5414,6 +5461,231 @@ void main() {
           findsNothing,
           reason: 'FindBackPill must be absent after find is closed (EC-05)',
         );
+      },
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // SP-20260620 TASK-07: KeyboardAccessoryBar host integration
+  //
+  // Spec refs: FR-14, FR-16, FR-17, FR-18, FR-19, FR-21, EC-08a, EC-08b,
+  //            EC-09, NFR-06
+  //
+  // Gate: defaultTargetPlatform == TargetPlatform.iOS && keyboardInset > 0.
+  // Slot: Positioned(left:0, right:0, bottom:keyboardInset).
+  // onDone: _editorFocusNode.unfocus() → didChangeMetrics → onKeyboardDismissed.
+  // No new dismiss code path (FR-18).
+  // -------------------------------------------------------------------------
+  group('BufferScreen — SP-20260620 KeyboardAccessoryBar slot (TASK-07)', () {
+    // -----------------------------------------------------------------------
+    // 32.1  Accessory bar present on iOS when keyboard is up (FR-16/FR-19)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      '32.1 iOS + viewInsets.bottom=300 → KeyboardAccessoryBar present at '
+      'Positioned(left:0,right:0,bottom:300)',
+      (tester) async {
+        // Reset in finally so _verifyInvariants sees null (addTearDown runs
+        // after the binding's invariant check in this Flutter version).
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        try {
+          tester.view.devicePixelRatio = 1.0;
+          tester.view.padding = const FakeViewPadding(bottom: 34.0);
+          tester.view.viewInsets = const FakeViewPadding(bottom: 300.0);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.view.resetPadding);
+          addTearDown(tester.view.resetViewInsets);
+          tester.view.physicalSize = const Size(800, 1200);
+          addTearDown(tester.view.resetPhysicalSize);
+
+          await _pumpBufferScreen(tester, initialSharedText: null);
+
+          // Bar must be in the tree.
+          expect(
+            find.byType(KeyboardAccessoryBar),
+            findsOneWidget,
+            reason:
+                'KeyboardAccessoryBar must be present on iOS with keyboard up',
+          );
+
+          // Must be wrapped in a Positioned(left:0, right:0, bottom:300).
+          Positioned? accessoryPositioned;
+          for (final w in tester.widgetList<Positioned>(
+            find.byType(Positioned),
+          )) {
+            if (w.left == 0 && w.right == 0 && w.bottom == 300.0) {
+              accessoryPositioned = w;
+              break;
+            }
+          }
+          expect(
+            accessoryPositioned,
+            isNotNull,
+            reason:
+                'KeyboardAccessoryBar must be wrapped in '
+                'Positioned(left:0, right:0, bottom:300.0)',
+          );
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 32.2a  Absent on Android even with keyboard up (FR-17/EC-08a)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      '32.2a Android + viewInsets.bottom=300 → KeyboardAccessoryBar absent (EC-08a)',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.android;
+        try {
+          tester.view.devicePixelRatio = 1.0;
+          tester.view.viewInsets = const FakeViewPadding(bottom: 300.0);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.view.resetViewInsets);
+          tester.view.physicalSize = const Size(800, 1200);
+          addTearDown(tester.view.resetPhysicalSize);
+
+          await _pumpBufferScreen(tester, initialSharedText: null);
+
+          expect(
+            find.byType(KeyboardAccessoryBar),
+            findsNothing,
+            reason: 'KeyboardAccessoryBar must be absent on Android (EC-08a)',
+          );
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 32.2b  Absent on iOS when keyboard is down (FR-17/EC-08b)
+    // -----------------------------------------------------------------------
+    testWidgets(
+      '32.2b iOS + viewInsets.bottom=0 → KeyboardAccessoryBar absent (EC-08b)',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        try {
+          tester.view.devicePixelRatio = 1.0;
+          tester.view.viewInsets = const FakeViewPadding(bottom: 0.0);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.view.resetViewInsets);
+
+          await _pumpBufferScreen(tester, initialSharedText: null);
+
+          expect(
+            find.byType(KeyboardAccessoryBar),
+            findsNothing,
+            reason:
+                'KeyboardAccessoryBar must be absent on iOS when keyboard is down '
+                '(EC-08b)',
+          );
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 32.3  iOS + kbd up + slot lift includes kKeyboardAccessoryBarHeight (FR-14)
+    //
+    // chromeSlotBottomInset(300, 34, 48) == max(16, 300+48+8) + 34 == 356 + 34 == 390.
+    // -----------------------------------------------------------------------
+    testWidgets(
+      '32.3 iOS + viewInsets=300 + safeAreaBottom=34 → bottom morph slot == 390.0 '
+      '(chromeSlotBottomInset(300,34,48)) (FR-14)',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        try {
+          tester.view.devicePixelRatio = 1.0;
+          tester.view.padding = const FakeViewPadding(bottom: 34.0);
+          tester.view.viewInsets = const FakeViewPadding(bottom: 300.0);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.view.resetPadding);
+          addTearDown(tester.view.resetViewInsets);
+          tester.view.physicalSize = const Size(800, 1200);
+          addTearDown(tester.view.resetPhysicalSize);
+
+          await _pumpBufferScreen(tester, initialSharedText: null);
+
+          Positioned? morphSlotPositioned;
+          for (final w in tester.widgetList<Positioned>(
+            find.byType(Positioned),
+          )) {
+            if (w.left == kChromeSideMargin && w.right == kChromeSideMargin) {
+              morphSlotPositioned = w;
+              break;
+            }
+          }
+          expect(
+            morphSlotPositioned,
+            isNotNull,
+            reason:
+                'Expected a Positioned with left==$kChromeSideMargin and '
+                'right==$kChromeSideMargin (bottom morph slot)',
+          );
+          // chromeSlotBottomInset(300, 34, 48) == max(16, 300+48+8) + 34 == 390.0
+          const expectedBottom = 390.0;
+          expect(
+            morphSlotPositioned!.bottom,
+            closeTo(expectedBottom, 0.5),
+            reason:
+                'Bottom morph slot must be chromeSlotBottomInset(300, 34, 48) = '
+                '$expectedBottom on iOS with keyboard up (FR-14)',
+          );
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
+      },
+    );
+
+    // -----------------------------------------------------------------------
+    // 32.4  Bar un-mounts when keyboardInset → 0 (FR-18/EC-09)
+    //
+    // We cannot synthetically call _editorFocusNode.unfocus() from the test,
+    // but we CAN simulate the outcome: lower viewInsets → 0 and pump, asserting
+    // the bar un-mounts (the gate `keyboardInset > 0` goes false).
+    // The onKeyboardDismissed path (testOnKeyboardDismissed seam) is exercised
+    // by the existing keyboard-dismiss tests in the EC-07 group.
+    // -----------------------------------------------------------------------
+    testWidgets(
+      '32.4 iOS + viewInsets → 0 → KeyboardAccessoryBar un-mounts (FR-18/EC-09)',
+      (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        try {
+          tester.view.devicePixelRatio = 1.0;
+          tester.view.padding = const FakeViewPadding(bottom: 34.0);
+          tester.view.viewInsets = const FakeViewPadding(bottom: 300.0);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.view.resetPadding);
+          addTearDown(tester.view.resetViewInsets);
+          tester.view.physicalSize = const Size(800, 1200);
+          addTearDown(tester.view.resetPhysicalSize);
+
+          await _pumpBufferScreen(tester, initialSharedText: null);
+
+          // Bar present while keyboard is up.
+          expect(
+            find.byType(KeyboardAccessoryBar),
+            findsOneWidget,
+            reason: 'Bar must be present before keyboard dismissal',
+          );
+
+          // Simulate keyboard dismiss: lower viewInsets to 0.
+          tester.view.viewInsets = const FakeViewPadding(bottom: 0.0);
+          await tester.pump();
+
+          // Bar must un-mount when keyboardInset == 0 (gate goes false).
+          expect(
+            find.byType(KeyboardAccessoryBar),
+            findsNothing,
+            reason:
+                'KeyboardAccessoryBar must un-mount when keyboardInset drops to 0 '
+                '(FR-18: bar un-mounts, no new dismiss code path)',
+          );
+        } finally {
+          debugDefaultTargetPlatformOverride = null;
+        }
       },
     );
   });

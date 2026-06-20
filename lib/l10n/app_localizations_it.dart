@@ -207,4 +207,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get copiedToast => 'Copiato';
+
+  @override
+  String get keyboardDoneTooltip => 'Fatto';
 }

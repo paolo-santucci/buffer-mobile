@@ -433,20 +433,23 @@ void main() {
   });
 
   // ---------------------------------------------------------------------------
-  // GlassTokens value gates (NFR-05, NFR-03 — TASK-01 / sp-20260617)
+  // GlassTokens value gates (NFR-05, NFR-03 — SP-20260620 TASK-02)
   //
   // These are PINNED constants — if a future change drifts the fill-alpha values
   // by eye, these gates trip immediately, forcing a deliberate code change.
   //
   // Pinned values (change here + in glass_surface.dart together):
-  //   fillAlphaLight == 0.92   (≥ 0.90 NFR-05 floor)
-  //   fillAlphaDark  == 0.82   (≥ 0.80 NFR-05 floor)
+  //   fillAlphaLight == 0.68   (SP-20260620 TASK-02 update; NFR-05 canon delta §6.2)
+  //   fillAlphaDark  == 0.68   (SP-20260620 TASK-02 update; NFR-05 canon delta §6.2)
   //
+  // <!-- CANON GAP: liquid-glass translucency token not yet in bible; per spec §6.2 / OQ-13 -->
   // <!-- CANON GAP: glass surface (fill alpha light/dark, blur sigma, shadow spec, radii) -->
   // ---------------------------------------------------------------------------
-  group('GlassTokens value gates (NFR-05 / NFR-03 — sp-20260617 TASK-01)', () {
-    testWidgets('AppTheme.light() GlassTokens.fillAlphaLight == 0.92 '
-        '(NFR-05 alpha-drift guard — pinned constant)', (tester) async {
+  group('GlassTokens value gates (NFR-05 / NFR-03 — sp-20260620 TASK-02)', () {
+    testWidgets('AppTheme.light() GlassTokens.fillAlphaLight == 0.68 '
+        '(NFR-05 alpha-drift guard — pinned constant, SP-20260620 TASK-02)', (
+      tester,
+    ) async {
       late GlassTokens tokens;
 
       await tester.pumpWidget(
@@ -463,16 +466,19 @@ void main() {
 
       expect(
         tokens.fillAlphaLight,
-        // PINNED: change this and the constant in GlassTokens together.
-        closeTo(0.92, 0.001),
+        // PINNED: change this and the constant in glass_surface.dart together.
+        // SP-20260620 TASK-02: updated 0.92 → 0.68 (NFR-05 canon delta §6.2).
+        closeTo(0.68, 0.001),
         reason:
-            'fillAlphaLight is PINNED at 0.92 (NFR-05 alpha-drift guard). '
-            'Change this test AND the constant in GlassTokens together.',
+            'fillAlphaLight is PINNED at 0.68 (SP-20260620 TASK-02, NFR-05 canon delta). '
+            'Change this test AND the constant in glass_surface.dart together.',
       );
     });
 
-    testWidgets('AppTheme.light() GlassTokens.fillAlphaDark == 0.82 '
-        '(NFR-05 alpha-drift guard — pinned constant)', (tester) async {
+    testWidgets('AppTheme.light() GlassTokens.fillAlphaDark == 0.68 '
+        '(NFR-05 alpha-drift guard — pinned constant, SP-20260620 TASK-02)', (
+      tester,
+    ) async {
       late GlassTokens tokens;
 
       await tester.pumpWidget(
@@ -489,11 +495,12 @@ void main() {
 
       expect(
         tokens.fillAlphaDark,
-        // PINNED: change this and the constant in GlassTokens together.
-        closeTo(0.82, 0.001),
+        // PINNED: change this and the constant in glass_surface.dart together.
+        // SP-20260620 TASK-02: updated 0.82 → 0.68 (NFR-05 canon delta §6.2).
+        closeTo(0.68, 0.001),
         reason:
-            'fillAlphaDark is PINNED at 0.82 (NFR-05 alpha-drift guard). '
-            'Change this test AND the constant in GlassTokens together.',
+            'fillAlphaDark is PINNED at 0.68 (SP-20260620 TASK-02, NFR-05 canon delta). '
+            'Change this test AND the constant in glass_surface.dart together.',
       );
     });
 
@@ -584,8 +591,11 @@ void main() {
         );
         expect(
           tokens!.fillAlphaDark,
-          greaterThanOrEqualTo(0.80),
-          reason: 'fillAlphaDark >= 0.80 per NFR-05 in dark theme',
+          // SP-20260620 TASK-02: PINNED at 0.68 (NFR-05 canon delta §6.2).
+          closeTo(0.68, 0.001),
+          reason:
+              'fillAlphaDark is PINNED at 0.68 per SP-20260620 TASK-02 '
+              '(NFR-05 canon delta §6.2). Change here + glass_surface.dart together.',
         );
       },
     );

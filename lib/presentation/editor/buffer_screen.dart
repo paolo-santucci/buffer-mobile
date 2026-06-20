@@ -99,6 +99,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter/services.dart';
@@ -120,6 +122,7 @@ import 'package:foglietto/presentation/settings/settings_provider.dart';
 import 'package:foglietto/presentation/shell/bottom_toolbar.dart';
 import 'package:foglietto/presentation/shell/chrome_pill.dart';
 import 'package:foglietto/presentation/shell/chrome_reveal_controller.dart';
+import 'package:foglietto/presentation/shell/keyboard_accessory_bar.dart';
 import 'package:foglietto/presentation/shell/overflow_popover.dart';
 import 'package:foglietto/presentation/shell/toast_controller.dart';
 import 'package:foglietto/presentation/shell/toast_overlay.dart';
@@ -1210,6 +1213,19 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
     // for editorBottomInset (no behavioural change there).
     final double keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
+    // SP-20260620 TASK-07 (Fix 5 / FR-14 / FR-19):
+    // iOS accessory-bar height term, folded inside chromeSlotBottomInset's
+    // max(). Non-zero only when the accessory bar is actually visible:
+    //   - iOS platform (defaultTargetPlatform — testable on Linux CI).
+    //   - Soft keyboard is up (keyboardInset > 0).
+    // Uses defaultTargetPlatform, NOT Platform.isIOS (FR-19: must work on
+    // Linux CI where dart:io Platform.isIOS is always false).
+    // kKeyboardAccessoryBarHeight is the named constant from TASK-01 (FR-21).
+    final double iosAccessoryH =
+        (defaultTargetPlatform == TargetPlatform.iOS && keyboardInset > 0)
+        ? kKeyboardAccessoryBarHeight
+        : 0.0;
+
     // (f) Single editor TextStyle: height 1.4, fontSize from settings, family+fallback resolved.
     final editorStyle = TextStyle(
       height: 1.4,
@@ -1392,15 +1408,16 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
               // SP-20260618 TASK-06 (FR-07, FR-12, FR-17, EC-12):
               // Bottom morph slot — toolbar ↔ search bar animated transition.
               //
-              // _BottomMorphSlot animates between the two children using
-              // AnimatedSize + AnimatedSwitcher so the inactive child is not
-              // hit-testable. The slot is inset from all edges by the chrome
-              // spacing constants so it floats above the safe-area and the
-              // soft keyboard:
-              //   left/right: kChromeSideMargin
-              //   bottom: chromeSlotBottomInset(keyboardInset, safeAreaBottom)
-              //           = max(kChromeBottomGap, keyboardInset) + safeAreaBottom
-              //           (anti-additive — BUG-A fix, T-02)
+              // SP-20260620 TASK-07 (Fix 5 / FR-13 / FR-14):
+              // chromeSlotBottomInset now takes a 3rd arg (iosAccessoryH):
+              //   bottom: chromeSlotBottomInset(keyboardInset, safeAreaBottom, iosAccessoryH)
+              //           = max(kChromeBottomGap,
+              //                 keyboardInset + iosAccessoryH + kToolbarKeyboardGap)
+              //             + safeAreaBottom
+              //   On Android / iOS with kbd down: iosAccessoryH=0 → same as before.
+              //   On iOS with kbd up: iosAccessoryH=kKeyboardAccessoryBarHeight=48dp.
+              //   Anti-additive: the gap+accessory term folds INSIDE max() — no double-
+              //   counting (FR-14). Named constants only; no spacing literal (FR-21).
               //
               // Reduce-motion: Duration(milliseconds: 1) instead of
               // kChromeMorphDuration (never Duration.zero — RenderAnimatedSize
@@ -1410,7 +1427,11 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
               Positioned(
                 left: kChromeSideMargin,
                 right: kChromeSideMargin,
-                bottom: chromeSlotBottomInset(keyboardInset, safeAreaBottom),
+                bottom: chromeSlotBottomInset(
+                  keyboardInset,
+                  safeAreaBottom,
+                  iosAccessoryH,
+                ),
                 child: _BottomMorphSlot(
                   expanded: findState.active,
                   motionDuration: MediaQuery.disableAnimationsOf(context)
@@ -1459,6 +1480,37 @@ class _BufferScreenState extends ConsumerState<BufferScreen>
                           Actions.maybeInvoke(context, const CloseFindIntent()),
                     ),
                   ),
+                ),
+
+              // ---------------------------------------------------------------
+              // SP-20260620 TASK-07 (Fix 6 / FR-16, FR-17, FR-18, FR-19, FR-21):
+              // iOS keyboard input-accessory bar.
+              //
+              // Mounted only when both conditions hold (EC-08a/EC-08b):
+              //   1. defaultTargetPlatform == TargetPlatform.iOS (FR-19: uses the
+              //      testable predicate, NOT Platform.isIOS which is false on Linux CI).
+              //   2. keyboardInset > 0 (soft keyboard is up).
+              //
+              // Positioned(left:0, right:0, bottom:keyboardInset) places the bar
+              // flush against the keyboard top (FR-13). The bar un-mounts when
+              // keyboardInset drops to 0 (gate goes false) — no new dismiss code
+              // path is introduced (FR-18).
+              //
+              // onDone → _editorFocusNode.unfocus() drives the EXISTING
+              // didChangeMetrics → onKeyboardDismissed path (FR-18).
+              //
+              // <!-- CANON GAP: iOS keyboard-accessory bar not in bible;
+              //      cross-cutting a11y minimums applied (GlassSurface 0.68,
+              //      ≥48dp target, Semantics, Tooltip); per spec §4 CANON PARTIAL
+              //      / OQ-06/OQ-13 -->
+              // ---------------------------------------------------------------
+              if (defaultTargetPlatform == TargetPlatform.iOS &&
+                  keyboardInset > 0)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: keyboardInset,
+                  child: KeyboardAccessoryBar(onDone: _editorFocusNode.unfocus),
                 ),
 
               // ---------------------------------------------------------------

@@ -271,5 +271,9 @@
   "copiedToast": "Copied",
   "@copiedToast": {
     "description": "Toast message shown briefly after the buffer text is copied to clipboard (SP-20260617 FR-26)."
+  },
+  "keyboardDoneTooltip": "Done",
+  "@keyboardDoneTooltip": {
+    "description": "Tooltip/label for the button that dismisses the soft keyboard on the iOS input-accessory bar (SP-20260620 FR-20)."
   }
 }

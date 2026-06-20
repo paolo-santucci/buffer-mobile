@@ -630,10 +630,15 @@ void main() {
 
   // =========================================================================
   // 11. Pill top gap (TASK-05, FR-01)
+  //
+  // After TASK-05 the Positioned.top uses kChromePillTopGap (= kChromeTopGap/3
+  // ≈ 5.333dp), NOT kChromeTopGap (16dp). Tests updated from the old 16+S
+  // value to kChromePillTopGap+S (FR-01). The find-back-pill keeps kChromeTopGap
+  // (FR-03) — tested in buffer_screen_test.dart, not here.
   // =========================================================================
   group('ChromePill — pill top gap (TASK-05 FR-01)', () {
     testWidgets(
-      'given_safeAreaTop_44_when_mounted_then_GlassSurface_top_offset_ge_kChromeTopGap_plus_44',
+      'given_safeAreaTop_44_when_mounted_then_GlassSurface_top_offset_ge_kChromePillTopGap_plus_44',
       (tester) async {
         await tester.pumpWidget(_buildApp(visible: true, safeAreaTop: 44.0));
         await tester.pumpAndSettle();
@@ -641,16 +646,17 @@ void main() {
         final topLeft = tester.getTopLeft(find.byType(GlassSurface).first);
         expect(
           topLeft.dy,
-          greaterThanOrEqualTo(kChromeTopGap + 44.0),
+          greaterThanOrEqualTo(kChromePillTopGap + 44.0),
           reason:
               'With safeAreaTop=44, the glass pill must float at least '
-              '${kChromeTopGap + 44.0}dp from the top (TASK-05 FR-01)',
+              '${kChromePillTopGap + 44.0}dp from the top (TASK-05 FR-01; '
+              'kChromePillTopGap = kChromeTopGap/3 ≈ 5.333dp)',
         );
       },
     );
 
     testWidgets(
-      'given_safeAreaTop_0_when_mounted_then_GlassSurface_top_offset_ge_kChromeTopGap',
+      'given_safeAreaTop_0_when_mounted_then_GlassSurface_top_offset_ge_kChromePillTopGap',
       (tester) async {
         await tester.pumpWidget(_buildApp(visible: true, safeAreaTop: 0.0));
         await tester.pumpAndSettle();
@@ -658,10 +664,10 @@ void main() {
         final topLeft = tester.getTopLeft(find.byType(GlassSurface).first);
         expect(
           topLeft.dy,
-          greaterThanOrEqualTo(kChromeTopGap),
+          greaterThanOrEqualTo(kChromePillTopGap),
           reason:
-              'With safeAreaTop=0, pill top must still be >= kChromeTopGap '
-              '(no longer flush at top:0)',
+              'With safeAreaTop=0, pill top must be >= kChromePillTopGap '
+              '(= kChromeTopGap/3 ≈ 5.333dp) — not flush at top:0 (TASK-05 FR-01)',
         );
       },
     );
@@ -669,10 +675,13 @@ void main() {
 
   // =========================================================================
   // 12. Large notch lock-step (EC-09, TASK-05)
+  //
+  // After TASK-05: exact value is kChromePillTopGap + safeAreaTop
+  // (= kChromeTopGap/3 + 59 ≈ 64.333dp for Dynamic Island).
   // =========================================================================
   group('ChromePill — large notch lock-step (EC-09 TASK-05)', () {
     testWidgets(
-      'given_safeAreaTop_59_when_mounted_then_GlassSurface_top_offset_equals_kChromeTopGap_plus_59',
+      'given_safeAreaTop_59_when_mounted_then_GlassSurface_top_offset_equals_kChromePillTopGap_plus_59',
       (tester) async {
         await tester.pumpWidget(_buildApp(visible: true, safeAreaTop: 59.0));
         await tester.pumpAndSettle();
@@ -680,10 +689,11 @@ void main() {
         final topLeft = tester.getTopLeft(find.byType(GlassSurface).first);
         expect(
           topLeft.dy,
-          equals(kChromeTopGap + 59.0),
+          closeTo(kChromePillTopGap + 59.0, 0.01),
           reason:
               'With safeAreaTop=59 (large Dynamic Island), pill top must be '
-              'exactly kChromeTopGap + 59 = ${kChromeTopGap + 59.0}dp (EC-09)',
+              'kChromePillTopGap + 59 = ${kChromePillTopGap + 59.0}dp (EC-09; '
+              'kChromePillTopGap = kChromeTopGap/3 ≈ 5.333dp)',
         );
       },
     );

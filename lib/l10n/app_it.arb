@@ -271,5 +271,9 @@
   "copiedToast": "Copiato",
   "@copiedToast": {
     "description": "Messaggio toast mostrato brevemente dopo che il testo del buffer è stato copiato negli appunti (SP-20260617 FR-26)."
+  },
+  "keyboardDoneTooltip": "Fatto",
+  "@keyboardDoneTooltip": {
+    "description": "Tooltip/etichetta per il pulsante che chiude la tastiera soft sulla barra di accessibilità di input iOS (SP-20260620 FR-20)."
   }
 }

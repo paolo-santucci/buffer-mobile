@@ -481,6 +481,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Copied'**
   String get copiedToast;
+
+  /// Tooltip/label for the button that dismisses the soft keyboard on the iOS input-accessory bar (SP-20260620 FR-20).
+  ///
+  /// In en, this message translates to:
+  /// **'Done'**
+  String get keyboardDoneTooltip;
 }
 
 class _AppLocalizationsDelegate

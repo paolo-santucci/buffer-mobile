@@ -16,7 +16,8 @@
 //     ClipRRect(borderRadius) wrapping BackdropFilter(ImageFilter.blur(σ)) behind
 //     a colorScheme.surface.withValues(alpha: fillAlpha[brightness]) fill +
 //     Border.all(outlineVariant, borderWidth) + soft BoxShadow (shadow token).
-//     fillAlpha >= 0.90 light / >= 0.80 dark (NFR-05).
+//     fillAlpha == 0.68 light / 0.68 dark (SP-20260620 TASK-02; NFR-05 canon delta §6.2).
+//     <!-- CANON GAP: liquid-glass translucency token not yet in bible; per spec §6.2 / OQ-13 -->
 //
 //   Opaque branch (highContrast == true, FR-20):
 //     NO BackdropFilter; fill is colorScheme.surface at alpha 1.0; border + shadow retained.
@@ -42,16 +43,19 @@ import 'package:flutter/material.dart';
 // GlassTokens — ThemeExtension (C1b, single source of truth, NFR-03)
 //
 // Pinned fill-alpha constants (NFR-05 alpha-drift guards):
-//   _kFillAlphaLight = 0.92  (>= 0.90 floor; change here + app_theme_test.dart together)
-//   _kFillAlphaDark  = 0.82  (>= 0.80 floor; change here + app_theme_test.dart together)
+//   _kFillAlphaLight = 0.68  (SP-20260620 TASK-02 update; change here + test files together)
+//   _kFillAlphaDark  = 0.68  (SP-20260620 TASK-02 update; change here + test files together)
+//
+// <!-- CANON GAP: liquid-glass translucency token not yet in bible;
+//      per spec §6.2 / OQ-13 -->
 //
 // <!-- CANON GAP: fill alpha light/dark, blur sigma, shadow spec, radii — no hex values
 //      in ui-design-bible.md for glass surfaces; values chosen to meet NFR-05 floor and
 //      provide legible contrast over the editor. -->
 // ---------------------------------------------------------------------------
 
-const double _kFillAlphaLight = 0.92;
-const double _kFillAlphaDark = 0.82;
+const double _kFillAlphaLight = 0.68;
+const double _kFillAlphaDark = 0.68;
 const double _kBlurSigma = 12.0;
 const double _kBorderWidth = 0.8;
 
@@ -77,12 +81,12 @@ class GlassTokens extends ThemeExtension<GlassTokens> {
     required this.shadow,
   });
 
-  /// Fill alpha for light-mode glass surface. Pinned at [_kFillAlphaLight] (0.92).
-  /// Must be >= 0.90 per NFR-05.
+  /// Fill alpha for light-mode glass surface. Pinned at [_kFillAlphaLight] (0.68).
+  /// Updated from 0.92 → 0.68 by SP-20260620 TASK-02 (NFR-05 canon delta, spec §6.2).
   final double fillAlphaLight;
 
-  /// Fill alpha for dark-mode glass surface. Pinned at [_kFillAlphaDark] (0.82).
-  /// Must be >= 0.80 per NFR-05.
+  /// Fill alpha for dark-mode glass surface. Pinned at [_kFillAlphaDark] (0.68).
+  /// Updated from 0.82 → 0.68 by SP-20260620 TASK-02 (NFR-05 canon delta, spec §6.2).
   final double fillAlphaDark;
 
   /// BackdropFilter ImageFilter.blur sigma (both x and y).

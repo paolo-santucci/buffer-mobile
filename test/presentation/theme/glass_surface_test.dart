@@ -68,50 +68,51 @@ void main() {
       },
     );
 
-    testWidgets(
-      'GlassSurface fill container derives alpha from fillAlphaLight token '
-      '— not a hard-coded literal (FR-21, NFR-05)',
-      (tester) async {
-        final theme = AppTheme.light();
-        final tokens = theme.extension<GlassTokens>()!;
+    testWidgets('GlassSurface fill container derives alpha from fillAlphaLight token '
+        '— not a hard-coded literal (FR-21, NFR-05)', (tester) async {
+      final theme = AppTheme.light();
+      final tokens = theme.extension<GlassTokens>()!;
 
-        late GlassTokens capturedTokens;
+      late GlassTokens capturedTokens;
 
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: theme,
-            home: MediaQuery(
-              data: const MediaQueryData(),
-              child: Scaffold(
-                body: Builder(
-                  builder: (context) {
-                    capturedTokens = GlassTokens.of(context)!;
-                    return GlassSurface(
-                      borderRadius: tokens.pillRadius,
-                      child: const Text('x'),
-                    );
-                  },
-                ),
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: theme,
+          home: MediaQuery(
+            data: const MediaQueryData(),
+            child: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  capturedTokens = GlassTokens.of(context)!;
+                  return GlassSurface(
+                    borderRadius: tokens.pillRadius,
+                    child: const Text('x'),
+                  );
+                },
               ),
             ),
           ),
-        );
+        ),
+      );
 
-        // fillAlphaLight must be >= 0.90 (NFR-05)
-        expect(
-          capturedTokens.fillAlphaLight,
-          greaterThanOrEqualTo(0.90),
-          reason:
-              'fillAlphaLight must be >= 0.90 for WCAG AA contrast (NFR-05)',
-        );
-        // fillAlphaDark must be >= 0.80 (NFR-05)
-        expect(
-          capturedTokens.fillAlphaDark,
-          greaterThanOrEqualTo(0.80),
-          reason: 'fillAlphaDark must be >= 0.80 for WCAG AA contrast (NFR-05)',
-        );
-      },
-    );
+      // fillAlphaLight PINNED at 0.68 (SP-20260620 TASK-02 — NFR-05 canon delta §6.2)
+      // <!-- CANON GAP: liquid-glass translucency token not yet in bible; per spec §6.2 / OQ-13 -->
+      expect(
+        capturedTokens.fillAlphaLight,
+        closeTo(0.68, 0.001),
+        reason:
+            'fillAlphaLight is PINNED at 0.68 (SP-20260620 TASK-02, NFR-05 canon delta). '
+            'Change this test AND the constant in glass_surface.dart together.',
+      );
+      // fillAlphaDark PINNED at 0.68 (SP-20260620 TASK-02 — NFR-05 canon delta §6.2)
+      expect(
+        capturedTokens.fillAlphaDark,
+        closeTo(0.68, 0.001),
+        reason:
+            'fillAlphaDark is PINNED at 0.68 (SP-20260620 TASK-02, NFR-05 canon delta). '
+            'Change this test AND the constant in glass_surface.dart together.',
+      );
+    });
 
     testWidgets(
       'GlassSurface border color uses outlineVariant from colorScheme '
@@ -580,6 +581,160 @@ void main() {
         mid.searchBarRadius,
         equals(const BorderRadius.all(Radius.circular(16.0))),
         reason: 'lerp at t=0.5 must interpolate searchBarRadius',
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // TC-G10: TASK-02 / SP-20260620 — translucency 0.68 (FR-11, FR-12, NFR-03)
+  //
+  // <!-- CANON GAP: liquid-glass translucency token not yet in bible;
+  //      per spec §6.2 / OQ-13 -->
+  //
+  // TDD: these tests are written BEFORE the alpha constants are changed.
+  // They FAIL at 0.92/0.82 and PASS only after _kFillAlphaLight/_kFillAlphaDark
+  // are updated to 0.68 in glass_surface.dart.
+  // ---------------------------------------------------------------------------
+  group('Translucency 0.68 — TASK-02 (FR-11, FR-12, NFR-03)', () {
+    testWidgets('FR-11: fillAlphaLight == 0.68 via GlassTokens.of(context) '
+        '(not the old 0.92)', (tester) async {
+      late GlassTokens capturedTokens;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: MediaQuery(
+            data: const MediaQueryData(),
+            child: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  capturedTokens = GlassTokens.of(context)!;
+                  return GlassSurface(
+                    borderRadius: capturedTokens.pillRadius,
+                    child: const Text('x'),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        capturedTokens.fillAlphaLight,
+        closeTo(0.68, 0.001),
+        reason:
+            'FR-11: fillAlphaLight must be 0.68 (SP-20260620 translucency update). '
+            'Was 0.92 before this task.',
+      );
+      // Negative: must NOT still be 0.92
+      expect(
+        capturedTokens.fillAlphaLight,
+        isNot(closeTo(0.92, 0.001)),
+        reason:
+            'FR-11 negative: 0.92 was the old value — must no longer be the alpha',
+      );
+    });
+
+    testWidgets('FR-11: fillAlphaDark == 0.68 via GlassTokens.of(context) '
+        '(not the old 0.82)', (tester) async {
+      late GlassTokens capturedTokens;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark(),
+          home: MediaQuery(
+            data: const MediaQueryData(),
+            child: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  capturedTokens = GlassTokens.of(context)!;
+                  return GlassSurface(
+                    borderRadius: capturedTokens.pillRadius,
+                    child: const Text('x'),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(
+        capturedTokens.fillAlphaDark,
+        closeTo(0.68, 0.001),
+        reason:
+            'FR-11: fillAlphaDark must be 0.68 (SP-20260620 translucency update). '
+            'Was 0.82 before this task.',
+      );
+      // Negative: must NOT still be 0.82
+      expect(
+        capturedTokens.fillAlphaDark,
+        isNot(closeTo(0.82, 0.001)),
+        reason:
+            'FR-11 negative: 0.82 was the old dark value — must no longer be the alpha',
+      );
+    });
+
+    testWidgets(
+      'FR-12/NFR-03 KEEP: highContrast:true → fill alpha 1.0, NO BackdropFilter '
+      '(opaque fallback branch unchanged by TASK-02)',
+      (tester) async {
+        final tokens = AppTheme.light().extension<GlassTokens>()!;
+
+        await pumpGlassSurface(
+          tester,
+          glassSurface: GlassSurface(
+            borderRadius: tokens.pillRadius,
+            child: const Text('hc'),
+          ),
+          mediaQueryData: const MediaQueryData(highContrast: true),
+        );
+
+        // NO BackdropFilter in the high-contrast branch (FR-12/NFR-03)
+        expect(
+          find.byType(BackdropFilter),
+          findsNothing,
+          reason:
+              'FR-12/NFR-03: highContrast:true MUST produce NO BackdropFilter '
+              '— opaque fallback; TASK-02 must not touch this branch.',
+        );
+      },
+    );
+
+    testWidgets('FR-11 negative: default branch does NOT render at alpha 1.0 '
+        '(i.e. glass branch is genuinely translucent, not opaque)', (
+      tester,
+    ) async {
+      late GlassTokens capturedTokens;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: MediaQuery(
+            data: const MediaQueryData(),
+            child: Scaffold(
+              body: Builder(
+                builder: (context) {
+                  capturedTokens = GlassTokens.of(context)!;
+                  return GlassSurface(
+                    borderRadius: capturedTokens.pillRadius,
+                    child: const Text('x'),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // fillAlphaLight in default branch must be < 1.0 (translucent, not opaque)
+      expect(
+        capturedTokens.fillAlphaLight,
+        lessThan(1.0),
+        reason:
+            'FR-11 negative: default branch fill alpha must be < 1.0 '
+            '(translucent glass, not opaque)',
       );
     });
   });

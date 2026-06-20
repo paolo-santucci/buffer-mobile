@@ -16,17 +16,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:foglietto/presentation/editor/editor_layout.dart';
 
 // ---------------------------------------------------------------------------
-// Helpers — baseline computation mirrors the pre-bump formula so each G5 test
-// expresses the postcondition as `baseline + kChromeTopGap`.
+// Helpers — baseline computation mirrors the TASK-01 editorTopInset formula.
 // ---------------------------------------------------------------------------
 
-/// Baseline for editorTopInset before the kChromeTopGap bump.
-///
-/// `max( kChromeMenuZoneHeight + safeAreaTop , verticalMargin(width) )`
+/// Baseline for editorTopInset per the TASK-01 formula:
+///   `max( safeAreaTop + kEditorTopClearance , verticalMargin(width) )`
 double _topBaseline(double width, double safeAreaTop) {
-  final chromeFloor = kChromeMenuZoneHeight + safeAreaTop;
+  final clearanceFloor = safeAreaTop + kEditorTopClearance;
   final m7Vertical = verticalMargin(width);
-  return chromeFloor > m7Vertical ? chromeFloor : m7Vertical;
+  return clearanceFloor > m7Vertical ? clearanceFloor : m7Vertical;
 }
 
 void main() {
@@ -246,11 +244,11 @@ void main() {
   // Spec §5.1 C2b: max(kChromeMenuZoneHeight + safeAreaTop, verticalMargin(width))
   // ===========================================================================
   group('editorTopInset', () {
-    test('given_width400_safeArea24_when_called_then_result_closeTo_88', () {
-      // baseline: kChromeMenuZoneHeight(48) + safeAreaTop(24) = 72, dominates verticalMargin(400)=10
-      // G5 bump: 72 + kChromeTopGap(16) = 88
+    test('given_width400_safeArea24_when_called_then_result_closeTo_48', () {
+      // TASK-01 new formula: max(24 + kEditorTopClearance(24), verticalMargin(400)=10)
+      // = max(48, 10) = 48.0
       final result = editorTopInset(400.0, 24.0);
-      expect(result, closeTo(88.0, 0.5));
+      expect(result, closeTo(48.0, 0.5));
     });
 
     test(
@@ -289,11 +287,16 @@ void main() {
       },
     );
 
-    test('given_width400_safeArea0_when_called_then_result_is_at_least_48', () {
-      // Even with zero safe-area, chrome zone must be reserved.
-      final result = editorTopInset(400.0, 0.0);
-      expect(result, greaterThanOrEqualTo(48.0));
-    });
+    test(
+      'given_width400_safeArea0_when_called_then_result_is_at_least_kEditorTopClearance',
+      () {
+        // TASK-01: the 48dp kChromeMenuZoneHeight floor is dropped.
+        // With safeAreaTop=0: max(0 + 24, verticalMargin(400)=10) = 24.
+        // Floor is now kEditorTopClearance (24dp), not 48dp.
+        final result = editorTopInset(400.0, 0.0);
+        expect(result, greaterThanOrEqualTo(kEditorTopClearance));
+      },
+    );
 
     test(
       'given_widths_320_400_800_and_safeAreas_0_24_when_called_then_result_always_gte_verticalMargin',
@@ -343,41 +346,47 @@ void main() {
     );
   });
 
-  group('G5 editorTopInset bump', () {
+  group('G5 editorTopInset TASK-01 new formula', () {
+    // New formula: max(safeAreaTop + kEditorTopClearance, verticalMargin(width))
+    // No trailing + kChromeTopGap; no 48dp kChromeMenuZoneHeight floor.
+
     test(
-      'given_width400_safeAreaTop0_when_called_then_result_equals_baseline_plus_kChromeTopGap',
+      'given_width400_safeAreaTop0_when_called_then_result_equals_baseline',
       () {
         const w = 400.0;
         const sat = 0.0;
+        // max(0 + 24, verticalMargin(400)=10) = 24.0
         final baseline = _topBaseline(w, sat);
-        expect(editorTopInset(w, sat), equals(baseline + kChromeTopGap));
+        expect(editorTopInset(w, sat), equals(baseline));
       },
     );
 
     test(
-      'given_width400_safeAreaTop44_when_called_then_result_equals_baseline_plus_kChromeTopGap',
+      'given_width400_safeAreaTop44_when_called_then_result_equals_baseline',
       () {
         const w = 400.0;
         const sat = 44.0;
+        // max(44 + 24, verticalMargin(400)=10) = max(68, 10) = 68.0
         final baseline = _topBaseline(w, sat);
-        expect(editorTopInset(w, sat), equals(baseline + kChromeTopGap));
+        expect(editorTopInset(w, sat), equals(baseline));
       },
     );
 
     test(
-      'given_width800_safeAreaTop59_when_called_then_result_equals_baseline_plus_kChromeTopGap',
+      'given_width800_safeAreaTop59_when_called_then_result_equals_baseline',
       () {
         const w = 800.0;
         const sat = 59.0;
+        // max(59 + 24, verticalMargin(800)=36) = max(83, 36) = 83.0
         final baseline = _topBaseline(w, sat);
-        expect(editorTopInset(w, sat), equals(baseline + kChromeTopGap));
+        expect(editorTopInset(w, sat), equals(baseline));
       },
     );
 
     test(
       'given_safeAreaTops_0_20_44_59_at_width400_when_called_then_results_strictly_increasing',
       () {
-        // kChromeTopGap is additive on all results so monotonicity is preserved.
+        // Monotonicity preserved: safeAreaTop is additive inside the clearanceFloor term.
         final results = [
           0.0,
           20.0,
@@ -396,14 +405,12 @@ void main() {
     );
 
     test(
-      'given_EC01_width400_safeAreaTop0_when_called_then_result_gte_kChromeMenuZoneHeight_plus_kChromeTopGap',
+      'given_EC01_width400_safeAreaTop0_when_called_then_result_equals_kEditorTopClearance',
       () {
-        // EC-01 no-notch floor: result >= 48 + 16 = 64.
+        // EC-06 no-notch: max(0 + 24, verticalMargin(400)=10) = 24.0.
+        // The old 48dp floor (kChromeMenuZoneHeight + kChromeTopGap = 64) is gone.
         final result = editorTopInset(400.0, 0.0);
-        expect(
-          result,
-          greaterThanOrEqualTo(kChromeMenuZoneHeight + kChromeTopGap),
-        );
+        expect(result, equals(kEditorTopClearance));
       },
     );
   });
@@ -419,23 +426,27 @@ void main() {
   // max, NEVER +). Only safeAreaBottom is genuinely additive.
   // ===========================================================================
   group('chromeSlotBottomInset', () {
+    // TASK-01: 3-arg signature — chromeSlotBottomInset(keyboardInset, safeAreaBottom, iosAccessoryHeight)
+    // Body: max(kChromeBottomGap, keyboardInset + iosAccessoryHeight + kToolbarKeyboardGap) + safeAreaBottom
+
     test(
-      'anti-additive: keyboard(200) dominates → result == 224.0, NOT kChromeBottomGap + 200 + 24',
+      'anti-additive: keyboard(200) iosAccessory(0) dominates → result == 232.0, NOT kChromeBottomGap + 200 + 24',
       () {
-        // max(kChromeBottomGap(16), 200) + 24 = 200 + 24 = 224.0
-        // Must NOT be 16 + 200 + 24 = 240.0
-        final result = chromeSlotBottomInset(200.0, 24.0);
-        expect(result, equals(224.0));
+        // max(kChromeBottomGap(16), 200+0+8) + 24 = max(16,208) + 24 = 208 + 24 = 232.0
+        // Must NOT be 16 + 200 + 0 + 8 + 24 (additive).
+        final result = chromeSlotBottomInset(200.0, 24.0, 0.0);
+        expect(result, equals(232.0));
         expect(result, isNot(equals(kChromeBottomGap + 200.0 + 24.0)));
       },
     );
 
     test(
-      'tie-not-doubled: keyboard == kChromeBottomGap → result == kChromeBottomGap + 24, never doubled',
+      'tie-not-doubled: inner sum == kChromeBottomGap → result == kChromeBottomGap + 24, never doubled',
       () {
-        // max(kChromeBottomGap, kChromeBottomGap) + 24 = kChromeBottomGap + 24
-        // Must NOT be kChromeBottomGap + kChromeBottomGap + 24
-        final result = chromeSlotBottomInset(kChromeBottomGap, 24.0);
+        // EC-07: 8 + 0 + 8 = 16 == kChromeBottomGap → max(16, 16) + 24 = 16 + 24 = 40.
+        // Must NOT be kChromeBottomGap + (inner sum) + 24 = 16 + 16 + 24 = 56.
+        const keyboardInset = 8.0; // 8 + 0 + 8 = 16 == kChromeBottomGap
+        final result = chromeSlotBottomInset(keyboardInset, 24.0, 0.0);
         expect(result, equals(kChromeBottomGap + 24.0));
         expect(
           result,
@@ -445,10 +456,10 @@ void main() {
     );
 
     test(
-      'keyboard-0-resting: keyboard == 0 → result == kChromeBottomGap + 24 (gap dominates)',
+      'keyboard-0-resting: keyboard == 0, iosAccessory == 0 → max picks kChromeBottomGap → result == kChromeBottomGap + 24',
       () {
-        // max(kChromeBottomGap(16), 0) + 24 = 16 + 24 = 40.0
-        final result = chromeSlotBottomInset(0.0, 24.0);
+        // max(kChromeBottomGap(16), 0+0+8) + 24 = max(16, 8) + 24 = 16 + 24 = 40.0
+        final result = chromeSlotBottomInset(0.0, 24.0, 0.0);
         expect(result, equals(kChromeBottomGap + 24.0));
       },
     );
@@ -456,36 +467,242 @@ void main() {
     test(
       'monotonic non-decreasing in keyboardInset [0→200] and safeAreaBottom [0→48]; purity: same args → identical result',
       () {
-        // monotonic in keyboardInset
+        // monotonic in keyboardInset (iosAccessory=0)
         final kValues = [0.0, kChromeBottomGap, 50.0, 100.0, 200.0];
         for (var i = 0; i < kValues.length - 1; i++) {
-          final r1 = chromeSlotBottomInset(kValues[i], 0.0);
-          final r2 = chromeSlotBottomInset(kValues[i + 1], 0.0);
+          final r1 = chromeSlotBottomInset(kValues[i], 0.0, 0.0);
+          final r2 = chromeSlotBottomInset(kValues[i + 1], 0.0, 0.0);
           expect(
             r1,
             lessThanOrEqualTo(r2),
             reason:
-                'chromeSlotBottomInset(${kValues[i]}, 0) should be <= chromeSlotBottomInset(${kValues[i + 1]}, 0)',
+                'chromeSlotBottomInset(${kValues[i]}, 0, 0) should be <= chromeSlotBottomInset(${kValues[i + 1]}, 0, 0)',
           );
         }
-        // monotonic in safeAreaBottom
+        // monotonic in safeAreaBottom (keyboardInset=0, iosAccessory=0)
         final sabValues = [0.0, 12.0, 24.0, 34.0, 48.0];
         for (var i = 0; i < sabValues.length - 1; i++) {
-          final r1 = chromeSlotBottomInset(0.0, sabValues[i]);
-          final r2 = chromeSlotBottomInset(0.0, sabValues[i + 1]);
+          final r1 = chromeSlotBottomInset(0.0, sabValues[i], 0.0);
+          final r2 = chromeSlotBottomInset(0.0, sabValues[i + 1], 0.0);
           expect(
             r1,
             lessThanOrEqualTo(r2),
             reason:
-                'chromeSlotBottomInset(0, ${sabValues[i]}) should be <= chromeSlotBottomInset(0, ${sabValues[i + 1]})',
+                'chromeSlotBottomInset(0, ${sabValues[i]}, 0) should be <= chromeSlotBottomInset(0, ${sabValues[i + 1]}, 0)',
           );
         }
         // purity: identical args → identical result
         const ki = 150.0;
         const sab = 24.0;
-        final first = chromeSlotBottomInset(ki, sab);
-        final second = chromeSlotBottomInset(ki, sab);
+        const iosAcc = 48.0;
+        final first = chromeSlotBottomInset(ki, sab, iosAcc);
+        final second = chromeSlotBottomInset(ki, sab, iosAcc);
         expect(second, equals(first));
+      },
+    );
+  });
+
+  // ===========================================================================
+  // TASK-01 — New constants (FR-21) and updated function signatures
+  // ===========================================================================
+  group('TASK-01 new constants', () {
+    test(
+      'given_kChromePillTopGap_when_read_then_equals_kChromeTopGap_divided_by_3',
+      () {
+        expect(kChromePillTopGap, closeTo(kChromeTopGap / 3, 1e-9));
+        expect(kChromePillTopGap, isNot(equals(16.0)));
+      },
+    );
+
+    test(
+      'given_kEditorTopClearance_when_read_then_equals_24_and_not_equal_to_kChromePillTopGap',
+      () {
+        expect(kEditorTopClearance, equals(24.0));
+        // kEditorTopClearance == kChromeMenuZoneHeight / 2 == 48 / 2 == 24
+        expect(kEditorTopClearance, closeTo(kChromeMenuZoneHeight / 2, 1e-9));
+        expect(kEditorTopClearance, isNot(equals(kChromePillTopGap)));
+      },
+    );
+
+    test('given_kToolbarKeyboardGap_when_read_then_equals_8', () {
+      expect(kToolbarKeyboardGap, equals(8.0));
+    });
+
+    test('given_kKeyboardAccessoryBarHeight_when_read_then_equals_48', () {
+      expect(kKeyboardAccessoryBarHeight, equals(48.0));
+    });
+
+    test('given_gate_pinned_constants_when_read_then_all_still_equal_16', () {
+      // NFR-01 gate: these three must remain == 16.0
+      expect(kChromeTopGap, equals(16.0));
+      expect(kChromeBottomGap, equals(16.0));
+      expect(kChromeSideMargin, equals(16.0));
+    });
+
+    test('given_kChromeMenuZoneHeight_when_read_then_still_equals_48', () {
+      // Must remain defined (drives editorBottomInset + kEditorTopClearance numerator)
+      expect(kChromeMenuZoneHeight, equals(48.0));
+    });
+  });
+
+  group('TASK-01 editorTopInset new formula', () {
+    // New formula: max(safeAreaTop + kEditorTopClearance, verticalMargin(width))
+    // No 48dp floor, no trailing + kChromeTopGap
+
+    test('given_width375_safeArea44_when_called_then_result_closeTo_68', () {
+      // max(44 + 24, verticalMargin(375)≈10) = max(68, 10) = 68.0
+      final result = editorTopInset(375.0, 44.0);
+      expect(result, closeTo(68.0, 0.01));
+    });
+
+    test(
+      'given_width375_safeArea44_when_called_then_result_strictly_less_than_old_value_108',
+      () {
+        // Old formula: max(48+44, verticalMargin(375)) + 16 = 92 + 16 = 108.
+        // New formula drops the 48dp floor and the + kChromeTopGap → 68.0.
+        // FR-09: text is higher than before.
+        final result = editorTopInset(375.0, 44.0);
+        expect(result, lessThan(108.0));
+      },
+    );
+
+    test(
+      'given_width375_safeArea0_when_called_then_result_closeTo_24_kEditorTopClearance',
+      () {
+        // EC-06 no-notch: max(0+24, verticalMargin(375)≈10) = 24.0 (kEditorTopClearance governs)
+        final result = editorTopInset(375.0, 0.0);
+        expect(result, closeTo(24.0, 0.01));
+      },
+    );
+
+    test(
+      'given_widths_200_to_800_safeArea0_when_called_then_result_gte_verticalMargin',
+      () {
+        // FR-10 KEEP: responsive floor — result always >= verticalMargin(width)
+        for (var w = 200.0; w <= 800.0; w += 10.0) {
+          final result = editorTopInset(w, 0.0);
+          final vMargin = verticalMargin(w);
+          expect(
+            result,
+            greaterThanOrEqualTo(vMargin),
+            reason:
+                'editorTopInset($w, 0)=$result must be >= verticalMargin($w)=$vMargin',
+          );
+        }
+      },
+    );
+
+    test(
+      'given_safeAreaTop_increments_0_to_60_at_width400_when_called_then_monotone_non_decreasing',
+      () {
+        // FR-10 KEEP: monotonicity in safeAreaTop
+        var prev = editorTopInset(400.0, 0.0);
+        for (var sat = 1.0; sat <= 60.0; sat += 1.0) {
+          final next = editorTopInset(400.0, sat);
+          expect(
+            next,
+            greaterThanOrEqualTo(prev),
+            reason:
+                'editorTopInset(400, $sat) should be >= editorTopInset(400, ${sat - 1})',
+          );
+          prev = next;
+        }
+      },
+    );
+  });
+
+  group('TASK-01 chromeSlotBottomInset 3-arg', () {
+    // New signature: chromeSlotBottomInset(keyboardInset, safeAreaBottom, iosAccessoryHeight)
+    // Body: max(kChromeBottomGap, keyboardInset + iosAccessoryHeight + kToolbarKeyboardGap) + safeAreaBottom
+
+    test(
+      'given_keyboard300_safeArea34_iosAccessory0_when_called_then_result_equals_342',
+      () {
+        // max(16, 300+0+8)+34 = max(16,308)+34 = 308+34 = 342.0
+        final result = chromeSlotBottomInset(300.0, 34.0, 0.0);
+        expect(result, equals(342.0));
+      },
+    );
+
+    test(
+      'given_keyboard300_safeArea34_iosAccessory48_when_called_then_result_equals_390',
+      () {
+        // max(16, 300+48+8)+34 = max(16,356)+34 = 356+34 = 390.0
+        // iOS accessory folds INSIDE max (anti-additive)
+        final result = chromeSlotBottomInset(300.0, 34.0, 48.0);
+        expect(result, equals(390.0));
+      },
+    );
+
+    test(
+      'given_keyboard0_safeArea24_iosAccessory0_when_called_then_result_equals_40',
+      () {
+        // FR-15: resting/keyboard-down unchanged
+        // max(16, 0+0+8)+24 = max(16,8)+24 = 16+24 = 40.0
+        final result = chromeSlotBottomInset(0.0, 24.0, 0.0);
+        expect(result, equals(40.0));
+      },
+    );
+
+    test(
+      'given_antiAdditiveTie_when_called_then_result_equals_kChromeBottomGap_plus_safeAreaBottom',
+      () {
+        // EC-07: keyboardInset + iosAccessoryH + kToolbarKeyboardGap == kChromeBottomGap(16)
+        // 8 + 0 + 8 = 16 → max(16, 16) + sab = 16 + sab (not doubled)
+        const keyboardInset = 8.0;
+        const safeAreaBottom = 20.0;
+        final result = chromeSlotBottomInset(
+          keyboardInset,
+          safeAreaBottom,
+          0.0,
+        );
+        expect(result, equals(kChromeBottomGap + safeAreaBottom));
+      },
+    );
+
+    test(
+      'given_increasing_keyboard_and_safeArea_when_called_then_monotone_non_decreasing',
+      () {
+        // Monotonicity in keyboardInset
+        final kValues = [0.0, 8.0, kChromeBottomGap, 50.0, 300.0];
+        for (var i = 0; i < kValues.length - 1; i++) {
+          final r1 = chromeSlotBottomInset(kValues[i], 0.0, 0.0);
+          final r2 = chromeSlotBottomInset(kValues[i + 1], 0.0, 0.0);
+          expect(
+            r1,
+            lessThanOrEqualTo(r2),
+            reason:
+                'chromeSlotBottomInset(${kValues[i]}, 0, 0) must be <= chromeSlotBottomInset(${kValues[i + 1]}, 0, 0)',
+          );
+        }
+        // Monotonicity in safeAreaBottom
+        final sabValues = [0.0, 12.0, 24.0, 34.0, 48.0];
+        for (var i = 0; i < sabValues.length - 1; i++) {
+          final r1 = chromeSlotBottomInset(0.0, sabValues[i], 0.0);
+          final r2 = chromeSlotBottomInset(0.0, sabValues[i + 1], 0.0);
+          expect(
+            r1,
+            lessThanOrEqualTo(r2),
+            reason:
+                'chromeSlotBottomInset(0, ${sabValues[i]}, 0) must be <= chromeSlotBottomInset(0, ${sabValues[i + 1]}, 0)',
+          );
+        }
+      },
+    );
+
+    test(
+      'given_iosAccessory48_when_called_then_result_anti_additive_not_sum_of_all_terms',
+      () {
+        // Anti-additive: the iOS accessory height folds INSIDE max with keyboardInset.
+        // keyboardInset=300, iosAccessory=48 → sum inside max = 356 > 16, so max picks 356.
+        // result = 356 + safeAreaBottom, NOT 16 + 300 + 48 + 8 + sab (no additive doubling).
+        final result = chromeSlotBottomInset(300.0, 0.0, 48.0);
+        expect(result, equals(356.0));
+        // Must not be additive of kChromeBottomGap + keyboardInset + iosAccessory + gap
+        expect(
+          result,
+          isNot(equals(kChromeBottomGap + 300.0 + 48.0 + kToolbarKeyboardGap)),
+        );
       },
     );
   });
