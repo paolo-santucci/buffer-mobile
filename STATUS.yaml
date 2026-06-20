@@ -1,0 +1,156 @@
+schema-version: 2
+last-updated: "2026-06-21T00:00:00+02:00"
+active-plan: null
+last-plan: ".claude/docs/plans/archive/sp-20260620-kmp-m1-foundation-scaffold-plan.md"
+
+short-plan:
+  feature: |
+    KMP Milestone 2 (Shared Domain & Data). Port Foglietto's recovery, settings, and pure-editor
+    domain/data logic from the Flutter behavioral reference (git history at `main`) into the
+    platform-neutral `shared/` Kotlin module, preserving behavioral contracts EXACTLY, with the
+    Dart test suites ported as the oracle, all green on `./gradlew check` (JVM-only on Linux, no
+    Apple/Flutter dependency — NFR-07). Scope FR-03..FR-10 + FR-18:
+    RECOVERY domain — RecoveryFilename parser (ms fixed-width grammar YYYY-MM-DDTHH-MM-SS-mmmZ,
+    rejects 6-digit µs, never throws), RecoveryPreview (512-byte lenient head, `\s*\n+\s*` collapse
+    to single space, hard-cut ≤80 UTF-16 code units surrogate-safe, no ellipsis), RecoveryNote
+    entity (path/savedAt/preview; savedAt from filename never mtime), RecoveryRepository port.
+    RECOVERY data — okio-backed FileRecoveryRepository (save/list/read/delete/deleteAll/trim;
+    fixed-width stem; collision -1/-2 never overwrite; lexicographic==chronological order NEVER
+    mtime; no-op-guard on absent dir; tolerate vanished/changed files; keep-newest-10 trim).
+    expect/actual RecoveryDirProvider (iOS actual = Documents dir; JVM/test actual = temp dir).
+    SaveBufferToRecovery use case — trim-guard (empty/whitespace → no I/O), RAW text saved, trim(10)
+    after save. SETTINGS — AppSettings (MVP-trimmed: colorScheme enum + fontSizeIndex 21-slot 6..38
+    default idx 8 only) + SettingsRepository port + multiplatform-settings impl (load never throws on
+    absent/wrong-type, safe enum parse via explicit when (no valueOf/byName), clamp fontSizeIndex).
+    EDITOR — LineIndent (tab-vs-two-space unit, position-stable re-anchoring, 3-way outdent delta) +
+    ListContinuation (bullet/ordered grammar; `- [x]`→`- [ ]`; z/Z ends no-wraparound; empty item
+    ends list + deletes marker line checking two-above; leading whitespace preserved) ported verbatim.
+    [ASSUMED] OQ-02: DROP useMonospaceFont + all MVP-excluded settings (spelling/emergency/lineLength).
+    [ASSUMED] OQ-07: fresh KMP store, keep keys 'color-scheme'/'font-size'. Recovery always-on (FR-18):
+    emergencyRecoveryEnabled gate dropped; keep=10 literal at use-case boundary. Kotlin okio I/O is
+    blocking → the Dart async-save/saveSync split collapses to one synchronous shared save; suspend
+    bridging is a SwiftUI-boundary concern (M3), not shared-internal. R-05/R-06/R-14 in scope.
+  slug: "kmp-m2-shared-domain-data"
+  auto: true
+  request-type: feature
+  workflow: canonical
+  parent:
+    spec: ".claude/docs/specs/lp-20260620-kotlin-multiplatform-rewrite-spec.md"
+    plan: ".claude/docs/plans/lp-20260620-kotlin-multiplatform-rewrite-plan.md"
+    milestone: 2
+    frs: "FR-03,FR-04,FR-05,FR-06,FR-07,FR-08,FR-09,FR-10,FR-18"
+  paths:
+    spec: ".claude/docs/specs/sp-20260620-kmp-m2-shared-domain-data-spec.md"
+    plan: ".claude/docs/plans/sp-20260620-kmp-m2-shared-domain-data-plan.md"
+    assess-dir: ".claude/docs/specs/sp-20260620-kmp-m2-shared-domain-data-assessment"
+  phases:
+    brainstorm: done
+    assess: done
+    triage: done
+    spec: done
+    plan: done
+    build: pending
+  approvals:
+    spec: approved
+    plan: approved
+  rejection-note: null
+  build-progress:
+    current-wave: 3
+    waves-completed: [1, 2, 3]
+    tasks-done:
+      - TASK-01  # Recovery pure helpers + models + repository interface — 24/24 tests green (2026-06-20)
+      - TASK-02  # AppSettings model — 16/16 tests green (2026-06-20)
+      - TASK-03  # Editor pure functions LineIndent + ListContinuation — LineIndentTest 9/9 + ListContinuationTest 31/31 green (2026-06-20); ./gradlew check 84 total tests PASS
+      - TASK-05  # SaveBufferToRecovery use case — SaveBufferToRecoveryTest 6/6 green (2026-06-20); total jvmTest 90 PASS
+      - TASK-04  # FileRecoveryRepository okio-backed impl — FileRecoveryRepositoryTest 25/25 green (2026-06-20); ./gradlew :shared:jvmTest 136/136 PASS; [DEVIATION] added multiplatform-settings-test:1.2.0 to commonTest (EC-13 minimal gap — MapSettings in test artifact not base); ForwardingFileSystem used for I/O error test (no FakeFileSystem dep needed)
+      - TASK-06  # SettingsRepository interface + SettingsRepositoryImpl — SettingsRepositoryTest 21/21 green (2026-06-20); total jvmTest 136 PASS; [DEVIATION] MapSettings absent in multiplatform-settings:1.2.0 JVM jar — replaced with inline MockSettings in commonTest (same contract, no new dep)
+      - TASK-07  # Source-scan gates + M1 placeholder removal + dep reconciliation — SourceScanGateTest 11/11 green (2026-06-21); total jvmTest 143/143 PASS; ./gradlew check GREEN; Platform.kt/PlaceholderTest.kt/JvmSmokeTest.kt deleted; multiplatform-settings-test dep removed (genuinely unused — no import, only KDoc comments); commit 9f81622
+
+long-plan:
+  feature: |
+    Rewrite Foglietto (currently Flutter) as a Kotlin Multiplatform project — iOS-only MVP, a first-class iOS 26 Liquid Glass app.
+    ARCHITECTURE: shared Kotlin module (shared/) = domain (use cases) + data (persistence) ONLY, no presentation layer, strictly
+    platform-neutral (expect/actual) because Android is a planned next target. Native SwiftUI app (iosApp/) owns all presentation
+    state via @Observable Swift view models calling shared suspend use cases; native text editing stays SwiftUI. Persistence: settings
+    via multiplatform-settings; 10-note recovery as flat .txt files via okio in the iOS Documents directory, EXPOSED to the Files app
+    (UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace).
+    CODEBASE: rewrite in-place on a new branch; repo becomes KMP (shared/ + iosApp/); Flutter sources removed (recoverable via git
+    history, used as behavioral reference). Brand/bundle-id/TestFlight/CI secrets retained.
+    MVP SCOPE (iOS only, parity minus spellcheck and find/replace): ephemeral buffer (gone on close; clear on fresh launch, save on
+    background/detach); 10-note recovery ALWAYS ON (no toggle) — files in Documents dir, visible in Files app, restore via an inline
+    expandable submenu INSIDE the menu bubble (Apple Notes 'Note recenti' pattern); share-sheet inbound text (cold-start no-flash seed);
+    ALL settings INSIDE the menu bubble (no separate screen): font-size control + pinch-to-zoom, theme via description-only picker
+    (System/Light/Dark), Dynamic Type aware; bottom toolbar = copy, paste, close-keyboard, indent, de-indent (no separate keyboard
+    accessory bar); Markdown list auto-continuation; EN+IT localization (system locale, English fallback); light/dark themes + per-theme
+    launch surface. EXCLUDED: spellcheck, find/replace (no Find affordance anywhere).
+    HARD CONSTRAINTS: min iOS 26.0, native Liquid Glass unconditionally (no fallback branch); Liquid Glass compliance with Apple's
+    official 'App design and UI' guidance (https://developer.apple.com/documentation/technologyoverviews/app-design-and-ui) — native
+    SwiftUI Liquid Glass APIs (.glassEffect, GlassEffectContainer, glass button/toolbar styles) not hand-rolled blur; glass on the
+    control/navigation layer ONLY, never content; respect concentricity/grouping/placement; honor Reduce Transparency, Increase
+    Contrast, Reduce Motion fallbacks; standard SwiftUI controls adopt system glass automatically.
+    DEFINITION OF DONE: KMP build signed and uploaded to TestFlight via a reworked GitHub Actions pipeline (Gradle -> shared XCFramework
+    -> xcodebuild archive -> sign with existing secrets -> altool upload to the same ASC app), feature-complete against the scope above.
+  slug: "kotlin-multiplatform-rewrite"
+  auto: false
+  request-type: feature
+  paths:
+    spec: ".claude/docs/specs/lp-20260620-kotlin-multiplatform-rewrite-spec.md"
+    plan: ".claude/docs/plans/lp-20260620-kotlin-multiplatform-rewrite-plan.md"
+    assess-dir: ".claude/docs/specs/lp-20260620-kotlin-multiplatform-rewrite-assessment"
+  phases:
+    brainstorm: done
+    assess: done
+    spec: done
+    plan: done
+  approvals:
+    spec: approved
+
+pending-consolidation: []
+
+recently-completed:
+  - date: 2026-06-21
+    summary: "KMP M2 (Shared Domain & Data) COMPLETE — commit 9f81622, branch kmp-rewrite. All 7 tasks, 3 waves, 143 jvmTest PASS (0 failures, 0 skips), ./gradlew check GREEN on Linux (JVM-only, no Xcode/Flutter artifact). Wave 1: TASK-01 recovery pure leaves/models/repo-iface (24 tests), TASK-02 AppSettings model (16 tests), TASK-03 LineIndent+ListContinuation editor port (40 tests). Wave 2: TASK-04 FileRecoveryRepository okio-backed (25 tests), TASK-05 SaveBufferToRecovery use-case (6 tests), TASK-06 SettingsRepositoryImpl (21 tests). Wave 3 (TASK-07, this session): SourceScanGateTest.kt authored + confirmed RED (3/11 gate-6 failures while placeholders existed) then GREEN (11/11) after: Platform.kt + PlaceholderTest.kt + JvmSmokeTest.kt deleted; multiplatform-settings-test dep removed from libs.versions.toml + build.gradle.kts (confirmed UNUSED — zero import statements for MapSettings anywhere in shared/src; only KDoc comments referenced it). DEP RECONCILIATION: TASK-04 added the dep believing SettingsRepositoryTest used MapSettings; TASK-06 used inline MockSettings instead; grep confirmed dep unused; TASK-07 removed it restoring minimal-dep intent (R-14). Test count: 136 prior - 4 placeholder (JvmSmokeTest 2 + PlaceholderTest 2) + 11 gate = 143. All 8 gates GREEN: no Apple/Flutter import in commonMain, no FileSystem.SYSTEM in commonMain code, no .lines()/.lineSequence() in shared, no valueOf/enumValueOf in settings, no emergencyRecoveryEnabled in recovery, placeholders absent, no saveSync/callSync/_writeChain/_trimSync in recovery, trim(keep:Int) has no default. Spec refs: FR-03..FR-10, FR-18..FR-25, FR-26..FR-34, NFR-01..NFR-07, EC-08/EC-13..EC-15."
+  - date: 2026-06-20
+    summary: "KMP REWRITE MILESTONE 1 (Foundation & Scaffold, Phase 0) BUILT, CI-VERIFIED & CLOSED on branch kmp-rewrite (commits 462ab99 + fix 585b1ea, pushed origin; 241 files, +1380/-58212). Via /short-plan --auto canonical: brainstorm→assess (3 parallel code-reviewers)→spec (sp-20260620-kmp-m1-foundation-scaffold, 18 FR/5 NFR/54 acceptance)→plan (8 tasks/5 waves)→wave build→close. Stood up the Kotlin Multiplatform project IN-PLACE: (1) shared/ EMPTY platform-neutral module — jvm() + HOST-GUARDED iosArm64/iosSimulatorArm64/iosX64 → XCFramework(\"shared\"); okio 3.9.1 + multiplatform-settings 1.2.0 + Kotlin 2.1.21 via gradle/libs.versions.toml; Gradle 9.1.0 wrapper promoted from android/ to repo root. (2) iosApp/ native SwiftUI shell consuming shared over a LOCAL SPM .binaryTarget (iosApp/SharedPackage); literal Info.plist with TOP-LEVEL CFBundleIconName=AppIcon; retained Foglietto identity (bundle id com.paolosantucci.foglietto, MARKETING_VERSION 1.0.0, single-1024 AppIcon, LaunchBackground #2D73BA/#330A3C); IPHONEOS_DEPLOYMENT_TARGET=26.0. (3) Flutter sources REMOVED (recoverable via git history; behavioral reference for M2+). (4) CI reworked: android.yml retired, quality.yml→./gradlew check (ubuntu/JDK17), ios.yml→Gradle XCFramework→xcodebuild archive (macos-26/Xcode-26, signing spine + 8 secrets preserved, ExportOptions relocated to repo root), push+PR triggers WIDENED to kmp-rewrite (the assessment's #1 failure mode). (5) tool/m1_gate.sh 12-check structural gate. Agents: android-app-expert (gradle+shared), ios-app-expert (assets+iosApp), flutter-devops (CI+gate), infra-ops (.gitignore+README); orchestrator did all FS/git plumbing (binary copies, git rm/add, commit, push) since specialist Bash allowlists exclude them. Orchestrator fixes beyond agent output: libs.multiplatform.settings accessor (dash→dot), host-guarded Apple targets so `check` is jvm-only on Linux (NFR-07), and the SPM .binaryTarget path ../shared→../../shared (the one CI fix-forward). VERIFICATION: MC-01 local ./gradlew check + :shared:jvmTest green (4 tests); MC-02 iOS run 27882448070 green (XCFramework + xcodebuild archive macos-26); MC-03 Quality run 27882448062 green (./gradlew check ubuntu); m1_gate.sh 12/12. Spec+plan archived; §6.2 Spec Impact OMITTED (greenfield, no canon delta) → no pending-consolidation push. Launch-colour CANON GAP (#2D73BA/#330A3C vs bible #f6d32d/#873000) routed to OQ-02 for a decisions/ reconciliation. NO v* tag (no M1 TestFlight upload). Stray untracked ios/ Flutter cruft left on disk (not tracked, not pushed)."
+  - date: 2026-06-20
+    summary: "Overflow-popover dual-axis clip morph (qp-20260620-overflow-popover-morph-rework) BUILT, CLOSED, COMMITTED & PUBLISHING — commit 25f211f on main (3 files: overflow_popover.dart + overflow_popover_test.dart + sp_20260620_gate_test.dart; 305+/138-), pushed 9629e36..25f211f, TAGGED v1.0.0-rc4 → iOS deploy_testflight run 27874202658 + Quality/Android/iOS (rc4 supersedes rc3; build number = GITHUB_RUN_NUMBER). /short-plan quick path (3 tasks/2 waves, all flutter-frontend-engineer/sonnet). Rewrote _MorphedBubble from ScaleTransition+FadeTransition → AnimatedBuilder dual-axis clip morph: outer ClipRRect(BorderRadius.lerp pillRadius 32→popoverRadius 16, t) wrapping GlassSurface so the BackdropFilter blur boundary tracks the shape; SizedBox(width: lerpDouble(96,280,t)) anchored topRight with OverflowBox(minWidth:0,maxWidth:280) guarding the sub-200dp width frames (user chose the literal SizedBox lerp over a clip-reveal); Align(topRight, heightFactor:t); content Opacity ((t-0.4)/0.6).clamp(0,1). Durations 260ms open / 160ms reverseDuration close on Curves.fastEaseInToSlowEaseOut, both Duration.zero under reduce-motion. Constants _kMorphOpenDuration/_kMorphCloseDuration/_kPillWidth(96=2×_kButtonSize)/_kBubbleWidth(280)/_kContentFadeStart(0.4); import dart:ui lerpDouble. Preserved reverseOut(), the single AnimationController, and the qp-20260619 idempotent dismiss latch/barrier/reopen. Inverted sp_20260620_gate_test.dart Gate 6c: asserts NO ScaleTransition + heightFactor + BorderRadius.lerp + 0.4 threshold (6a/6b untouched). Verification: dart format clean, flutter analyze 0, exactly 3 in-scope files, overflow_popover_test 20/20, buffer_screen_popover_reopen_test 2/2 (latch intact), sp_20260620_gate 39/39, full suite 1487/1487. QP §9 Spec Impact OMITTED → no pending-consolidation push (clean close). Also this session: /finalize-plan ran twice and STOPPED+deferred on the NFR-05 entry (still queued). NOT yet device-validated."
+  - date: 2026-06-20
+    summary: "SP-20260620 six liquid-glass chrome polish fixes BUILT & CLOSED & COMMITTED (9629e36; pushed main ed8f9a5..9629e36; TAGGED v1.0.0-rc3 → iOS deploy_testflight + Quality/Android/iOS). Canonical short-plan resumed at Gate 3 (user-approved), 8 tasks / 4 waves: (1) kChromePillTopGap=kChromeTopGap/3 (≈5.333) repoints ChromePill higher (find-back-pill untouched). (2) OverflowPopover MORPH — new _MorphedBubble (ScaleTransition alignment:topRight + FadeTransition on one 180ms easeOutCubic controller; CompositedTransformFollower targetAnchor=followerAnchor=topRight, offset zero ⇒ grows from pill corner, no 8dp gap) + async reverse-before-remove dismiss preserving the qp-20260619 idempotent latch/barrier/reopen; reduce-motion→Duration.zero. (3) editorTopInset rewritten to max(safeAreaTop+kEditorTopClearance(=24), verticalMargin(width)) dropping the 48dp chrome-zone floor → text ~40dp higher. (4) glass fill alpha 0.92/0.82→0.68 light+dark (user-chosen AA-preserving floor; opaque high-contrast branch untouched; rendered contrast asserted PASS light≈17.1:1 / dark≈13.1:1 via deterministic pre-blend — OQ-09 testability fallback over headless toImage()). (5) kToolbarKeyboardGap=8.0 folded anti-additively inside chromeSlotBottomInset (now 3-arg: keyboardInset, safeAreaBottom, iosAccessoryHeight). (6) NEW iOS-only KeyboardAccessoryBar (lib/presentation/shell/keyboard_accessory_bar.dart — ref-free GlassSurface, CupertinoIcons.chevron_down Done ≥48dp + ARB keyboardDoneTooltip EN 'Done'/IT 'Fatto' + Semantics(button:true)) mounted in buffer_screen.dart at Positioned(bottom:keyboardInset) gated defaultTargetPlatform==iOS && keyboardInset>0, onDone→_editorFocusNode.unfocus() reusing the existing keyboard-dismiss path; no Android change. New gate test/sp_20260620_gate_test.dart (39 tests). Gate-pinned kChromeTopGap/kChromeBottomGap/kChromeSideMargin stay 16.0 (sp-20260618 gate green). Full suite 1486/1486 green, flutter analyze 0, dart format clean. Spec+plan archived; NFR-05 0.68 glass-contrast delta pushed to pending-consolidation for consolidation into sp-20260617. NOT yet validated on a real device."
+  - date: 2026-06-19
+    summary: "Quick-plan qp-20260619 BUILD COMPLETE & CLOSED (4 tasks / 2 waves, all green) — fixed two liquid-glass-chrome regressions. BUG A (toolbar covered by keyboard): added pure chromeSlotBottomInset(keyboardInset, safeAreaBottom)=max(kChromeBottomGap,keyboardInset)+safeAreaBottom to editor_layout.dart (anti-additive sibling of editorBottomInset); hoisted keyboardInset to buffer_screen.dart build() scope and set the bottom morph slot Positioned.bottom=chromeSlotBottomInset(...) so the toolbar/find-box now floats ABOVE the soft keyboard (the slot previously used constant kChromeBottomGap+safeAreaBottom with no viewInsets term, so the keyboard overdrew it). BUG B (… menu opens only once): root cause was a double OverlayEntry.remove() — the popover's internal dismissals (outside-tap barrier + 3 menu tiles) called the RAW dismiss which never cleared the host _dismissPopoverRaw latch, so the 2nd … tap called entry.remove() on an already-removed entry → assert('removed only once')/TypeError → reopen aborted. Fix: openOverflowPopover gains an onDismissed param + a bool-dismissed idempotent guarded funnel routing ALL dismissal paths through one closure that removes-guarded AND clears the latch; _onOverflowTap drops the redundant wrappedDismiss. Final: full suite 1402/1402 green, flutter analyze 0, format clean. COMMITTED to main as ed8f9a5 and TAGGED v1.0.0-rc2. The SAME commit also themes the launch/splash background per-theme — #2d73ba light / #330a3c dark (Android @color/launch_background in values/ + values-night/; iOS LaunchBackground colorset in LaunchScreen.storyboard)."
+  - date: 2026-06-19
+    summary: "Foglietto 1.0.0-rc1 UPLOADED TO TESTFLIGHT — iOS deploy_testflight job fully green end-to-end (run 27794148714, tag v1.0.0-rc1 → commit 19711e6). Reached after fixing a 6-layer chain, each surfaced by a re-run/re-tag: (1) IOS_DIST_CERT_P12_BASE64 was a cert without private key → user re-exported a real .p12; (2) IOS_PROVISIONING_PROFILE_BASE64 wrong content → re-set; (3) cert↔profile mismatch (profile didn't embed the .p12's Apple Distribution cert) → user realigned them (flutter-devops diagnosed via SHA-1 fingerprint compare); (4) CFBundleIconName missing from archived Info.plist — the INFOPLIST_FILE-based plist needs an explicit TOP-LEVEL CFBundleIconName=AppIcon (nested CFBundleIcons form is invisible to `plutil -extract CFBundleIconName` and to the raw `xcodebuild archive` path that skips Flutter's plist injection); kept the modern single-1024 light/dark/tinted AppIcon and REVERTED the classic per-size set (commit 6fa6e46 reverted; 6b689b0 then 2349f90; ios-app-expert); (5) altool ASC API auth -26000 → user corrected APP_STORE_CONNECT_API_KEY/ID/ISSUER secrets; (6) App Store Connect 409 'must build with iOS 26 SDK / Xcode 26' → both iOS jobs moved to runs-on macos-26 + maxim-lobanov/setup-xcode@v1 xcode-version 26 (commit 19711e6; flutter-devops). Flutter 3.44.2 builds fine on Xcode 26; IPHONEOS_DEPLOYMENT_TARGET 13.0 did NOT need raising. Build = marketing 1.0.0, build number = GITHUB_RUN_NUMBER."
+in-progress:
+  - title: "Foglietto 1.0.0-rc4 — iOS deploy running; TestFlight + device validation pending"
+    state: "Tag v1.0.0-rc4 (25f211f) pushed; iOS deploy_testflight 27874202658 + Quality/Android/iOS running. main HEAD=25f211f. Supersedes rc3. Bundles the six SP-20260620 chrome fixes + the NEW overflow-popover dual-axis clip morph."
+    touched:
+      - "lib/presentation/shell/overflow_popover.dart"
+      - "lib/presentation/editor/buffer_screen.dart"
+      - "lib/presentation/shell/keyboard_accessory_bar.dart"
+      - "lib/presentation/theme/glass_surface.dart"
+    next-step: "Confirm rc4 TestFlight landing; answer export-compliance; validate the morph + six fixes on device."
+    blocker: null
+
+next-steps:
+  - "KMP M2 DONE. Next: run /short-plan for KMP Milestone 3 (SwiftUI iosApp shell — presentation layer) on branch kmp-rewrite: @Observable view models calling shared use cases, ephemeral buffer (gone on close), recovery submenu inside the menu bubble, settings inside the bubble (font-size + theme picker), Liquid Glass chrome (.glassEffect / GlassEffectContainer), bottom toolbar (copy/paste/keyboard-dismiss/indent/de-indent), Markdown list-continuation wired, EN+IT l10n, dynamic type. All presentation in iosApp/ SwiftUI (macOS CI runner required for XCFramework + xcodebuild). The shared/ KMP module is now the stable contract; iosApp/ consumes it via SPM binaryTarget."
+  - "Resolve before M2 finalizes the settings model: OQ-02 (keep or drop useMonospaceFont — [ASSUMED] dropped for MVP) and OQ-07 (confirm settings key names for the fresh KMP multiplatform-settings store — no migration, new keys are free)."
+  - "Reconcile the launch-colour CANON GAP: retained Foglietto LaunchBackground #2D73BA/#330A3C diverges from ui-design-bible §Colour-&-branding tokens (#f6d32d/#873000). Parent §5.3 identity-retention is binding for now; log a decision in .claude/docs/decisions/ (OQ-02 of the M1 spec)."
+  - "Clean the stray untracked ios/ Flutter cruft left on the kmp-rewrite working tree (git rm removed tracked files; untracked ios/ leftovers remain on disk — not tracked, not pushed, CI unaffected). rm -rf the untracked ios/ remnants before M2 work to avoid confusion."
+  - "Later KMP open questions to confirm before their milestones: OQ-05 recovery read-side cap (M3/M4), OQ-01/OQ-06 Share Extension in first TestFlight build + whether it needs a 2nd provisioning profile / new CI secret (M5)."
+  - "Flutter app (main branch, separate from the KMP rewrite): confirm v1.0.0-rc4 (25f211f) TestFlight landing, answer the export-compliance prompt, assign to an internal testing group (build = GITHUB_RUN_NUMBER), and device-validate the overflow-popover morph + six SP-20260620 chrome fixes."
+  - "pending-consolidation is now EMPTY. The lone entry (sp-20260620-...-spec / glass-translucency-floor NFR-05 0.90/0.80→0.68) was DROPPED via /finalize-plan on 2026-06-20 per user decision — NOT consolidated. Rationale: it was blocked (domain liquid-glass-floating-chrome has no canon slice; delta targeted an archived peer spec with paraphrased old:), AND the KMP rewrite replaces the Flutter liquid-glass chrome with native SwiftUI .glassEffect, making the Flutter-era canon consolidation moot. If the 0.68 translucency intent must survive, re-capture it as a native-glass legibility note during KMP M4 (Liquid Glass Chrome), not against the retired Flutter spec. State: .claude/docs/_finalize-plan-state.yaml."
+  - "Next /canon-bootstrap pass: add ui-design-bible anatomy for the liquid-glass surfaces (ChromePill, bottom toolbar, overflow popover, FindBackPill, bottom morph, iOS KeyboardAccessoryBar + 0.68 translucency token). NOTE: this canon is Flutter-era; reconcile against the KMP rewrite's native Liquid Glass direction (the Flutter chrome is being replaced by native SwiftUI .glassEffect in KMP M4)."
+
+known-issues:
+  - severity: warning
+    description: "M3 FR-09 cursor-margin scroll is a documented PARTIAL: framework keeps caret on-screen and after-Enter track + inset-stability gating work, but the precise ≥22px-below-caret on-change margin (_doMarginScroll) is a no-op stub — faithful impl needs the caret pixel rect (RenderEditable) unreachable from a Material TextField. MC-03 only partially met. See D-005."
+    impact: medium
+    workaround: "Revisit via raw EditableText + GlobalKey<EditableTextState>.getLocalRectForCaret, or accept the framework baseline and drop the 22px margin (spec-delta)."
+  - severity: warning
+    description: "On-device integration tests written + tagged but NOT yet executed (headless-skipped): M6 m6_shell_smoke_test, M5 recovery_12saves_trim_test (NFR-03/MC-01), M4 find_50k_scroll_test (NFR-04), M3 list_continuation_test (R-03/MC-01), M2 recovery_persistence_test (NFR-M2-02). Need an emulator/device."
+    impact: medium
+    workaround: "Run both integration_test/ files on a connected device/emulator before the respective milestones ship."
+  - severity: warning
+    description: "OQ-B1 / OQ-M6-05 / OQ-M7-03 open: the shared_preferences key strings (incl. 'color-scheme' and 'font-size') are transcribed best-effort from the spec, not yet cross-checked against the live upstream GNOME Buffer gschema. A mismatch means on-device stored values are never found. (Key count 7 after 'show-line-numbers' removal.)"
+    impact: medium
+    workaround: "Cross-check keys against upstream gschema; fix is one line per key in AppSettings.k* (repository unaffected)."
