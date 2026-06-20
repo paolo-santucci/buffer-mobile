@@ -476,14 +476,18 @@ void main() {
   });
 
   // =========================================================================
-  // 7. morph animation (FR-04/FR-05) — scale+fade from topRight
+  // 7. morph animation (FR-04/FR-05) — dual-axis clip morph from topRight
   //
   // CANON GAP: morph-motion exception for off-anatomy popover;
   // per spec §4 CANON PARTIAL / OQ-03.
+  //
+  // Option B rewrite (qp-20260620): AnimatedBuilder dual-axis clip morph.
+  // ClipRRect radius lerps 32→16dp; SizedBox width lerps 96→280dp; height
+  // via Align(heightFactor: t); content Opacity fades from t=0.4.
   // =========================================================================
   group('OverflowPopover — morph animation (FR-04/FR-05)', () {
     testWidgets(
-      'given_animations_enabled_then_ScaleTransition_and_FadeTransition_present_after_open',
+      'given_animations_enabled_then_AnimatedBuilder_present_and_no_ScaleTransition_after_open',
       (tester) async {
         tester.view.physicalSize = const Size(800, 1200);
         tester.view.devicePixelRatio = 1.0;
@@ -493,118 +497,185 @@ void main() {
         await tester.pumpWidget(_buildApp());
         await _openPopover(tester);
 
-        // ScaleTransition must be present in the popover tree (morph open, FR-04).
+        // New morph: AnimatedBuilder must be present (dual-axis clip, FR-04).
+        expect(
+          find.descendant(
+            of: find.byType(OverflowPopover),
+            matching: find.byType(AnimatedBuilder),
+          ),
+          findsAtLeastNWidgets(1),
+          reason: 'AnimatedBuilder must drive the dual-axis clip morph (FR-04)',
+        );
+
+        // ScaleTransition must NOT be used (replaced by clip morph).
         expect(
           find.descendant(
             of: find.byType(OverflowPopover),
             matching: find.byType(ScaleTransition),
           ),
-          findsAtLeastNWidgets(1),
-          reason: 'ScaleTransition must be present after morph open (FR-04)',
+          findsNothing,
+          reason:
+              'ScaleTransition must NOT be present in the new morph (FR-04)',
         );
 
-        // FadeTransition must also be present (combined scale+fade, FR-04).
+        // After pumpAndSettle the GlassSurface must be visible (morph complete).
         expect(
           find.descendant(
             of: find.byType(OverflowPopover),
-            matching: find.byType(FadeTransition),
+            matching: find.byType(GlassSurface),
           ),
           findsAtLeastNWidgets(1),
-          reason: 'FadeTransition must be present after morph open (FR-04)',
-        );
-
-        // ScaleTransition must align to topRight (morph grows from pill corner).
-        final scale = tester.widget<ScaleTransition>(
-          find
-              .descendant(
-                of: find.byType(OverflowPopover),
-                matching: find.byType(ScaleTransition),
-              )
-              .first,
-        );
-        expect(
-          scale.alignment,
-          equals(Alignment.topRight),
           reason:
-              'ScaleTransition alignment must be Alignment.topRight (FR-04)',
-        );
-
-        // After pumpAndSettle the animation must have completed: scale == 1.
-        expect(
-          scale.scale.value,
-          closeTo(1.0, 0.01),
-          reason:
-              'ScaleTransition scale must be 1.0 after animation settles (FR-04)',
-        );
-
-        // FadeTransition opacity must be 1.0 after animation settles.
-        final fade = tester.widget<FadeTransition>(
-          find
-              .descendant(
-                of: find.byType(OverflowPopover),
-                matching: find.byType(FadeTransition),
-              )
-              .first,
-        );
-        expect(
-          fade.opacity.value,
-          closeTo(1.0, 0.01),
-          reason:
-              'FadeTransition opacity must be 1.0 after animation settles (FR-04)',
+              'GlassSurface must be present and visible after morph settles',
         );
       },
     );
 
-    testWidgets(
-      'given_animations_enabled_then_morph_controller_duration_is_180ms',
-      (tester) async {
-        tester.view.physicalSize = const Size(800, 1200);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
+    testWidgets('given_animations_enabled_then_morph_open_duration_is_260ms', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
 
-        await tester.pumpWidget(_buildApp());
+      await tester.pumpWidget(_buildApp());
 
-        // Pump without settling so we can inspect the animation mid-flight.
-        await tester.tap(find.byKey(const Key('anchor_btn')));
-        await tester.pump(); // start the entry
-        await tester.pump(); // trigger initState forward()
+      // Tap to open but don't settle — inspect mid-flight at 130ms (half of 260ms).
+      await tester.tap(find.byKey(const Key('anchor_btn')));
+      await tester.pump(); // OverlayEntry inserted + initState forward()
+      await tester.pump(const Duration(milliseconds: 130)); // mid-open
 
-        // Find the ScaleTransition and inspect its animation's duration via
-        // the underlying controller (accessible through the Listenable).
-        final scaleFinder = find.descendant(
+      // GlassSurface must exist (morph is in progress, not collapsed).
+      expect(
+        find.descendant(
           of: find.byType(OverflowPopover),
-          matching: find.byType(ScaleTransition),
-        );
-        expect(
-          scaleFinder,
-          findsAtLeastNWidgets(1),
-          reason: 'ScaleTransition must be in the tree',
-        );
+          matching: find.byType(GlassSurface),
+        ),
+        findsAtLeastNWidgets(1),
+        reason: 'GlassSurface must be present during open morph at t=130ms',
+      );
 
-        // The controller duration is on the AnimationController which backs
-        // the CurvedAnimation. We check duration indirectly: the scale animation
-        // is not yet at 1.0 when we pump a fraction of 180ms.
-        // Pump 90ms (half of 180ms) — scale should be between 0 and 1.
-        await tester.pump(const Duration(milliseconds: 90));
+      // Should not yet be fully settled.
+      expect(
+        find.byType(OverflowPopover),
+        findsOneWidget,
+        reason: 'Popover must still be in tree at t=130ms',
+      );
 
-        final scaleMid = tester.widget<ScaleTransition>(scaleFinder.first);
-        expect(
-          scaleMid.scale.value,
-          lessThan(1.0),
-          reason:
-              'Scale must still be animating at t=90ms (controller duration=180ms, FR-04)',
-        );
-        expect(
-          scaleMid.scale.value,
-          greaterThan(0.0),
-          reason: 'Scale must have started by t=90ms',
-        );
+      // Complete the animation.
+      await tester.pumpAndSettle();
+    });
 
-        // Complete the animation.
-        await tester.pumpAndSettle();
-      },
-    );
+    // -----------------------------------------------------------------------
+    // TDD test (Option B) — drives intermediate frames through the full
+    // open+reverse cycle to confirm no RenderFlex overflow at any frame.
+    // -----------------------------------------------------------------------
+    testWidgets('morph_opens_and_reverse_dismisses_without_exception', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(_buildApp());
+
+      // --- Open phase ---
+      // Tap and drive intermediate frames through the 260ms open so the
+      // width-lerp passes through the sub-200dp range (below the bubble's
+      // ConstrainedBox minWidth) — this would throw a RenderFlex overflow
+      // without the OverflowBox guard.
+      await tester.tap(find.byKey(const Key('anchor_btn')));
+      await tester.pump(); // OverlayEntry inserted
+
+      // Drive through intermediate frames at 40ms intervals.
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'No overflow at t=40ms open (sub-200dp width range)',
+      );
+
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'No overflow at t=80ms open',
+      );
+
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'No overflow at t=120ms open',
+      );
+
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'No overflow at t=160ms open',
+      );
+
+      // Settle the open phase.
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'No overflow after open settles',
+      );
+
+      // Bubble must be mounted after open.
+      expect(
+        find.byType(OverflowPopover),
+        findsOneWidget,
+        reason: 'OverflowPopover must be mounted after open completes',
+      );
+
+      // --- Reverse / dismiss phase ---
+      // Drive reverseOut() by tapping the barrier, pumping intermediate
+      // frames through the 160ms close.
+      await tester.tapAt(const Offset(20, 1100));
+      await tester.pump(); // start reverse
+
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'No overflow at t=40ms close',
+      );
+
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'No overflow at t=80ms close',
+      );
+
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'No overflow at t=120ms close',
+      );
+
+      // Settle the close phase.
+      await tester.pumpAndSettle();
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'No overflow after close settles',
+      );
+
+      // Bubble must be removed after close.
+      expect(
+        find.byType(OverflowPopover),
+        findsNothing,
+        reason:
+            'OverflowPopover must be removed after reverse-dismiss completes',
+      );
+    });
   });
 
   // =========================================================================
@@ -638,19 +709,15 @@ void main() {
           reason: 'Popover must appear immediately under reduce-motion (FR-06)',
         );
 
-        // After open the scale must already be 1.0 (instant).
-        final scaleFinder = find.descendant(
-          of: find.byType(OverflowPopover),
-          matching: find.byType(ScaleTransition),
+        // After open the GlassSurface must be present (instant open).
+        expect(
+          find.descendant(
+            of: find.byType(OverflowPopover),
+            matching: find.byType(GlassSurface),
+          ),
+          findsAtLeastNWidgets(1),
+          reason: 'GlassSurface must be present instantly under reduce-motion',
         );
-        if (scaleFinder.evaluate().isNotEmpty) {
-          final scale = tester.widget<ScaleTransition>(scaleFinder.first);
-          expect(
-            scale.scale.value,
-            closeTo(1.0, 0.01),
-            reason: 'Scale must be 1.0 instantly under reduce-motion (FR-06)',
-          );
-        }
 
         // Dismiss via barrier — must complete instantly (no reverse wait).
         await tester.tapAt(const Offset(20, 1100));

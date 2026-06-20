@@ -1016,23 +1016,50 @@ ScaleTransition(
       });
     });
 
-    // ── 6c. ScaleTransition IS present in overflow_popover.dart ──────────────
-    //        (confirms the morph is in the right file, not just absent elsewhere)
+    // ── 6c. Dual-axis clip morph IS present in overflow_popover.dart ──────────
+    //        AnimatedBuilder drives: (a) ClipRRect borderRadius lerp 32→16dp,
+    //        (b) SizedBox width lerp (heightFactor Align reveal),
+    //        (c) content Opacity threshold at 0.4.
+    //        ScaleTransition is ABSENT — replaced by the dual-axis mechanism.
 
-    test('should_have_ScaleTransition_in_overflow_popover_dart '
-        '(morph is in the correct file)', () {
+    test('should_have_dual_axis_clip_morph_in_overflow_popover_dart', () {
       final file = File('$root/$overflowPopoverPath');
       expect(
         file.existsSync(),
         isTrue,
         reason: '$overflowPopoverPath must exist.',
       );
+      final source = file.readAsStringSync();
       expect(
-        file.readAsStringSync().contains('ScaleTransition'),
+        source.contains('ScaleTransition'),
+        isFalse,
+        reason:
+            'ScaleTransition must NOT appear in $overflowPopoverPath — '
+            'the morph is now an AnimatedBuilder dual-axis clip, not a '
+            'ScaleTransition (Option B / SP-20260620 next-step).',
+      );
+      expect(
+        source.contains('heightFactor'),
         isTrue,
         reason:
-            'ScaleTransition must be present in $overflowPopoverPath '
-            '(the morph lives here — NFR-07 confirms correct placement).',
+            'heightFactor must appear in $overflowPopoverPath — '
+            'the Align height-reveal drives the vertical expand/collapse.',
+      );
+      expect(
+        source.contains('BorderRadius.lerp'),
+        isTrue,
+        reason:
+            'BorderRadius.lerp must appear in $overflowPopoverPath — '
+            'the outer ClipRRect radius lerps from pillRadius (32dp) to '
+            'popoverRadius (16dp) during the morph.',
+      );
+      expect(
+        source.contains('0.4'),
+        isTrue,
+        reason:
+            'The content-fade threshold 0.4 (_kContentFadeStart) must appear '
+            'in $overflowPopoverPath — content opacity = '
+            '((t - 0.4) / 0.6).clamp(0.0, 1.0).',
       );
     });
   });

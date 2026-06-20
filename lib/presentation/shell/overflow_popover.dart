@@ -2,11 +2,12 @@
 //
 // Spec refs: FR-04, FR-05, FR-06, FR-07, FR-08, FR-19, NFR-06, NFR-07
 // Plan refs: TASK-04 (Wave 1 morph rewrite),
+//            qp-20260620-overflow-popover-morph-rework.md
 //            sp-20260620-ui-chrome-morph-transparency-spacing-plan.md
 //            TASK-07 (original), sp-20260617-liquid-glass-floating-chrome-plan.md
 //
 // Component C6: a CompositedTransformFollower hosted in an OverlayEntry,
-// wrapping the menu body in GlassSurface(popoverRadius) with a scale+fade morph.
+// wrapping the menu body in GlassSurface(popoverRadius) with a dual-axis clip morph.
 //
 // The pill → popover trigger is wired in buffer_screen.dart (TASK-07/Wave 3).
 // This file delivers the popover widget + open/dismiss/entry behaviour in
@@ -22,19 +23,30 @@
 //   Tapping the barrier triggers the async dismiss funnel.
 //
 // Morph (FR-04/FR-05):
-//   _MorphedBubble drives a single AnimationController: ScaleTransition
-//   (alignment: topRight) wrapping FadeTransition wrapping _PopoverBubble.
+//   _MorphedBubble drives a single AnimationController (260ms open /
+//   160ms reverseDuration close) on Curves.fastEaseInToSlowEaseOut.
+//   An AnimatedBuilder drives four transforms outside-in:
+//     (a) ClipRRect — borderRadius lerps from tokens.pillRadius (32dp) to
+//         tokens.popoverRadius (16dp), clipping the GlassSurface BackdropFilter
+//         blur boundary to the morphing shape (C-05).
+//     (b) SizedBox — width lerps from _kPillWidth (96dp) to _kBubbleWidth (280dp),
+//         anchored topRight; inner _PopoverBubble wrapped in OverflowBox so
+//         sub-200dp frames cannot throw RenderFlex overflow (C-06).
+//     (c) Align(alignment: topRight, heightFactor: t) — height reveal.
+//     (d) Opacity — content fades in from t=_kContentFadeStart (0.4).
 //   On open: forward(). On dismiss: reverseOut() → awaits completion → remove.
 //
 // <!-- CANON GAP: morph-motion exception for off-anatomy popover;
-//      per spec §4 CANON PARTIAL / OQ-03. The scale+fade morph is a deliberate
-//      exception to the bible §Motion crossfade-only ethos. -->
+//      per spec §4 CANON PARTIAL / OQ-03. The dual-axis clip morph is a
+//      deliberate exception to the bible §Motion crossfade-only ethos. -->
 //
 // <!-- CANON GAP: anchored popover bubble anatomy + outside-tap-dismiss rule
 //      ui-design-bible.md does not define the anatomy or dismiss behaviour for
 //      anchored popover bubbles. Implementation binds to surface/outlineVariant
 //      (via GlassSurface), GlassTokens.popoverRadius, and ≥48dp entries.
 //      Flag for upstream bible amendment per OQ-17. -->
+
+import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 
@@ -47,11 +59,26 @@ import 'package:foglietto/presentation/typography/font_size_stepper.dart';
 // Private constants
 // ---------------------------------------------------------------------------
 
-/// Morph animation duration for the scale+fade open/dismiss.
+/// Open duration for the dual-axis clip morph (forward pass).
 ///
-/// Under reduce-motion (MediaQuery.disableAnimations) the controller uses
-/// Duration.zero so the popover opens and dismisses instantly.
-const Duration _kMorphDuration = Duration(milliseconds: 180);
+/// Under reduce-motion (MediaQuery.disableAnimations) both durations are set
+/// to Duration.zero so the popover opens and dismisses instantly.
+const Duration _kMorphOpenDuration = Duration(milliseconds: 260);
+
+/// Close/reverse duration for the dual-axis clip morph (reverse pass).
+const Duration _kMorphCloseDuration = Duration(milliseconds: 160);
+
+/// Width of the pill in logical pixels (2 × _kButtonSize from chrome_pill.dart:64 = 48.0).
+/// Keep in sync with `_kButtonSize` in `chrome_pill.dart`.
+const double _kPillWidth = 96.0;
+
+/// Width of the expanded popover bubble in logical pixels.
+/// Matches the maxWidth in _PopoverBubble's ConstrainedBox.
+const double _kBubbleWidth = 280.0;
+
+/// Content fade start threshold (controller value t).
+/// Opacity of the popover content = ((t - _kContentFadeStart) / 0.6).clamp(0,1).
+const double _kContentFadeStart = 0.4;
 
 // ---------------------------------------------------------------------------
 // Public constants
@@ -260,11 +287,16 @@ class _PopoverOverlayContent extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// _MorphedBubble — scale+fade morph wrapper for _PopoverBubble
+// _MorphedBubble — dual-axis clip morph wrapper for _PopoverBubble
 //
 // CANON GAP: morph-motion exception for off-anatomy popover;
-// per spec §4 CANON PARTIAL / OQ-03. The scale+fade morph is a deliberate
-// exception to the bible §Motion crossfade-only ethos.
+// per spec §4 CANON PARTIAL / OQ-03. The dual-axis clip morph is a deliberate
+// exception to the bible §Motion crossfade-only ethos. One AnimationController
+// at 260ms open / 160ms reverseDuration close on fastEaseInToSlowEaseOut drives:
+//   (a) ClipRRect radius lerp (tokens.pillRadius 32dp → tokens.popoverRadius 16dp)
+//   (b) SizedBox width lerp (_kPillWidth 96dp → _kBubbleWidth 280dp) + OverflowBox guard
+//   (c) Align(topRight, heightFactor: t) for height reveal
+//   (d) Opacity content fade from t=_kContentFadeStart (0.4)
 // ---------------------------------------------------------------------------
 
 class _MorphedBubble extends StatefulWidget {
@@ -289,9 +321,13 @@ class _MorphedBubbleState extends State<_MorphedBubble>
   @override
   void initState() {
     super.initState();
-    // Create with default duration; didChangeDependencies updates it before
-    // the first build (called immediately after initState completes).
-    _controller = AnimationController(vsync: this, duration: _kMorphDuration);
+    // Create with default open duration; didChangeDependencies updates both
+    // duration and reverseDuration before the first build.
+    _controller = AnimationController(
+      vsync: this,
+      duration: _kMorphOpenDuration,
+      reverseDuration: _kMorphCloseDuration,
+    );
   }
 
   @override
@@ -301,7 +337,12 @@ class _MorphedBubbleState extends State<_MorphedBubble>
     // Duration.zero under reduce-motion (disableAnimations) — guard/latch unchanged.
     final disableAnimations =
         MediaQuery.maybeOf(context)?.disableAnimations ?? false;
-    _controller.duration = disableAnimations ? Duration.zero : _kMorphDuration;
+    _controller.duration = disableAnimations
+        ? Duration.zero
+        : _kMorphOpenDuration;
+    _controller.reverseDuration = disableAnimations
+        ? Duration.zero
+        : _kMorphCloseDuration;
 
     // Forward immediately on first mount — morph open (FR-04).
     if (!_forwardStarted) {
@@ -325,25 +366,57 @@ class _MorphedBubbleState extends State<_MorphedBubble>
 
   @override
   Widget build(BuildContext context) {
-    // CurvedAnimation applies easeOutCubic on the forward pass.
-    // On reverse the curve is automatically inverted.
+    final tokens = GlassTokens.of(context) ?? kDefaultGlassTokens;
+
+    // CurvedAnimation on the forward pass; auto-inverted on reverse.
     final curved = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeOutCubic,
+      curve: Curves.fastEaseInToSlowEaseOut,
     );
 
-    // ScaleTransition grows/collapses from the pill's top-right corner.
-    // FadeTransition fades the bubble in/out on the same controller value.
-    return ScaleTransition(
-      alignment: Alignment.topRight,
-      scale: curved,
-      child: FadeTransition(
-        opacity: _controller,
-        child: _PopoverBubble(
-          hostContext: widget.hostContext,
-          onDismiss: widget.onDismiss,
-        ),
-      ),
+    // Single AnimatedBuilder drives all four morph transforms.
+    // Composition order (outside-in):
+    //   (a) ClipRRect — lerped radius clips the GlassSurface BackdropFilter
+    //       blur boundary to the morphing shape (C-05 / NFR-10).
+    //   (b) Align(topRight, heightFactor: t) — height reveal from 0 → full.
+    //   (c) SizedBox — width lerp anchored topRight; OverflowBox prevents
+    //       RenderFlex overflow on sub-200dp frames (C-06).
+    //   (d) Opacity — content fades in after t reaches _kContentFadeStart.
+    return AnimatedBuilder(
+      animation: curved,
+      builder: (context, _) {
+        final t = curved.value;
+        final radius = BorderRadius.lerp(
+          tokens.pillRadius,
+          tokens.popoverRadius,
+          t,
+        )!;
+        final width = lerpDouble(_kPillWidth, _kBubbleWidth, t)!;
+        final contentOpacity = ((t - _kContentFadeStart) / 0.6).clamp(0.0, 1.0);
+
+        return ClipRRect(
+          borderRadius: radius,
+          child: Align(
+            alignment: Alignment.topRight,
+            heightFactor: t,
+            child: SizedBox(
+              width: width,
+              child: OverflowBox(
+                minWidth: 0,
+                maxWidth: _kBubbleWidth,
+                alignment: Alignment.topRight,
+                child: Opacity(
+                  opacity: contentOpacity,
+                  child: _PopoverBubble(
+                    hostContext: widget.hostContext,
+                    onDismiss: widget.onDismiss,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
