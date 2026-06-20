@@ -9,7 +9,10 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "shared",
-            path: "../shared/build/XCFrameworks/release/shared.xcframework"
+            // Path is relative to this package dir (iosApp/SharedPackage/): up to iosApp/, up to repo
+            // root, then the Gradle XCFramework output. `../shared/...` (one level) would wrongly resolve
+            // to iosApp/shared/... — it must be two levels.
+            path: "../../shared/build/XCFrameworks/release/shared.xcframework"
         )
     ]
 )

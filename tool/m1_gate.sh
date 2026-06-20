@@ -222,8 +222,8 @@ echo "[i] SharedPackage/Package.swift XCFramework path ..."
 pkg_swift="iosApp/SharedPackage/Package.swift"
 [[ -f "$pkg_swift" ]] || fail "(i) $pkg_swift not found on disk"
 
-grep -qF "shared/build/XCFrameworks/release/shared.xcframework" "$pkg_swift" \
-    || fail "(i) exact path 'shared/build/XCFrameworks/release/shared.xcframework' not found in $pkg_swift"
+grep -qF "../../shared/build/XCFrameworks/release/shared.xcframework" "$pkg_swift" \
+    || fail "(i) binaryTarget path '../../shared/build/XCFrameworks/release/shared.xcframework' not found in $pkg_swift (must be TWO levels up from iosApp/SharedPackage/ to reach the repo-root XCFramework — '../shared/...' wrongly resolves to iosApp/shared/...)"
 
 echo "  [i] OK"
 
