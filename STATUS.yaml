@@ -1,58 +1,37 @@
 schema-version: 2
-last-updated: "2026-06-21T12:00:00+02:00"
-active-plan: ".claude/docs/plans/sp-20260621-kmp-m3-swiftui-editor-core-plan.md"
-last-plan: ".claude/docs/plans/archive/sp-20260620-kmp-m2-shared-domain-data-plan.md"
+last-updated: "2026-06-21T10:10:00+02:00"
+active-plan: null
+last-plan: ".claude/docs/plans/archive/sp-20260621-kmp-m3-swiftui-editor-core-plan.md"
 
 short-plan:
-  feature: "KMP Milestone 3 — SwiftUI Editor Core: UITextView-backed editor via UIViewRepresentable with the shouldChangeTextIn pre-edit hook, single UTF-16 offset boundary (shared Kotlin sole authority), @Observable BufferViewModel calling shared use cases, ephemeral buffer behavior, font-size control + pinch-to-zoom."
-  slug: "kmp-m3-swiftui-editor-core"
-  auto: true
-  request-type: feature
-  workflow: canonical
+  feature: null
+  slug: null
+  auto: false
+  request-type: null
+  workflow: null
   parent:
-    spec: ".claude/docs/specs/lp-20260620-kotlin-multiplatform-rewrite-spec.md"
-    plan: ".claude/docs/plans/lp-20260620-kotlin-multiplatform-rewrite-plan.md"
-    milestone: 3
-    frs: "FR-11, FR-12, FR-13, FR-21"
+    spec: null
+    plan: null
+    milestone: null
+    frs: null
   paths:
-    spec: ".claude/docs/specs/sp-20260621-kmp-m3-swiftui-editor-core-spec.md"
-    plan: ".claude/docs/plans/sp-20260621-kmp-m3-swiftui-editor-core-plan.md"
-    assess-dir: ".claude/docs/specs/sp-20260621-kmp-m3-swiftui-editor-core-assessment"
+    spec: null
+    plan: null
+    assess-dir: null
   phases:
-    brainstorm: done
-    assess: done
-    triage: done
-    spec: done
-    plan: done
+    brainstorm: pending
+    assess: pending
+    triage: pending
+    spec: pending
+    plan: pending
     build: pending
   approvals:
-    spec: approved
-    plan: approved
+    spec: null
+    plan: null
   rejection-note: null
   build-progress:
-    current-wave: 8
-    waves-completed:
-      - wave: 1
-        tasks-completed: [TASK-01, TASK-02]
-        notes: "TASK-01 PinchZoom.kt GREEN — 15 jvmTest (PinchZoomTest) + 3 gate (PinchZoomGateTest) = 18 new; total 161 jvmTest (143 prior + 18 new); ./gradlew check EXIT 0. TASK-02 tool/m3_gate.sh authored (16 checks a-p, set -uo pipefail, fail() helper, no xcodebuild/plutil, executable); exits nonzero on M1-baseline tree naming each missing M3 artifact (EXPECTED — M3 Swift files arrive in later waves). Wave 1 COMPLETE."
-      - wave: 2
-        tasks-completed: [TASK-03]
-        notes: "TASK-03 iosApp/iosApp/Editor/TextOffsetBridge.swift authored (enum, static funcs: caretOffset/collapsedRange/selection/range/clamp; nsText.length exclusively, ZERO String.count/String.Index; selExtent ABSOLUTE not length; reversed-anchor min/abs; clamp(-1)->0). pbxproj 3-place reg: A1000060 (PBXFileReference path=Editor/TextOffsetBridge.swift + group A1000031 child) + A1000061 (PBXBuildFile + Sources phase A1000005). TextOffsetBridgeTests.swift authored on disk UNREGISTERED (TASK-08 wires it). Swift conformance = gate+review (no local compile). Wave 2 COMPLETE."
-      - wave: 3
-        tasks-completed: [TASK-04]
-        notes: "TASK-04 iosApp/iosApp/Editor/BufferViewModel.swift authored (@Observable final class; private(set) var text: String init-empty; var fontSizeIndex: Int from settings.load().fontSizeIndex Int32->Int; init(settings: SettingsRepository=IosSettingsFactoryKt.createIosSettingsRepository()); updateText/populate DISTINCT entry points sharing private apply(text:); indent(in:of:)/outdent(in:of:) via TextOffsetBridge.selection+LineIndent.shared+TextOffsetBridge.range returning (text,NSRange) atomically; ZERO save/persist/recoveryWrite member). pbxproj 3-place reg: A1000062 (PBXFileReference path=Editor/BufferViewModel.swift + group A1000031 child) + A1000063 (PBXBuildFile + Sources phase A1000005). BufferViewModelTests.swift authored on disk UNREGISTERED (TASK-08 wires it). Gate checks d/i/j/p: ALL PASS. Doc-comment .populate( false-positive fixed: avoided literal pattern in comments. Wave 3 COMPLETE."
-      - wave: 4
-        tasks-completed: [TASK-05]
-        notes: "TASK-05 iosApp/iosApp/Editor/BufferEditor.swift authored (struct BufferEditor: UIViewRepresentable + nested final class Coordinator: NSObject, UITextViewDelegate). makeUIView: UITextView; bg=UIColor.systemBackground (CANON GAP — named token not yet wired); UIFont.monospacedSystemFont at fontPt(for:index) using AppSettings(fontSizeIndex:Int32).fontSizePt (KotlinList subscript bridge avoided); NSMutableParagraphStyle lineHeightMultiple=1.4 on typingAttributes; ZERO material visual effect on content (FR-20/NFR-03). updateUIView: reconciles font pt + text only on real divergence (EC-12). Coordinator.shouldChangeTextIn: §5.1.d decision table exact — row1 text=newline+len0+process!=nil: write result.text wholesale, set selectedRange via collapsedRange(at:result.caret), updateText, return false; row2 text=newline+len0+process==nil: return true; row3 any-other-edit: return true. NO boolean latch / re-entrancy flag anywhere (EC-03/FR-02). textViewDidChange: updateText once. pbxproj 3-place reg: A1000064 (PBXFileReference path=Editor/BufferEditor.swift + group A1000031 child) + A1000065 (PBXBuildFile + Sources phase A1000005). BufferEditorCoordinatorTests.swift authored on disk UNREGISTERED (TASK-08 wires it). Gate checks a/b/e/h/k/p: ALL PASS. Gate fails at (f) SharedPlaceholder in ContentView — EXPECTED, TASK-07 scope. CANON GAP: UIColor.systemBackground used for --view-bg-color (no named asset token yet). KotlinList subscript bridge: used AppSettings.fontSizePt computed property instead of companion.slotList subscript. Wave 4 COMPLETE."
-      - wave: 5
-        tasks-completed: [TASK-06]
-        notes: "TASK-06 iosApp/iosApp/Editor/EditorPinchModifier.swift authored (struct EditorPinchModifier: ViewModifier; MagnifyGesture — MagnificationGesture is deprecated; onChanged delegates ALL math to PinchZoom.shared.clampedTargetIndex(scale:startIndex:); startIndex captured via @State gestureStartIndex on first onChanged tick; live apply to viewModel.fontSizeIndex each update; onEnded: settings.load().setFontSizeIndex(index:) then settings.save(_:) EXACTLY ONCE preserving colorScheme; zero SettingsRepository.shared — uses injected settings with IosSettingsFactoryKt.createIosSettingsRepository() default; ZERO ln/round/1.15 in executable code; testable seam via internal onPinchBegan/onPinchChanged/onPinchEnded methods). pbxproj 3-place reg: A1000066 (PBXFileReference path=Editor/EditorPinchModifier.swift + group A1000031 child) + A1000067 (PBXBuildFile + Sources phase A1000005). EditorPinchModifierTests.swift authored on disk UNREGISTERED (TASK-08 wires it). Gate checks g/h/k/p: ALL PASS. Gate fails at (f) SharedPlaceholder in ContentView — EXPECTED, TASK-07 scope. CANON GAP: ui-design-bible.md has no §Motion spec for pinch-to-zoom; slot bounds [0,20] and font scale are canon-governed (§Typography). Wave 5 COMPLETE."
-      - wave: 6
-        tasks-completed: [TASK-08]
-        notes: "TASK-08 net-new iosAppTests XCTest target: SurrogatePairOffsetTests.swift authored (6 test methods: NSString.length==7, caretOffset==2, collapsedRange{2,0}, round-trip identity, ListContinuation no-crash, testSuiteIsNonEmpty sentinel). pbxproj net-new PBXNativeTarget A1000085 (com.apple.product-type.bundle.unit-test), product A1000086 iosAppTests.xctest; PBXContainerItemProxy A1000087 + PBXTargetDependency A1000088 on app A1000008; PBXSourcesBuildPhase A1000080 + PBXFrameworksBuildPhase A1000081; XCBuildConfiguration A1000082 (Debug)/A1000083 (Release) with TEST_HOST/BUNDLE_LOADER/GENERATE_INFOPLIST_FILE=YES/IPHONEOS_DEPLOYMENT_TARGET=26.0/SWIFT_VERSION=6.0/PRODUCT_BUNDLE_IDENTIFIER=com.paolosantucci.foglietto.iosAppTests; XCConfigurationList A1000084; PBXGroup A1000089 (iosAppTests); PBXFileReference A1000070/72/74/76/78 for 5 test sources; PBXBuildFile A1000071/73/75/77/79 for test target Sources phase; ENABLE_TESTABILITY=YES added to app target Debug config A1000041. iosApp.xcscheme: TestableReference for A1000085 added inside <TestAction><Testables>. ios.yml: test_ios job added (macos-26, Xcode 26, JDK 17, assembleSharedReleaseXCFramework, xcodebuild test -destination 'platform=iOS Simulator,OS=latest,name=iPhone 16', CODE_SIGNING_ALLOWED=NO, tee log, false-green guard: grep 'Test Suite .* passed/failed' + assert 'Executed 0 tests' absent). Gate check (n): iosAppTests in <TestAction> block PASS. Gate check (o): 6 IPHONEOS_DEPLOYMENT_TARGET=26.0 / 4 SWIFT_VERSION=6.0 PASS. Gate check (p): all 4 Editor files >= 4 occurrences PASS. Gate (f) still fails on ContentView — EXPECTED, TASK-07 scope. Wave 6 COMPLETE."
-      - wave: 7
-        tasks-completed: [TASK-07]
-        notes: "TASK-07 ContentView.swift replaced wholesale + iosAppApp.swift minimal touch. ContentView: struct receives (viewModel: BufferViewModel, settings: SettingsRepository) as let properties; body = BufferEditor(viewModel:).frame(maxWidth:.infinity,maxHeight:.infinity).ignoresSafeArea().modifier(EditorPinchModifier(viewModel:settings:)). CANON GAP launch-colour comment relocated from old ContentView lines 4-5 to new file lines 9-10 (preserved verbatim). iosAppApp: @State private var settings = IosSettingsFactoryKt.createIosSettingsRepository(); @State private var viewModel = BufferViewModel(settings: IosSettingsFactoryKt.createIosSettingsRepository()); body: ContentView(viewModel: viewModel, settings: settings) — settings threaded into ContentView and forwarded to EditorPinchModifier so pinch save uses the injected store. No ScenePhase save wiring (M5/FR-12). Lesson: gate (f) matches ANY file content including comments — never write the forbidden symbol name even in a comment; fixed by removing comment referencing the deleted symbol. gate check (f) SharedPlaceholder NOW PASSES. All 16 checks (a)-(p) EXIT 0 — ALL M3 GATES PASSED. No pbxproj edit. No new .swift file. Wave 7 COMPLETE."
+    current-wave: null
+    waves-completed: []
 
 long-plan:
   feature: |
@@ -97,54 +76,53 @@ pending-consolidation: []
 
 recently-completed:
   - date: 2026-06-21
-    summary: "KMP M2 (Shared Domain & Data) COMPLETE — commit 9f81622, branch kmp-rewrite. All 7 tasks, 3 waves, 143 jvmTest PASS (0 failures, 0 skips), ./gradlew check GREEN on Linux (JVM-only, no Xcode/Flutter artifact). Wave 1: TASK-01 recovery pure leaves/models/repo-iface (24 tests), TASK-02 AppSettings model (16 tests), TASK-03 LineIndent+ListContinuation editor port (40 tests). Wave 2: TASK-04 FileRecoveryRepository okio-backed (25 tests), TASK-05 SaveBufferToRecovery use-case (6 tests), TASK-06 SettingsRepositoryImpl (21 tests). Wave 3 (TASK-07, this session): SourceScanGateTest.kt authored + confirmed RED (3/11 gate-6 failures while placeholders existed) then GREEN (11/11) after: Platform.kt + PlaceholderTest.kt + JvmSmokeTest.kt deleted; multiplatform-settings-test dep removed from libs.versions.toml + build.gradle.kts (confirmed UNUSED — zero import statements for MapSettings anywhere in shared/src; only KDoc comments referenced it). DEP RECONCILIATION: TASK-04 added the dep believing SettingsRepositoryTest used MapSettings; TASK-06 used inline MockSettings instead; grep confirmed dep unused; TASK-07 removed it restoring minimal-dep intent (R-14). Test count: 136 prior - 4 placeholder (JvmSmokeTest 2 + PlaceholderTest 2) + 11 gate = 143. All 8 gates GREEN: no Apple/Flutter import in commonMain, no FileSystem.SYSTEM in commonMain code, no .lines()/.lineSequence() in shared, no valueOf/enumValueOf in settings, no emergencyRecoveryEnabled in recovery, placeholders absent, no saveSync/callSync/_writeChain/_trimSync in recovery, trim(keep:Int) has no default. Spec refs: FR-03..FR-10, FR-18..FR-25, FR-26..FR-34, NFR-01..NFR-07, EC-08/EC-13..EC-15."
+    summary: "KMP Milestone 3 (SwiftUI Editor Core) BUILT, CI-GREEN & CLOSED on branch kmp-rewrite. Build (8 waves, commit 30fd4d3) was complete but its LP marker was unflipped and CI red; this session drove M3 to green and closed it. UITextView editor via UIViewRepresentable + shouldChangeTextIn pre-edit hook (no post-edit diffing/latch), single UTF-16 offset boundary (TextOffsetBridge; shared Kotlin sole authority), @Observable BufferViewModel calling shared use cases, ephemeral buffer, font-size + pinch-to-zoom (all pinch math in shared PinchZoom). Four CI-red fixes: (1) M1 gate (j) commonMain-purity grep matched a comment in PinchZoom.kt naming UIKit/Foundation/SwiftUI -> reworded (791aafa). (2) Duplicate StubSettingsRepository across two iosAppTests files -> made the BufferViewModelTests copy private (791aafa). (3) Swift-6 strict-concurrency: BufferEditorCoordinatorTests/EditorPinchModifierTests + free makeCoordinator helper marked @MainActor (construct @MainActor UIViewRepresentable/ViewModifier, send non-Sendable VM/stub) (248782d). (4) EditorPinchModifier gesture anchor was @State Int? — discarded outside a SwiftUI render so the seam never armed; moved to a reference-type PinchGestureState held in @State (persists across body re-evals AND direct seam calls); also corrected the EC-04 empty-marker test fixture from a lone first-line '- ' (which hits the intentional E-I2 quirk: lone first-line marker CONTINUES) to a real continued list '- a\n- ' so termination actually fires (afaacba). CI GREEN: Quality (./gradlew check + M1 gate 12/12) + iOS run 27897956409 (build_ios archive = MC-02; test_ios 48 tests, 0 failures, false-green guard pass = MC-03). Local: m3_gate 16/16, ./gradlew check EXIT 0. Spec+plan archived; §6.2 Spec Impact omitted (faithful port of already-canonized text-editor/typography slices; no canon delta) -> no pending-consolidation push. LP §8 already carries the M3 LP-IMPACT (iosMain createIosSettingsRepository factory). M3 marker flipped to [x] completed in the LP-plan."
+  - date: 2026-06-21
+    summary: "KMP M2 (Shared Domain & Data) COMPLETE — commit 9f81622, branch kmp-rewrite. 7 tasks, 3 waves, 143 jvmTest PASS, ./gradlew check GREEN on Linux (JVM-only). recovery/settings/editor verbatim Dart->Kotlin port into platform-neutral shared/. ListContinuation preserves the E-I2 lone-first-line-marker-continues quirk verbatim (load-bearing; M3's EC-04 test fixture corrected to respect it)."
   - date: 2026-06-20
-    summary: "KMP REWRITE MILESTONE 1 (Foundation & Scaffold, Phase 0) BUILT, CI-VERIFIED & CLOSED on branch kmp-rewrite (commits 462ab99 + fix 585b1ea, pushed origin; 241 files, +1380/-58212). Via /short-plan --auto canonical: brainstorm→assess (3 parallel code-reviewers)→spec (sp-20260620-kmp-m1-foundation-scaffold, 18 FR/5 NFR/54 acceptance)→plan (8 tasks/5 waves)→wave build→close. Stood up the Kotlin Multiplatform project IN-PLACE: (1) shared/ EMPTY platform-neutral module — jvm() + HOST-GUARDED iosArm64/iosSimulatorArm64/iosX64 → XCFramework(\"shared\"); okio 3.9.1 + multiplatform-settings 1.2.0 + Kotlin 2.1.21 via gradle/libs.versions.toml; Gradle 9.1.0 wrapper promoted from android/ to repo root. (2) iosApp/ native SwiftUI shell consuming shared over a LOCAL SPM .binaryTarget (iosApp/SharedPackage); literal Info.plist with TOP-LEVEL CFBundleIconName=AppIcon; retained Foglietto identity (bundle id com.paolosantucci.foglietto, MARKETING_VERSION 1.0.0, single-1024 AppIcon, LaunchBackground #2D73BA/#330A3C); IPHONEOS_DEPLOYMENT_TARGET=26.0. (3) Flutter sources REMOVED (recoverable via git history; behavioral reference for M2+). (4) CI reworked: android.yml retired, quality.yml→./gradlew check (ubuntu/JDK17), ios.yml→Gradle XCFramework→xcodebuild archive (macos-26/Xcode-26, signing spine + 8 secrets preserved, ExportOptions relocated to repo root), push+PR triggers WIDENED to kmp-rewrite (the assessment's #1 failure mode). (5) tool/m1_gate.sh 12-check structural gate. Agents: android-app-expert (gradle+shared), ios-app-expert (assets+iosApp), flutter-devops (CI+gate), infra-ops (.gitignore+README); orchestrator did all FS/git plumbing (binary copies, git rm/add, commit, push) since specialist Bash allowlists exclude them. Orchestrator fixes beyond agent output: libs.multiplatform.settings accessor (dash→dot), host-guarded Apple targets so `check` is jvm-only on Linux (NFR-07), and the SPM .binaryTarget path ../shared→../../shared (the one CI fix-forward). VERIFICATION: MC-01 local ./gradlew check + :shared:jvmTest green (4 tests); MC-02 iOS run 27882448070 green (XCFramework + xcodebuild archive macos-26); MC-03 Quality run 27882448062 green (./gradlew check ubuntu); m1_gate.sh 12/12. Spec+plan archived; §6.2 Spec Impact OMITTED (greenfield, no canon delta) → no pending-consolidation push. Launch-colour CANON GAP (#2D73BA/#330A3C vs bible #f6d32d/#873000) routed to OQ-02 for a decisions/ reconciliation. NO v* tag (no M1 TestFlight upload). Stray untracked ios/ Flutter cruft left on disk (not tracked, not pushed)."
+    summary: "KMP MILESTONE 1 (Foundation & Scaffold) BUILT, CI-VERIFIED & CLOSED on kmp-rewrite (462ab99 + 585b1ea). KMP project in-place: shared/ jvm()+host-guarded iosArm64/iosSimulatorArm64/iosX64 -> XCFramework; iosApp/ SwiftUI shell over SPM .binaryTarget; Flutter removed; CI reworked (quality.yml ./gradlew check + M1 gate, ios.yml Gradle XCFramework -> xcodebuild archive macos-26/Xcode-26); tool/m1_gate.sh 12-check gate. Foglietto identity retained."
   - date: 2026-06-20
-    summary: "Overflow-popover dual-axis clip morph (qp-20260620-overflow-popover-morph-rework) BUILT, CLOSED, COMMITTED & PUBLISHING — commit 25f211f on main (3 files: overflow_popover.dart + overflow_popover_test.dart + sp_20260620_gate_test.dart; 305+/138-), pushed 9629e36..25f211f, TAGGED v1.0.0-rc4 → iOS deploy_testflight run 27874202658 + Quality/Android/iOS (rc4 supersedes rc3; build number = GITHUB_RUN_NUMBER). /short-plan quick path (3 tasks/2 waves, all flutter-frontend-engineer/sonnet). Rewrote _MorphedBubble from ScaleTransition+FadeTransition → AnimatedBuilder dual-axis clip morph: outer ClipRRect(BorderRadius.lerp pillRadius 32→popoverRadius 16, t) wrapping GlassSurface so the BackdropFilter blur boundary tracks the shape; SizedBox(width: lerpDouble(96,280,t)) anchored topRight with OverflowBox(minWidth:0,maxWidth:280) guarding the sub-200dp width frames (user chose the literal SizedBox lerp over a clip-reveal); Align(topRight, heightFactor:t); content Opacity ((t-0.4)/0.6).clamp(0,1). Durations 260ms open / 160ms reverseDuration close on Curves.fastEaseInToSlowEaseOut, both Duration.zero under reduce-motion. Constants _kMorphOpenDuration/_kMorphCloseDuration/_kPillWidth(96=2×_kButtonSize)/_kBubbleWidth(280)/_kContentFadeStart(0.4); import dart:ui lerpDouble. Preserved reverseOut(), the single AnimationController, and the qp-20260619 idempotent dismiss latch/barrier/reopen. Inverted sp_20260620_gate_test.dart Gate 6c: asserts NO ScaleTransition + heightFactor + BorderRadius.lerp + 0.4 threshold (6a/6b untouched). Verification: dart format clean, flutter analyze 0, exactly 3 in-scope files, overflow_popover_test 20/20, buffer_screen_popover_reopen_test 2/2 (latch intact), sp_20260620_gate 39/39, full suite 1487/1487. QP §9 Spec Impact OMITTED → no pending-consolidation push (clean close). Also this session: /finalize-plan ran twice and STOPPED+deferred on the NFR-05 entry (still queued). NOT yet device-validated."
+    summary: "Overflow-popover dual-axis clip morph (qp-20260620) BUILT/CLOSED/COMMITTED on main (25f211f), TAGGED v1.0.0-rc4 -> iOS deploy_testflight. _MorphedBubble rewritten as AnimatedBuilder dual-axis clip morph (ClipRRect BorderRadius.lerp + SizedBox width lerp + Align heightFactor + content Opacity). Full suite 1487/1487."
   - date: 2026-06-20
-    summary: "SP-20260620 six liquid-glass chrome polish fixes BUILT & CLOSED & COMMITTED (9629e36; pushed main ed8f9a5..9629e36; TAGGED v1.0.0-rc3 → iOS deploy_testflight + Quality/Android/iOS). Canonical short-plan resumed at Gate 3 (user-approved), 8 tasks / 4 waves: (1) kChromePillTopGap=kChromeTopGap/3 (≈5.333) repoints ChromePill higher (find-back-pill untouched). (2) OverflowPopover MORPH — new _MorphedBubble (ScaleTransition alignment:topRight + FadeTransition on one 180ms easeOutCubic controller; CompositedTransformFollower targetAnchor=followerAnchor=topRight, offset zero ⇒ grows from pill corner, no 8dp gap) + async reverse-before-remove dismiss preserving the qp-20260619 idempotent latch/barrier/reopen; reduce-motion→Duration.zero. (3) editorTopInset rewritten to max(safeAreaTop+kEditorTopClearance(=24), verticalMargin(width)) dropping the 48dp chrome-zone floor → text ~40dp higher. (4) glass fill alpha 0.92/0.82→0.68 light+dark (user-chosen AA-preserving floor; opaque high-contrast branch untouched; rendered contrast asserted PASS light≈17.1:1 / dark≈13.1:1 via deterministic pre-blend — OQ-09 testability fallback over headless toImage()). (5) kToolbarKeyboardGap=8.0 folded anti-additively inside chromeSlotBottomInset (now 3-arg: keyboardInset, safeAreaBottom, iosAccessoryHeight). (6) NEW iOS-only KeyboardAccessoryBar (lib/presentation/shell/keyboard_accessory_bar.dart — ref-free GlassSurface, CupertinoIcons.chevron_down Done ≥48dp + ARB keyboardDoneTooltip EN 'Done'/IT 'Fatto' + Semantics(button:true)) mounted in buffer_screen.dart at Positioned(bottom:keyboardInset) gated defaultTargetPlatform==iOS && keyboardInset>0, onDone→_editorFocusNode.unfocus() reusing the existing keyboard-dismiss path; no Android change. New gate test/sp_20260620_gate_test.dart (39 tests). Gate-pinned kChromeTopGap/kChromeBottomGap/kChromeSideMargin stay 16.0 (sp-20260618 gate green). Full suite 1486/1486 green, flutter analyze 0, dart format clean. Spec+plan archived; NFR-05 0.68 glass-contrast delta pushed to pending-consolidation for consolidation into sp-20260617. NOT yet validated on a real device."
-  - date: 2026-06-19
-    summary: "Quick-plan qp-20260619 BUILD COMPLETE & CLOSED (4 tasks / 2 waves, all green) — fixed two liquid-glass-chrome regressions. BUG A (toolbar covered by keyboard): added pure chromeSlotBottomInset(keyboardInset, safeAreaBottom)=max(kChromeBottomGap,keyboardInset)+safeAreaBottom to editor_layout.dart (anti-additive sibling of editorBottomInset); hoisted keyboardInset to buffer_screen.dart build() scope and set the bottom morph slot Positioned.bottom=chromeSlotBottomInset(...) so the toolbar/find-box now floats ABOVE the soft keyboard (the slot previously used constant kChromeBottomGap+safeAreaBottom with no viewInsets term, so the keyboard overdrew it). BUG B (… menu opens only once): root cause was a double OverlayEntry.remove() — the popover's internal dismissals (outside-tap barrier + 3 menu tiles) called the RAW dismiss which never cleared the host _dismissPopoverRaw latch, so the 2nd … tap called entry.remove() on an already-removed entry → assert('removed only once')/TypeError → reopen aborted. Fix: openOverflowPopover gains an onDismissed param + a bool-dismissed idempotent guarded funnel routing ALL dismissal paths through one closure that removes-guarded AND clears the latch; _onOverflowTap drops the redundant wrappedDismiss. Final: full suite 1402/1402 green, flutter analyze 0, format clean. COMMITTED to main as ed8f9a5 and TAGGED v1.0.0-rc2. The SAME commit also themes the launch/splash background per-theme — #2d73ba light / #330a3c dark (Android @color/launch_background in values/ + values-night/; iOS LaunchBackground colorset in LaunchScreen.storyboard)."
+    summary: "SP-20260620 six liquid-glass chrome polish fixes BUILT/CLOSED/COMMITTED on main (9629e36), TAGGED v1.0.0-rc3. Pill higher, overflow morph, text higher, 0.68 glass translucency, toolbar<->keyboard gap, iOS KeyboardAccessoryBar. Full suite 1486/1486."
+
 in-progress:
-  - title: "KMP rewrite — M2 done & green; M3 (SwiftUI Editor Core) is next"
-    state: "long-plan kotlin-multiplatform-rewrite: M1+M2 BUILT/CLOSED on kmp-rewrite (9f81622; ./gradlew check green, 143 jvmTest). shared/ Kotlin domain+data (recovery/settings/editor) is now the stable contract consumed via SPM. Critical path M1->M2->M3->M4, M5||M6->M7 — M3 next (SwiftUI UITextView editor + offset boundary + @Observable VM; needs a macOS CI runner)."
+  - title: "KMP rewrite — M3 closed & CI-green; M4 (Liquid Glass Chrome) next"
+    state: "M1-M3 built/closed on kmp-rewrite (HEAD afaacba). CI green: Quality + iOS archive + 48 iosAppTests. shared/ is the stable contract consumed via SPM."
     touched:
-      - "shared/src/commonMain/kotlin/com/paolosantucci/foglietto/shared/recovery/"
-      - "shared/src/commonMain/kotlin/com/paolosantucci/foglietto/shared/settings/"
-      - "shared/src/commonMain/kotlin/com/paolosantucci/foglietto/shared/editor/"
-      - ".claude/docs/plans/archive/sp-20260620-kmp-m2-shared-domain-data-plan.md"
-    next-step: "Run /short-plan-step for KMP Milestone 3 (SwiftUI Editor Core). M3 owns Swift-side async bridging of the NON-suspend shared use cases (LP-IMPACT). The iOS recoveryBaseDir actual is CI-verified on macos-26 (Linux is jvm-only)."
+      - "iosApp/iosApp/Editor/BufferEditor.swift"
+      - "iosApp/iosApp/Editor/BufferViewModel.swift"
+      - "iosApp/iosApp/Editor/EditorPinchModifier.swift"
+      - "iosApp/iosApp/Editor/TextOffsetBridge.swift"
+      - "shared/src/commonMain/kotlin/com/paolosantucci/foglietto/shared/editor/PinchZoom.kt"
+    next-step: "Run /short-plan-step for KMP M4 (native Liquid Glass chrome: pill, menu bubble, recovery submenu, 5-button toolbar)."
     blocker: null
-  - title: "Foglietto 1.0.0-rc4 — iOS deploy running; TestFlight + device validation pending"
-    state: "Tag v1.0.0-rc4 (25f211f) pushed; iOS deploy_testflight 27874202658 + Quality/Android/iOS running. main HEAD=25f211f. Supersedes rc3. Bundles the six SP-20260620 chrome fixes + the NEW overflow-popover dual-axis clip morph."
+  - title: "Foglietto 1.0.0-rc4 (Flutter, main) — TestFlight + device validation pending"
+    state: "Tag v1.0.0-rc4 (25f211f) on main; iOS deploy + device validation pending. Separate from the KMP rewrite."
     touched:
       - "lib/presentation/shell/overflow_popover.dart"
       - "lib/presentation/editor/buffer_screen.dart"
-      - "lib/presentation/shell/keyboard_accessory_bar.dart"
-      - "lib/presentation/theme/glass_surface.dart"
-    next-step: "Confirm rc4 TestFlight landing; answer export-compliance; validate the morph + six fixes on device."
+    next-step: "Confirm rc4 TestFlight landing, answer export-compliance, device-validate."
     blocker: null
 
 next-steps:
-  - "KMP M2 DONE. Next: run /short-plan for KMP Milestone 3 (SwiftUI iosApp shell — presentation layer) on branch kmp-rewrite: @Observable view models calling shared use cases, ephemeral buffer (gone on close), recovery submenu inside the menu bubble, settings inside the bubble (font-size + theme picker), Liquid Glass chrome (.glassEffect / GlassEffectContainer), bottom toolbar (copy/paste/keyboard-dismiss/indent/de-indent), Markdown list-continuation wired, EN+IT l10n, dynamic type. All presentation in iosApp/ SwiftUI (macOS CI runner required for XCFramework + xcodebuild). The shared/ KMP module is now the stable contract; iosApp/ consumes it via SPM binaryTarget."
-  - "Reconcile the launch-colour CANON GAP: retained Foglietto LaunchBackground #2D73BA/#330A3C diverges from ui-design-bible §Colour-&-branding tokens (#f6d32d/#873000). Parent §5.3 identity-retention is binding for now; log a decision in .claude/docs/decisions/ (OQ-02 of the M1 spec)."
-  - "Clean the stray untracked ios/ Flutter cruft left on the kmp-rewrite working tree (git rm removed tracked files; untracked ios/ leftovers remain on disk — not tracked, not pushed, CI unaffected). rm -rf the untracked ios/ remnants before M2 work to avoid confusion."
-  - "Later KMP open questions to confirm before their milestones: OQ-05 recovery read-side cap (M3/M4), OQ-01/OQ-06 Share Extension in first TestFlight build + whether it needs a 2nd provisioning profile / new CI secret (M5)."
-  - "Flutter app (main branch, separate from the KMP rewrite): confirm v1.0.0-rc4 (25f211f) TestFlight landing, answer the export-compliance prompt, assign to an internal testing group (build = GITHUB_RUN_NUMBER), and device-validate the overflow-popover morph + six SP-20260620 chrome fixes."
-  - "pending-consolidation is now EMPTY. The lone entry (sp-20260620-...-spec / glass-translucency-floor NFR-05 0.90/0.80→0.68) was DROPPED via /finalize-plan on 2026-06-20 per user decision — NOT consolidated. Rationale: it was blocked (domain liquid-glass-floating-chrome has no canon slice; delta targeted an archived peer spec with paraphrased old:), AND the KMP rewrite replaces the Flutter liquid-glass chrome with native SwiftUI .glassEffect, making the Flutter-era canon consolidation moot. If the 0.68 translucency intent must survive, re-capture it as a native-glass legibility note during KMP M4 (Liquid Glass Chrome), not against the retired Flutter spec. State: .claude/docs/_finalize-plan-state.yaml."
-  - "Next /canon-bootstrap pass: add ui-design-bible anatomy for the liquid-glass surfaces (ChromePill, bottom toolbar, overflow popover, FindBackPill, bottom morph, iOS KeyboardAccessoryBar + 0.68 translucency token). NOTE: this canon is Flutter-era; reconcile against the KMP rewrite's native Liquid Glass direction (the Flutter chrome is being replaced by native SwiftUI .glassEffect in KMP M4)."
+  - "KMP M3 DONE & CI-green. Next: run /short-plan-step for KMP Milestone 4 (Liquid Glass Chrome) on kmp-rewrite — native top-right pill (share + overflow), menu bubble (all settings + description-only theme picker + inline expandable recovery submenu + About), 5-button bottom toolbar (copy/paste/keyboard-dismiss/indent/de-indent wired to shared LineIndent), auto-hide/reveal chrome. Native SwiftUI .glassEffect/GlassEffectContainer on control/nav layer only, no fallback branch. Resolve OQ-05 (recovery read-side cap) at SP-spec time."
+  - "M4 prep: wire the named --view-bg-color asset token (CANON GAP from M3 — BufferEditor uses UIColor.systemBackground as a placeholder; replace with UIColor(named:) once the asset exists). Also surface the 0.68 translucency intent as a native-glass legibility note during M4, not against the retired Flutter spec."
+  - "Reconcile the launch-colour CANON GAP: retained Foglietto LaunchBackground #2D73BA/#330A3C diverges from ui-design-bible tokens (#f6d32d/#873000). Parent identity-retention is binding for now; log a decision in .claude/docs/decisions/ (OQ-02 of the M1 spec)."
+  - "Clean stray untracked working-tree cruft on kmp-rewrite (store/ untracked; docs/ci-cd.md + the M2 plan show as deletions not yet committed) — tidy before/with M4."
+  - "Later KMP open questions before their milestones: OQ-01/OQ-06 Share Extension in first TestFlight build + whether it needs a 2nd provisioning profile / new CI secret (M5)."
+  - "Flutter app (main, separate from KMP): confirm v1.0.0-rc4 (25f211f) TestFlight landing, answer export-compliance, assign to internal testing, device-validate the overflow morph + six chrome fixes."
 
 known-issues:
   - severity: warning
-    description: "M3 FR-09 cursor-margin scroll is a documented PARTIAL: framework keeps caret on-screen and after-Enter track + inset-stability gating work, but the precise ≥22px-below-caret on-change margin (_doMarginScroll) is a no-op stub — faithful impl needs the caret pixel rect (RenderEditable) unreachable from a Material TextField. MC-03 only partially met. See D-005."
-    impact: medium
-    workaround: "Revisit via raw EditableText + GlobalKey<EditableTextState>.getLocalRectForCaret, or accept the framework baseline and drop the 22px margin (spec-delta)."
+    description: "KMP M3 BufferEditor uses UIColor.systemBackground for --view-bg-color (no named design-token asset wired yet). CANON GAP carried from M3; functional but not the canonical token."
+    impact: low
+    workaround: "Wire a named color asset in Assets.xcassets and switch to UIColor(named: \"ViewBgColor\") during M4."
   - severity: warning
-    description: "On-device integration tests written + tagged but NOT yet executed (headless-skipped): M6 m6_shell_smoke_test, M5 recovery_12saves_trim_test (NFR-03/MC-01), M4 find_50k_scroll_test (NFR-04), M3 list_continuation_test (R-03/MC-01), M2 recovery_persistence_test (NFR-M2-02). Need an emulator/device."
+    description: "Recovery shared_preferences/settings key strings (incl. 'color-scheme', 'font-size') transcribed best-effort, not cross-checked against the live upstream GNOME Buffer gschema. A mismatch means stored values are never found."
     impact: medium
-    workaround: "Run both integration_test/ files on a connected device/emulator before the respective milestones ship."
+    workaround: "Cross-check keys against upstream gschema; fix is one line per key in AppSettings."
   - severity: warning
-    description: "OQ-B1 / OQ-M6-05 / OQ-M7-03 open: the shared_preferences key strings (incl. 'color-scheme' and 'font-size') are transcribed best-effort from the spec, not yet cross-checked against the live upstream GNOME Buffer gschema. A mismatch means on-device stored values are never found. (Key count 7 after 'show-line-numbers' removal.)"
+    description: "KMP on-device integration tests not yet executed (no emulator/device in this environment); iosAppTests run on the CI simulator only. Surrogate-pair offset + list-continuation behavior verified via CI XCTest, not a physical device."
     impact: medium
-    workaround: "Cross-check keys against upstream gschema; fix is one line per key in AppSettings.k* (repository unaffected)."
+    workaround: "Run on a connected device/simulator before the TestFlight milestone (M7)."
