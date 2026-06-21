@@ -9,10 +9,13 @@ import shared
 //
 // `nil` means "inherit the device trait" — used for `.follow` (System).
 //
-// IMPORTANT: `AppColorScheme` is a Kotlin-bridged enum (non-frozen across the
-// KMP boundary), so the `@unknown default` case is REQUIRED for the switch to
-// compile under Swift 6 strict mode. It maps to `nil` (System) — the safest
-// fallback if the shared enum ever gains a case the Swift side has not learned.
+// IMPORTANT: with no SKIE bridge, the Kotlin `AppColorScheme` enum is exported
+// through standard Kotlin/Native Obj-C interop as a Swift *class* (not a Swift
+// enum). `case .follow:` etc. are therefore expression patterns matched via `==`
+// on the bridged singletons, so this is a non-enum switch: it needs a plain
+// `default:` (an `@unknown default:` is only valid on enum switches and fails to
+// compile here). The `default` maps to `nil` (System) — the safest fallback if
+// the shared enum ever gains a case the Swift side has not learned.
 extension AppColorScheme {
     /// SwiftUI color scheme to drive `.preferredColorScheme(_:)`.
     /// `.follow` → `nil` (inherit device); `.light` → `.light`; `.dark` → `.dark`.
@@ -21,7 +24,7 @@ extension AppColorScheme {
         case .follow: return nil       // System — inherit the device trait.
         case .light:  return .light
         case .dark:   return .dark
-        @unknown default: return nil   // Non-frozen KMP enum — default REQUIRED to compile.
+        default:      return nil       // Bridged Obj-C class → plain default required.
         }
     }
 }
