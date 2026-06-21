@@ -61,6 +61,25 @@ data class AppSettings(
         return copy(fontSizeIndex = clamped)
     }
 
+    /**
+     * Returns a copy of this settings with [colorScheme] set to [scheme],
+     * preserving [fontSizeIndex] verbatim.
+     *
+     * Identity-stable (S-C1, mirroring [setFontSizeIndex]): when [scheme]
+     * equals the current [colorScheme], returns `this` — NOT a new `copy()`.
+     * This allows callers (e.g. the theme picker) to use value-equality as a
+     * no-op guard (FR-10) without allocating a new instance.
+     *
+     * Non-suspend. Additive — no existing member changed or removed.
+     * No Foundation/UIKit dependency (commonMain).
+     *
+     * Spec FR-04, FR-24, NFR-08; closes CM-2. Contract §5.1.a.
+     */
+    fun setColorScheme(scheme: AppColorScheme): AppSettings {
+        if (scheme == colorScheme) return this
+        return copy(colorScheme = scheme)
+    }
+
     companion object {
         /**
          * 21-slot font-size table.

@@ -212,4 +212,75 @@ class AppSettingsTest {
         assertEquals("color-scheme", AppSettings.KEY_COLOR_SCHEME)
         assertEquals("font-size", AppSettings.KEY_FONT_SIZE)
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // M4 TASK-01 — setColorScheme tests (spec §7.1, FR-04, FR-24, NFR-08; closes CM-2)
+    //
+    // T-12: Happy path — setColorScheme changes colorScheme, preserves fontSizeIndex
+    // Spec §7.1 case 1: "AppSettings(fontSizeIndex=8, colorScheme=.follow)
+    //   .setColorScheme(.dark) => colorScheme==.dark AND fontSizeIndex==8"
+    // ──────────────────────────────────────────────────────────────────────────
+    @Test
+    fun given_settings_fontSizeIndex_8_colorScheme_follow_when_setColorScheme_dark_then_colorScheme_is_dark_and_fontSizeIndex_preserved() {
+        val s = AppSettings(fontSizeIndex = 8, colorScheme = AppColorScheme.follow)
+        val result = s.setColorScheme(AppColorScheme.dark)
+        assertEquals(AppColorScheme.dark, result.colorScheme)
+        assertEquals(8, result.fontSizeIndex)
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // T-13: Equal-value no-op — setColorScheme(current) returns data-class-EQUAL
+    // Spec §7.1 case 2: "equal-value no-op: setColorScheme(currentScheme) returns a
+    //   data-class-EQUAL AppSettings (==) so the picker can treat it as a no-op (FR-10)"
+    //
+    // NOTE: This tests for value equality (==), mirroring FR-10's picker no-op.
+    // The method may return `this` (assertSame) OR a new copy() — both satisfy
+    // data-class equality. The identity-stable path (assertSame) is validated in T-14.
+    // ──────────────────────────────────────────────────────────────────────────
+    @Test
+    fun given_settings_colorScheme_light_when_setColorScheme_light_then_returns_equal_AppSettings() {
+        val s = AppSettings(colorScheme = AppColorScheme.light, fontSizeIndex = 5)
+        val result = s.setColorScheme(AppColorScheme.light)
+        assertEquals(s, result)
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // T-14: All three schemes — setColorScheme(.follow/.light/.dark) each yields
+    //        correct colorScheme and preserves fontSizeIndex (full enum coverage)
+    // Spec §7.1 case 3: "all three schemes (follow/light/dark) each preserve fontSizeIndex"
+    // Also verifies the identity-stable guard: equal-scheme call returns `this` (assertSame)
+    // ──────────────────────────────────────────────────────────────────────────
+    @Test
+    fun given_settings_when_setColorScheme_all_three_variants_then_each_returns_correct_scheme_and_preserves_fontSizeIndex() {
+        val base = AppSettings(fontSizeIndex = 3, colorScheme = AppColorScheme.follow)
+
+        val toFollow = base.setColorScheme(AppColorScheme.follow)
+        assertEquals(AppColorScheme.follow, toFollow.colorScheme)
+        assertEquals(3, toFollow.fontSizeIndex)
+        // Same-value call: identity-stable — must return `this`
+        assertSame(base, toFollow)
+
+        val toLight = base.setColorScheme(AppColorScheme.light)
+        assertEquals(AppColorScheme.light, toLight.colorScheme)
+        assertEquals(3, toLight.fontSizeIndex)
+
+        val toDark = base.setColorScheme(AppColorScheme.dark)
+        assertEquals(AppColorScheme.dark, toDark.colorScheme)
+        assertEquals(3, toDark.fontSizeIndex)
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // T-15: Chained setters — setFontSizeIndex(12).setColorScheme(.light)
+    //        => fontSizeIndex==12 AND colorScheme==.light
+    // Spec §7.1 case 4: "chained setFontSizeIndex(12).setColorScheme(.light)
+    //   => fontSizeIndex==12 AND colorScheme==.light (symmetry with setFontSizeIndex)"
+    // ──────────────────────────────────────────────────────────────────────────
+    @Test
+    fun given_default_settings_when_setFontSizeIndex_12_then_setColorScheme_light_then_fontSizeIndex_is_12_and_colorScheme_is_light() {
+        val result = AppSettings()
+            .setFontSizeIndex(12)
+            .setColorScheme(AppColorScheme.light)
+        assertEquals(12, result.fontSizeIndex)
+        assertEquals(AppColorScheme.light, result.colorScheme)
+    }
 }

@@ -48,15 +48,17 @@ class BufferViewModel {
 
     /// Designated initialiser — accepts a `SettingsRepository` for dependency injection.
     ///
-    /// Production callers omit the argument and receive the real UserDefaults-backed store via
-    /// `IosSettingsFactoryKt.createIosSettingsRepository()` — a Kotlin top-level factory function
-    /// that returns the concrete `SettingsRepository` implementation.  Unit tests pass a stub.
+    /// The production instance is always supplied by the composition root in `iosAppApp.init()`
+    /// via `IosSettingsFactoryKt.createIosSettingsRepository()` — a Kotlin top-level factory
+    /// function that returns the concrete `SettingsRepository` implementation.  Unit tests pass
+    /// a stub.  No default value is provided here because the composition root (FR-03 / CM-1)
+    /// is the sole construction site; a default would create a second factory call outside it.
     ///
     /// `settings.load()` never throws and clamps `fontSizeIndex` to `[0, 20]` (EC-11 / FR-16).
     /// A raw stored value of 30 produces `fontSizeIndex == 20` here — not a crash, not the default.
     ///
     /// - Parameter settings: The settings repository to read on init.
-    init(settings: SettingsRepository = IosSettingsFactoryKt.createIosSettingsRepository()) {
+    init(settings: SettingsRepository) {
         self.text = ""
         // Int32 → Int conversion at the call site (FR-09); shared loader already clamped to [0,20].
         self.fontSizeIndex = Int(settings.load().fontSizeIndex)

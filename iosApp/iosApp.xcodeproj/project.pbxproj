@@ -15,11 +15,22 @@
 		A1000063 /* BufferViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000062 /* BufferViewModel.swift */; };
 		A1000065 /* BufferEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000064 /* BufferEditor.swift */; };
 		A1000067 /* EditorPinchModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000066 /* EditorPinchModifier.swift */; };
+		A1000091 /* ChromeVisibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000090 /* ChromeVisibility.swift */; };
+		A10000A1 /* TopPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000A0 /* TopPill.swift */; };
+		A10000B1 /* BottomToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000B0 /* BottomToolbar.swift */; };
+		A10000C1 /* MenuBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000C0 /* MenuBubble.swift */; };
+		A10000C3 /* MenuViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000C2 /* MenuViewModel.swift */; };
+		A10000C5 /* RecoveryListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000C4 /* RecoveryListViewModel.swift */; };
+		A10000D1 /* ChromeOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000D0 /* ChromeOverlay.swift */; };
 		A1000071 /* TextOffsetBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000070 /* TextOffsetBridgeTests.swift */; };
 		A1000073 /* BufferViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000072 /* BufferViewModelTests.swift */; };
 		A1000075 /* BufferEditorCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000074 /* BufferEditorCoordinatorTests.swift */; };
 		A1000077 /* EditorPinchModifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000076 /* EditorPinchModifierTests.swift */; };
 		A1000079 /* SurrogatePairOffsetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000078 /* SurrogatePairOffsetTests.swift */; };
+		A10000E1 /* ChromeVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000E0 /* ChromeVisibilityTests.swift */; };
+		A10000E3 /* MenuViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000E2 /* MenuViewModelTests.swift */; };
+		A10000E5 /* RecoveryListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000E4 /* RecoveryListViewModelTests.swift */; };
+		A10000E7 /* IosRecoveryFactoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000E6 /* IosRecoveryFactoryTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -42,11 +53,22 @@
 		A1000062 /* BufferViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/BufferViewModel.swift; sourceTree = "<group>"; };
 		A1000064 /* BufferEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/BufferEditor.swift; sourceTree = "<group>"; };
 		A1000066 /* EditorPinchModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/EditorPinchModifier.swift; sourceTree = "<group>"; };
+		A1000090 /* ChromeVisibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeVisibility.swift; sourceTree = "<group>"; };
+		A10000A0 /* TopPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopPill.swift; sourceTree = "<group>"; };
+		A10000B0 /* BottomToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomToolbar.swift; sourceTree = "<group>"; };
+		A10000C0 /* MenuBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBubble.swift; sourceTree = "<group>"; };
+		A10000C2 /* MenuViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuViewModel.swift; sourceTree = "<group>"; };
+		A10000C4 /* RecoveryListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryListViewModel.swift; sourceTree = "<group>"; };
+		A10000D0 /* ChromeOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeOverlay.swift; sourceTree = "<group>"; };
 		A1000070 /* TextOffsetBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextOffsetBridgeTests.swift; sourceTree = "<group>"; };
 		A1000072 /* BufferViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BufferViewModelTests.swift; sourceTree = "<group>"; };
 		A1000074 /* BufferEditorCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BufferEditorCoordinatorTests.swift; sourceTree = "<group>"; };
 		A1000076 /* EditorPinchModifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPinchModifierTests.swift; sourceTree = "<group>"; };
 		A1000078 /* SurrogatePairOffsetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurrogatePairOffsetTests.swift; sourceTree = "<group>"; };
+		A10000E0 /* ChromeVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeVisibilityTests.swift; sourceTree = "<group>"; };
+		A10000E2 /* MenuViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuViewModelTests.swift; sourceTree = "<group>"; };
+		A10000E4 /* RecoveryListViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryListViewModelTests.swift; sourceTree = "<group>"; };
+		A10000E6 /* IosRecoveryFactoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IosRecoveryFactoryTests.swift; sourceTree = "<group>"; };
 		A1000086 /* iosAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iosAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -87,10 +109,25 @@
 				A1000062 /* BufferViewModel.swift */,
 				A1000064 /* BufferEditor.swift */,
 				A1000066 /* EditorPinchModifier.swift */,
+				A1000092 /* Chrome */,
 				A1000012 /* Assets.xcassets */,
 				A1000013 /* Info.plist */,
 			);
 			path = iosApp;
+			sourceTree = "<group>";
+		};
+		A1000092 /* Chrome */ = {
+			isa = PBXGroup;
+			children = (
+				A1000090 /* ChromeVisibility.swift */,
+				A10000A0 /* TopPill.swift */,
+				A10000B0 /* BottomToolbar.swift */,
+				A10000C0 /* MenuBubble.swift */,
+				A10000C2 /* MenuViewModel.swift */,
+				A10000C4 /* RecoveryListViewModel.swift */,
+				A10000D0 /* ChromeOverlay.swift */,
+			);
+			path = Chrome;
 			sourceTree = "<group>";
 		};
 		A1000032 /* Products */ = {
@@ -110,6 +147,10 @@
 				A1000074 /* BufferEditorCoordinatorTests.swift */,
 				A1000076 /* EditorPinchModifierTests.swift */,
 				A1000078 /* SurrogatePairOffsetTests.swift */,
+				A10000E0 /* ChromeVisibilityTests.swift */,
+				A10000E2 /* MenuViewModelTests.swift */,
+				A10000E4 /* RecoveryListViewModelTests.swift */,
+				A10000E6 /* IosRecoveryFactoryTests.swift */,
 			);
 			path = iosAppTests;
 			sourceTree = "<group>";
@@ -217,6 +258,13 @@
 				A1000063 /* BufferViewModel.swift in Sources */,
 				A1000065 /* BufferEditor.swift in Sources */,
 				A1000067 /* EditorPinchModifier.swift in Sources */,
+				A1000091 /* ChromeVisibility.swift in Sources */,
+				A10000A1 /* TopPill.swift in Sources */,
+				A10000B1 /* BottomToolbar.swift in Sources */,
+				A10000C1 /* MenuBubble.swift in Sources */,
+				A10000C3 /* MenuViewModel.swift in Sources */,
+				A10000C5 /* RecoveryListViewModel.swift in Sources */,
+				A10000D1 /* ChromeOverlay.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -229,6 +277,10 @@
 				A1000075 /* BufferEditorCoordinatorTests.swift in Sources */,
 				A1000077 /* EditorPinchModifierTests.swift in Sources */,
 				A1000079 /* SurrogatePairOffsetTests.swift in Sources */,
+				A10000E1 /* ChromeVisibilityTests.swift in Sources */,
+				A10000E3 /* MenuViewModelTests.swift in Sources */,
+				A10000E5 /* RecoveryListViewModelTests.swift in Sources */,
+				A10000E7 /* IosRecoveryFactoryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -2,13 +2,24 @@
 // iosAppTests
 //
 // XCTest coverage for BufferEditor.Coordinator — the single pre-edit hook,
-// the textViewDidChange mirror, and the updateUIView reconciliation contract.
+// the textViewDidChange mirror, the updateUIView reconciliation contract,
+// AND the M4 Coordinator extension cases (CM-6 / §5.1.e):
+//   copyToPasteboard, pasteAtCaret, closeKeyboard, applyIndentResult,
+//   weak-textView nil-safety (EC-13), onTyping → ChromeVisibility wiring.
 //
 // NOTE: This file is authored on disk by TASK-05.
 // Target membership (iosAppTests) and pbxproj registration are owned by TASK-08.
 //
-// Spec refs: FR-02, FR-03, FR-04, FR-05, FR-13, FR-14, FR-15;
-//            §5.1.d decision table; §6.1 EC-03/EC-04/EC-05/EC-12/EC-13
+// OQ-12 resolution: the Coordinator can be instantiated directly in tests via
+// makeCoordinator() without a full UIHostingController-backed mount for MOST
+// tests. For tests that require a live, first-responder-capable UITextView
+// (closeKeyboard/pasteAtCaret), we use a lightweight UIWindow+UITextView mount
+// harness rather than UIHostingController to avoid SwiftUI dependency in this
+// file. See makeMountedCoordinator() helper below.
+//
+// Spec refs: FR-02, FR-03, FR-04, FR-05, FR-06, FR-13, FR-14, FR-15, FR-16, FR-17,
+//            FR-19; §5.1.d/§5.1.e decision table;
+//            §6.1 EC-03/EC-04/EC-05/EC-12/EC-13; M4 §7.1 Coordinator section.
 // Verification: CI-only (macos-26 / iOS Simulator). No local Swift compile available.
 
 import XCTest
@@ -53,6 +64,37 @@ private func makeCoordinator(viewModel: BufferViewModel) -> (UITextView, BufferE
     let coordinator = editor.makeCoordinator()
     textView.delegate = coordinator
     return (textView, coordinator)
+}
+
+/// Helper that creates a Coordinator WITH `coordinator.textView` set — mirrors what
+/// makeUIView does in the real app (CM-6 / §5.1.e).
+///
+/// OQ-12 resolution: we directly set `coordinator.textView = textView` (the same
+/// assignment makeUIView performs). No UIHostingController mount needed because
+/// `copyToPasteboard` reads from `viewModel.text` (not textView), `applyIndentResult`
+/// just assigns properties, and `closeKeyboard` calls `resignFirstResponder` (which
+/// works on any UITextView added to a UIWindow).
+///
+/// For closeKeyboard / first-responder tests we embed the textView in a real UIWindow
+/// so resignFirstResponder is honoured by the run loop.
+@MainActor
+private func makeMountedCoordinator(
+    viewModel: BufferViewModel
+) -> (UITextView, BufferEditor.Coordinator, UIWindow) {
+    let textView = UITextView(frame: CGRect(x: 0, y: 0, width: 300, height: 44))
+    let editor = BufferEditor(viewModel: viewModel)
+    let coordinator = editor.makeCoordinator()
+    textView.delegate = coordinator
+    // Set the weak handle — mirrors makeUIView (CM-6 / §5.1.e).
+    coordinator.textView = textView
+
+    // Embed in a UIWindow so first-responder mechanics work in the simulator.
+    let window = UIWindow(frame: UIScreen.main.bounds)
+    window.rootViewController = UIViewController()
+    window.rootViewController?.view.addSubview(textView)
+    window.makeKeyAndVisible()
+
+    return (textView, coordinator, window)
 }
 
 // ---------------------------------------------------------------------------
@@ -280,5 +322,229 @@ final class BufferEditorCoordinatorTests: XCTestCase {
         let pt8 = CGFloat(AppSettings(colorScheme: AppColorScheme.follow, fontSizeIndex: 8).fontSizePt)
         XCTAssertNotEqual(pt5, pt8,
             "Font pt must differ between index 5 and 8 — confirming the font update path is distinct from the text-clear path (EC-12)")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MARK: - M4 Coordinator extension tests (CM-6 / §5.1.e)
+// ---------------------------------------------------------------------------
+
+/// Tests for the M4 BufferEditor.Coordinator extension (CM-6 / §5.1.e):
+/// copyToPasteboard, pasteAtCaret, closeKeyboard, applyIndentResult, nil-safety,
+/// and onTyping → ChromeVisibility wiring.
+///
+/// `@MainActor`: exercises UIKit (`UITextView`, `UIPasteboard`, `UIWindow`) and
+/// the `@MainActor` UIViewRepresentable types.
+///
+/// OQ-12 resolution: uses `makeMountedCoordinator()` (direct textView assignment
+/// + lightweight UIWindow mount) instead of UIHostingController to avoid
+/// SwiftUI view-lifecycle overhead. This matches what `makeUIView` does in production
+/// and is sufficient for the action-hook surface area.
+@MainActor
+final class BufferEditorCoordinatorM4Tests: XCTestCase {
+
+    // -----------------------------------------------------------------------
+    // MARK: - copyToPasteboard (FR-16)
+
+    /// copyToPasteboard() with viewModel.text="hello" → UIPasteboard.general.string=="hello".
+    func test_copyToPasteboard_withText_copiesText() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+        vm.updateText("hello")
+
+        let (_, coord, _) = makeMountedCoordinator(viewModel: vm)
+
+        // Clear pasteboard before test to avoid residue from other tests.
+        UIPasteboard.general.string = nil
+        coord.copyToPasteboard()
+
+        XCTAssertEqual(UIPasteboard.general.string, "hello",
+            "copyToPasteboard() must write viewModel.text to UIPasteboard.general (FR-16)")
+    }
+
+    /// copyToPasteboard() with empty buffer copies "" — no crash, no gate (FR-08 vs FR-16).
+    func test_copyToPasteboard_emptyBuffer_copiesEmptyString_noCrash() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+        // vm.text is "" on fresh init.
+
+        let (_, coord, _) = makeMountedCoordinator(viewModel: vm)
+
+        UIPasteboard.general.string = "existing"
+        coord.copyToPasteboard()
+
+        XCTAssertEqual(UIPasteboard.general.string, "",
+            "copyToPasteboard() on empty buffer must copy \"\" — copy is not gated on non-empty (FR-16 vs FR-08)")
+    }
+
+    // -----------------------------------------------------------------------
+    // MARK: - pasteAtCaret (FR-16 / EC-03)
+
+    /// pasteAtCaret() with non-empty pasteboard inserts text without crashing (FR-16).
+    func test_pasteAtCaret_nonEmptyPasteboard_insertsText_noCrash() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+
+        let (tv, coord, _) = makeMountedCoordinator(viewModel: vm)
+        tv.text = "start"
+
+        UIPasteboard.general.string = "pasted"
+        coord.pasteAtCaret()
+
+        // After paste, the text view must contain the pasted text (exact insertion
+        // point is implementation detail; the key contracts are: no crash + pasteboard consumed).
+        XCTAssertTrue(
+            (tv.text ?? "").contains("pasted"),
+            "pasteAtCaret() must insert non-empty pasteboard text into the text view (FR-16)")
+    }
+
+    /// pasteAtCaret() with empty/nil pasteboard is a no-op (EC-03 / FR-16).
+    func test_pasteAtCaret_emptyClipboard_noOp_noCrash() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+
+        let (tv, coord, _) = makeMountedCoordinator(viewModel: vm)
+        tv.text = "unchanged"
+
+        // Clear pasteboard.
+        UIPasteboard.general.string = nil
+        coord.pasteAtCaret()
+
+        XCTAssertEqual(tv.text, "unchanged",
+            "pasteAtCaret() with nil/empty pasteboard must leave text unchanged (EC-03 / FR-16)")
+    }
+
+    // -----------------------------------------------------------------------
+    // MARK: - closeKeyboard (FR-16 / EC-13)
+
+    /// closeKeyboard() calls resignFirstResponder on textView (FR-16).
+    ///
+    /// We verify indirectly: after makeFirstResponder + closeKeyboard, the text view
+    /// is no longer the first responder.
+    func test_closeKeyboard_resignsFirstResponder() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+
+        let (tv, coord, _) = makeMountedCoordinator(viewModel: vm)
+
+        // Attempt to make the text view first responder.
+        tv.becomeFirstResponder()
+        // Note: on the simulator without a physical keyboard, isFirstResponder
+        // may or may not be true; we assert no crash regardless.
+
+        coord.closeKeyboard()
+
+        // After closeKeyboard, textView must NOT be first responder.
+        XCTAssertFalse(tv.isFirstResponder,
+            "closeKeyboard() must call resignFirstResponder, leaving textView as non-first-responder (FR-16)")
+    }
+
+    /// closeKeyboard() when coordinator.textView is nil → no crash (EC-13 teardown safety).
+    func test_closeKeyboard_nilTextView_noCrash() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+        let editor = BufferEditor(viewModel: vm)
+        let coord = editor.makeCoordinator()
+        // coordinator.textView is nil (never set — simulates post-teardown).
+
+        // Must not crash.
+        coord.closeKeyboard()
+
+        XCTAssertTrue(true, "closeKeyboard() with nil textView must not crash (EC-13)")
+    }
+
+    // -----------------------------------------------------------------------
+    // MARK: - applyIndentResult (FR-17 / §5.1.e)
+
+    /// applyIndentResult(text:"  hello", range:(2,0)) → textView.text=="  hello",
+    /// selectedRange==(2,0) (FR-17).
+    func test_applyIndentResult_setsTextAndRange() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+
+        let (tv, coord, _) = makeMountedCoordinator(viewModel: vm)
+
+        coord.applyIndentResult(text: "  hello", range: NSRange(location: 2, length: 0))
+
+        XCTAssertEqual(tv.text, "  hello",
+            "applyIndentResult must set textView.text to the supplied text (FR-17)")
+        XCTAssertEqual(tv.selectedRange, NSRange(location: 2, length: 0),
+            "applyIndentResult must set textView.selectedRange to the supplied NSRange (FR-17)")
+    }
+
+    /// applyIndentResult when coordinator.textView is nil → no crash (EC-13).
+    func test_applyIndentResult_nilTextView_noCrash() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+        let editor = BufferEditor(viewModel: vm)
+        let coord = editor.makeCoordinator()
+        // coordinator.textView is nil.
+
+        coord.applyIndentResult(text: "  hello", range: NSRange(location: 2, length: 0))
+
+        XCTAssertTrue(true, "applyIndentResult with nil textView must not crash (EC-13)")
+    }
+
+    // -----------------------------------------------------------------------
+    // MARK: - textView weak reference nil-safety (EC-13 / FR-06)
+
+    /// coordinator.textView becomes nil after the UITextView deallocates (no retain cycle, EC-13).
+    func test_textView_weakReference_nilAfterDeallocation() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+        let editor = BufferEditor(viewModel: vm)
+        let coord = editor.makeCoordinator()
+
+        // Create a textView in a local scope, assign to coordinator, then let it deallocate.
+        autoreleasepool {
+            let tv = UITextView()
+            coord.textView = tv
+            XCTAssertNotNil(coord.textView, "coordinator.textView must be non-nil before deallocation")
+            // tv goes out of scope here; autoreleasepool drains it.
+        }
+
+        // After deallocation, the weak reference must be nil.
+        XCTAssertNil(coord.textView,
+            "coordinator.textView must be nil after the UITextView deallocates (no retain cycle; EC-13 / FR-06)")
+    }
+
+    /// All action hooks are nil-safe when textView is nil (EC-13).
+    func test_actionHooks_nilTextView_noCrash() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+        let editor = BufferEditor(viewModel: vm)
+        let coord = editor.makeCoordinator()
+        // coordinator.textView intentionally left nil.
+
+        // None of these must crash.
+        coord.copyToPasteboard()
+        coord.pasteAtCaret()
+        coord.closeKeyboard()
+        coord.applyIndentResult(text: "x", range: NSRange(location: 0, length: 0))
+
+        XCTAssertTrue(true, "all action hooks must be nil-safe when textView is nil (EC-13 / FR-06)")
+    }
+
+    // -----------------------------------------------------------------------
+    // MARK: - onTyping wiring → ChromeVisibility (FR-19 / §4.3)
+
+    /// onTyping wired to cv.injectTyping() → firing it flips cv.state to .hidden (FR-19).
+    func test_onTyping_wiredToChrome_flipsToHidden() {
+        let cv = ChromeVisibility()
+        XCTAssertEqual(cv.state, .visible, "precondition: cv starts .visible")
+
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+        let editor = BufferEditor(viewModel: vm)
+        let coord = editor.makeCoordinator()
+
+        // Wire the SM callback (mirrors ContentView / updateUIView wiring — FR-19).
+        coord.onTyping = { [weak cv] in cv?.injectTyping() }
+
+        // Fire the callback.
+        coord.onTyping?()
+
+        XCTAssertEqual(cv.state, .hidden,
+            "onTyping wired to cv.injectTyping() must flip ChromeVisibility to .hidden (FR-19 / §4.3)")
     }
 }

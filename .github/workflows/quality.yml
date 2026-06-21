@@ -44,3 +44,15 @@ jobs:
       # script lands. See §6 (plan changes) for the cross-file step log.
       - name: M1 structural gate
         run: bash tool/m1_gate.sh
+
+      # M4 Liquid Glass Chrome structural gate: enforces the 13 invariants
+      # added in Milestone 4 that M1 does not cover — glass-off-content,
+      # glass-scoped-to-Chrome, no-glass-fallback-branch, single-settings-
+      # instance, no-VM-surface-widen, text-private-set, no-Find-entry,
+      # no-separate-KeyboardAccessoryBar, SourceScanGateTest passthrough,
+      # populate-gate-removed, no-epoch-arithmetic-in-factory,
+      # About-URLs-not-localized, no-okio-across-boundary.
+      # Complements m1_gate (scaffold purity); m1 and m4 are not redundant.
+      # Spec refs: NFR-01/02/05/06/08; TASK-13 (Wave 8, sp-kmp-m4 plan).
+      - name: M4 structural gate
+        run: bash tool/m4_gate.sh

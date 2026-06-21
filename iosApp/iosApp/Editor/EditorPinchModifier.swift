@@ -12,12 +12,12 @@
 //   live apply on update, persist exactly once on end.
 //   ZERO `ln`/`round`/`1.15` derivations are permitted in this file.
 //
-// Injection correction (plan §6 deviation 2026-06-21):
+// Injection correction (plan §6 deviation 2026-06-21 → TASK-04 CM-1 fix):
 //   `SettingsRepository.shared` does NOT exist — it is a Kotlin interface, not
-//   a singleton.  The `settings` parameter uses
-//   `IosSettingsFactoryKt.createIosSettingsRepository()` as the production
-//   default, matching `BufferViewModel`'s initialiser default.  TASK-07 will
-//   inject the SAME instance into both so they share one store (see §5.3 seam).
+//   a singleton.  The `settings` parameter carries no default value; the single
+//   production instance is always supplied by the composition root (`iosAppApp.init()`)
+//   and forwarded through `ContentView` → `EditorPinchModifier(settings:)` (FR-03 / CM-1).
+//   Tests inject stubs via the explicit parameter.
 //
 // <!-- CANON GAP: ui-design-bible.md has no dedicated §Motion / gesture spec
 //      for the two-finger pinch-to-zoom interaction.  The slot bounds [0, 20]
@@ -93,13 +93,16 @@ struct EditorPinchModifier: ViewModifier {
 
     /// Creates an `EditorPinchModifier`.
     ///
+    /// The production `settings` instance is always supplied by the composition root
+    /// (`iosAppApp.init()`) and forwarded here via `ContentView`.  Tests inject a stub.
+    /// No default value: the composition root is the sole factory call site (FR-03 / CM-1).
+    ///
     /// - Parameters:
     ///   - viewModel: The buffer presentation-state model.
-    ///   - settings: The settings repository for persistence.  Defaults to the
-    ///     production store via `IosSettingsFactoryKt.createIosSettingsRepository()`.
+    ///   - settings: The settings repository for persistence.
     init(
         viewModel: BufferViewModel,
-        settings: SettingsRepository = IosSettingsFactoryKt.createIosSettingsRepository()
+        settings: SettingsRepository
     ) {
         self.viewModel = viewModel
         self.settings = settings

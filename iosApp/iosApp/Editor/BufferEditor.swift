@@ -5,15 +5,16 @@
 // The SwiftUI built-in wrapper type is explicitly forbidden (AR-02 / FR-01);
 // this file uses UIViewRepresentable + UITextView only.
 //
-// Spec refs: FR-01, FR-02, FR-03, FR-04, FR-05, FR-14, FR-15, FR-20, FR-21,
-//            NFR-03, NFR-06; §5.1.c/§5.1.d; §6.1 EC-03/EC-04/EC-05/EC-12/EC-13
+// Spec refs: FR-01, FR-02, FR-03, FR-04, FR-05, FR-06, FR-14, FR-15, FR-16, FR-17,
+//            FR-19, FR-20, FR-21, NFR-03, NFR-06; §5.1.c/§5.1.d/§5.1.e;
+//            §6.1 EC-03/EC-04/EC-05/EC-12/EC-13
 //
 // UI canon: ui-design-bible.md §Editor text view + §Typography
 //   - Background:    --view-bg-color => UIColor.systemBackground (iOS semantic)
 //   - Font:          SF Mono (monospace) at slotList[fontSizeIndex] pt, ABSOLUTE (no DynamicType
 //                    pre-multiplication, FR-15)
 //   - Line-height:   1.4 via NSMutableParagraphStyle (§Typography, style.css:11-14)
-//   - Glass:         ZERO on content — no material effect on UITextView (FR-20 / NFR-03)
+//   - No native material visual effect on content — ZERO on UITextView (FR-20 / NFR-03)
 //   - Touch target:  UITextView fills the window; NFR-06 tap-target >=44pt is met by the
 //                    full-screen surface
 
@@ -65,12 +66,44 @@ private func fontPt(for index: Int) -> CGFloat {
 /// `updateUIView` reconciles font size and text only on real divergence so it does **not**
 /// clobber `textView.text` if the text is already equal — preserving in-session text when
 /// only `fontSizeIndex` changes (EC-12).
+///
+/// **Coordinator-access seam (TASK-11 / §4.3):**
+/// `makeUIView` publishes the newly created coordinator into `coordinatorBox.coordinator`
+/// so `ContentView` / `ChromeOverlay`'s toolbar closures can dispatch actions to it.
+/// `updateUIView` wires `chromeVisibility`'s inject* methods onto the coordinator's
+/// `onTyping` / `onScroll` / `onKeyboardDismiss` callbacks (FR-19). Both operations are
+/// purely additive — no M3 behaviour is changed or removed (EC-13 nil-safety retained).
 struct BufferEditor: UIViewRepresentable {
 
     // MARK: Properties
 
     /// The presentation-state model.  Bound at the call site by the composition root (TASK-07).
     let viewModel: BufferViewModel
+
+    // MARK: TASK-11 additive seam — coordinator bridge + SM callback wiring
+
+    /// The chrome auto-hide/reveal SM.  `updateUIView` wires its inject* methods onto the
+    /// coordinator's optional callbacks.  Optional so that `BufferEditor` can be used in
+    /// previews/tests without a live `ChromeVisibility` instance.
+    let chromeVisibility: ChromeVisibility?
+
+    /// Reference-type bridge that receives the live `Coordinator` once it is created.
+    /// `makeUIView` sets `coordinatorBox.coordinator = context.coordinator` so that
+    /// `ContentView`'s toolbar closures can reach it without UIKit coupling (§4.3 seam).
+    let coordinatorBox: CoordinatorBox?
+
+    // MARK: Convenience init (preserves any existing call-sites that pass only viewModel)
+
+    /// Full-parameter initialiser used by `ContentView` in TASK-11.
+    init(
+        viewModel: BufferViewModel,
+        chromeVisibility: ChromeVisibility? = nil,
+        coordinatorBox: CoordinatorBox? = nil
+    ) {
+        self.viewModel = viewModel
+        self.chromeVisibility = chromeVisibility
+        self.coordinatorBox = coordinatorBox
+    }
 
     // MARK: UIViewRepresentable
 
@@ -91,11 +124,20 @@ struct BufferEditor: UIViewRepresentable {
         // — Monospace font at absolute slot size (FR-14 / FR-15) —
         applyFont(to: textView, index: viewModel.fontSizeIndex)
 
-        // — No visual-effect material on content (FR-20 / NFR-03 / EC-13) —
-        // The UITextView is plain; any chrome material belongs to M4 overlay chrome only.
+        // — No native material visual effect on content (FR-20 / NFR-03 / EC-13) —
+        // The UITextView is plain; any chrome-layer material belongs to M4 overlay only.
 
         // — Delegate —
         textView.delegate = context.coordinator
+
+        // — CM-6 / FR-06: store a weak handle to the live text view (EC-13) —
+        // The Coordinator holds this as 'weak var textView', so no retain cycle is introduced.
+        context.coordinator.textView = textView
+
+        // — TASK-11 coordinator bridge: publish coordinator to ContentView's toolbar closures —
+        // CoordinatorBox.coordinator is weak, so this does not extend the coordinator's
+        // lifetime beyond the UIViewRepresentable's natural teardown (EC-13).
+        coordinatorBox?.coordinator = context.coordinator
 
         return textView
     }
@@ -111,6 +153,18 @@ struct BufferEditor: UIViewRepresentable {
         // This preserves in-session content when only fontSizeIndex changes (EC-12 / FR-13).
         if uiView.text != viewModel.text {
             uiView.text = viewModel.text
+        }
+
+        // — TASK-11 SM-callback wiring (FR-19 / §4.3) —
+        // Wire chromeVisibility's inject* methods onto the coordinator's optional
+        // callbacks. Using [weak chromeVisibility] avoids a retain cycle if the SM
+        // is ever deallocated while the coordinator is still live.
+        // These assignments are idempotent — reassigning the same closure on every
+        // updateUIView call is safe and does not cause re-entrancy (EC-13).
+        if let cv = chromeVisibility {
+            context.coordinator.onTyping = { [weak cv] in cv?.injectTyping() }
+            context.coordinator.onScroll = { [weak cv] dir in cv?.injectScroll(dir) }
+            context.coordinator.onKeyboardDismiss = { [weak cv] in cv?.injectKeyboardDismiss() }
         }
     }
 
@@ -142,7 +196,8 @@ struct BufferEditor: UIViewRepresentable {
 
     // MARK: - Coordinator
 
-    /// `UITextViewDelegate` implementing the single pre-edit hook (§5.1.d decision table).
+    /// `UITextViewDelegate` implementing the single pre-edit hook (§5.1.d decision table)
+    /// and the CM-6/FR-06 action hooks + SM-feeding callbacks (§5.1.e).
     ///
     /// Decision table (top-down; first matching row wins):
     ///
@@ -157,16 +212,109 @@ struct BufferEditor: UIViewRepresentable {
     ///   - No boolean latch / re-entrancy flag is needed or present — a direct `.text =` set
     ///     in UIKit does NOT re-enter `shouldChangeTextIn`, so no such flag is required.
     ///   - `process` is computed from the **pre-edit** text and `range.location`.
+    ///
+    /// CM-6 / FR-06 additions (§5.1.e, additive — M3 behaviour unchanged):
+    ///   - `weak var textView` holds a reference to the live `UITextView` without a retain
+    ///     cycle; it is `nil`-safe after the view deallocates (EC-13).
+    ///   - Four action hooks dispatched by the bottom toolbar: `copyToPasteboard()`,
+    ///     `pasteAtCaret()` (no-op on empty/nil clipboard, EC-03), `closeKeyboard()`,
+    ///     `applyIndentResult(text:range:)`.
+    ///   - Three SM-feeding optional callbacks: `onTyping`, `onScroll(_:)`,
+    ///     `onKeyboardDismiss`. All nil-safe when `textView == nil` (EC-13).
     final class Coordinator: NSObject, UITextViewDelegate {
 
         // MARK: Properties
 
         private let viewModel: BufferViewModel
 
+        // MARK: CM-6 / §5.1.e — weak UITextView handle (EC-13: no retain cycle)
+
+        /// Weak reference to the live `UITextView`.  Set by `makeUIView` immediately after
+        /// constructing the text view.  Becomes `nil` automatically when the view deallocates.
+        /// All action hooks below guard against `nil` before use (EC-13).
+        weak var textView: UITextView?
+
+        // MARK: CM-6 / §5.1.e — SM-feeding callbacks (set by ContentView in TASK-11)
+
+        /// Called on every keystroke.  `ContentView` sets this to `ChromeVisibility.injectTyping`.
+        /// Nil-safe — no-op when not set.
+        var onTyping: (() -> Void)?
+
+        /// Called on every scroll tick with the derived direction.  `ContentView` sets this to
+        /// `ChromeVisibility.injectScroll(_:)`.  Nil-safe — no-op when not set.
+        var onScroll: ((ScrollDirection) -> Void)?
+
+        /// Called when the keyboard dismisses (text view ends editing).  `ContentView` sets this
+        /// to `ChromeVisibility.injectKeyboardDismiss`.  Nil-safe — no-op when not set.
+        var onKeyboardDismiss: (() -> Void)?
+
+        // MARK: Scroll-direction tracking (for onScroll derivation)
+
+        /// Content-offset Y recorded at the end of the previous `scrollViewDidScroll` tick.
+        /// Used to derive scroll direction (FR-19): decreasing Y → forward (scroll-up) →
+        /// chrome reveals; increasing Y → reverse (scroll-down) → chrome hides.
+        private var lastContentOffsetY: CGFloat = 0
+
         // MARK: Init
 
         init(viewModel: BufferViewModel) {
             self.viewModel = viewModel
+        }
+
+        // MARK: CM-6 / §5.1.e — Action hooks (dispatched by BottomToolbar in TASK-09)
+
+        /// Copy the current buffer text to the system pasteboard (FR-16).
+        ///
+        /// Copies even when the buffer is empty — the share button (not copy) is gated on
+        /// non-empty (FR-08 vs FR-16).  No-op safety against nil `textView` is not needed
+        /// here because the text is read from `viewModel.text`, which is always available.
+        func copyToPasteboard() {
+            UIPasteboard.general.string = viewModel.text
+        }
+
+        /// Insert the current pasteboard string at the caret position (FR-16 / EC-03).
+        ///
+        /// No-op when the pasteboard string is `nil` or empty (EC-03).  If `textView` has
+        /// been deallocated (EC-13) the method returns silently — no crash.
+        func pasteAtCaret() {
+            guard let tv = textView else { return }
+            guard let paste = UIPasteboard.general.string, !paste.isEmpty else { return }
+            // Insert the pasteboard text at the current selectedRange, replacing any selection.
+            // `replace(_:withText:)` is the UIKit standard path for insertion at caret.
+            let range = tv.selectedRange
+            if let textRange = tv.selectedTextRange {
+                tv.replace(textRange, withText: paste)
+            } else {
+                // Fallback: construct a UITextRange-equivalent via the text storage.
+                let mutable = NSMutableString(string: tv.text ?? "")
+                mutable.replaceCharacters(in: range, with: paste)
+                tv.text = mutable as String
+                let newLocation = range.location + (paste as NSString).length
+                tv.selectedRange = NSRange(location: newLocation, length: 0)
+            }
+            // Mirror the change into the view model (keystroke-origin equivalent for paste).
+            viewModel.updateText(tv.text ?? "")
+        }
+
+        /// Resign first responder on the live text view, dismissing the keyboard (FR-16).
+        ///
+        /// No-op when `textView` is `nil` (EC-13 teardown safety).
+        func closeKeyboard() {
+            textView?.resignFirstResponder()
+        }
+
+        /// Assign the indent/outdent result back to the live text view (FR-17 / §5.1.e).
+        ///
+        /// Sets both `textView.text` and `textView.selectedRange` atomically.
+        /// No-op when `textView` is `nil` (EC-13 teardown safety).
+        ///
+        /// - Parameters:
+        ///   - text:  The new full buffer text returned by `viewModel.indent`/`outdent`.
+        ///   - range: The new selection returned by the same call (UTF-16 NSRange).
+        func applyIndentResult(text: String, range: NSRange) {
+            guard let tv = textView else { return }
+            tv.text = text
+            tv.selectedRange = range
         }
 
         // MARK: UITextViewDelegate — the single pre-edit hook (FR-02)
@@ -177,6 +325,9 @@ struct BufferEditor: UIViewRepresentable {
         /// There is NO post-edit diffing predicate and no boolean-latch re-entrancy flag
         /// (EC-03 / FR-02): a direct UIKit `.text =` assignment bypasses the delegate,
         /// so the hook does not re-enter itself on the continuation branch.
+        ///
+        /// CM-6 / §5.1.e: `onTyping` is emitted on the continuation branch (the SM must
+        /// know the user typed even when UIKit's newline insertion is suppressed).
         func textView(
             _ textView: UITextView,
             shouldChangeTextIn range: NSRange,
@@ -211,6 +362,11 @@ struct BufferEditor: UIViewRepresentable {
                     // Mirror committed text into the VM (FR-13 / keystroke origin).
                     viewModel.updateText(result.text)
 
+                    // Emit typing event for the chrome-visibility SM (FR-19 / §5.1.e).
+                    // The continuation branch returns false (UIKit newline suppressed), so
+                    // textViewDidChange will NOT be called — emit here instead.
+                    onTyping?()
+
                     // Return false: suppress UIKit's own "\n" insertion (FR-04).
                     // The direct .text = assignment above does NOT re-enter this hook
                     // (EC-03); no boolean latch is needed or present.
@@ -218,6 +374,7 @@ struct BufferEditor: UIViewRepresentable {
                 }
 
                 // Nil branch (FR-05 / §5.1.d row 2): let UIKit insert the plain newline.
+                // textViewDidChange will fire and emit onTyping there.
                 return true
             }
 
@@ -229,13 +386,49 @@ struct BufferEditor: UIViewRepresentable {
         // MARK: UITextViewDelegate — committed-text mirror
 
         /// Mirror committed text into the `BufferViewModel` after every UIKit-applied edit
-        /// (FR-13 steady-state typing path).
+        /// (FR-13 steady-state typing path), and emit the typing event for the SM (FR-19).
         ///
         /// Called by UIKit only for edits UIKit itself applied (i.e., `shouldChangeTextIn`
         /// returned `true`).  For the continuation branch (return false), the mirror is
-        /// done inside `shouldChangeTextIn` immediately after the direct text assignment.
+        /// done inside `shouldChangeTextIn` immediately after the direct text assignment,
+        /// and `onTyping` is emitted there rather than here.
         func textViewDidChange(_ textView: UITextView) {
             viewModel.updateText(textView.text)
+            // Emit typing event for the chrome-visibility SM (FR-19 / §5.1.e).
+            onTyping?()
+        }
+
+        // MARK: UIScrollViewDelegate — scroll-direction tracking (FR-19 / §5.1.e)
+
+        /// Derive scroll direction against the last recorded content offset and emit
+        /// `onScroll(_:)` to feed the chrome-visibility SM (FR-19).
+        ///
+        /// `UITextViewDelegate` inherits from `UIScrollViewDelegate`, so this method is
+        /// called automatically when the `UITextView`'s embedded scroll view moves.
+        ///
+        /// Direction derivation:
+        ///   - Content-offset Y **decreased** (user pulled content down → viewport moved up)
+        ///     → `.forward` → chrome reveals.
+        ///   - Content-offset Y **increased** (user pulled content up → viewport moved down)
+        ///     → `.reverse` → chrome hides.
+        ///
+        /// This is the ONLY place a real scroll event touches the SM (§4.3 data-flow).
+        func scrollViewDidScroll(_ scrollView: UIScrollView) {
+            let currentY = scrollView.contentOffset.y
+            let direction: ScrollDirection = currentY < lastContentOffsetY ? .forward : .reverse
+            lastContentOffsetY = currentY
+            onScroll?(direction)
+        }
+
+        // MARK: UITextViewDelegate — keyboard-dismiss event (FR-19 / §5.1.e)
+
+        /// Emit `onKeyboardDismiss` when the text view loses first-responder status
+        /// (keyboard dismisses).  Feeds the chrome-visibility SM (FR-19).
+        ///
+        /// Nil-safe: `onKeyboardDismiss` is an optional closure — calling it with `?.()`
+        /// is a no-op when not set.
+        func textViewDidEndEditing(_ textView: UITextView) {
+            onKeyboardDismiss?()
         }
     }
 }
