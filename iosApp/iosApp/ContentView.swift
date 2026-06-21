@@ -153,6 +153,14 @@ struct ContentView: View {
                 viewModel: viewModel
             )
         }
+        // ── Theme application (FR-23 / M6) ──────────────────────────────────
+        // Reads `menuVM.colorScheme` — an @Observable property updated by
+        // `selectTheme(_:)` — establishing a SwiftUI observation dependency so
+        // the entire view hierarchy re-renders whenever the user changes the theme.
+        // `swiftUIColorScheme` maps .follow→nil (inherit device), .light→.light,
+        // .dark→.dark (QP §3.1; `@unknown default` in the extension handles future
+        // non-frozen KMP enum cases with nil/System fallback — C-04/C-05).
+        .preferredColorScheme(menuVM.colorScheme.swiftUIColorScheme)
         // ── .safeAreaInset: BottomToolbar (anti-additive keyboard avoidance) ──
         // SwiftUI's .safeAreaInset provides max(keyboardHeight, bottomSafeAreaInset)
         // automatically — NO manual sum arithmetic anywhere (FR-18/NFR-07/EC-17).

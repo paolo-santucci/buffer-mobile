@@ -96,7 +96,7 @@ struct TopPill: View {
             String(localized: "Share", comment: "Share button accessibility label in the top pill")
         )
         .accessibilityAddTraits(.isButton)
-        // Tooltip shown on long-press / pointer hover (FR-23, EN literal — localized in M6).
+        // Tooltip shown on long-press / pointer hover (FR-23).
         .help(
             String(localized: "Share text", comment: "Share button tooltip in the top pill (FR-23)")
         )
@@ -125,7 +125,7 @@ struct TopPill: View {
             String(localized: "Menu", comment: "Overflow menu button accessibility label in the top pill")
         )
         .accessibilityAddTraits(.isButton)
-        // Tooltip (FR-23, EN literal — localized in M6).
+        // Tooltip (FR-23).
         .help(
             String(localized: "Open menu", comment: "Overflow menu button tooltip in the top pill (FR-23)")
         )

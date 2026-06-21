@@ -1,0 +1,516 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%d points" : {
+      "comment" : "Font size label accessibility text (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d points"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d punti"
+          }
+        }
+      }
+    },
+    "%d pt" : {
+      "comment" : "Font size point label, e.g. '14 pt' (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d pt"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d pt"
+          }
+        }
+      }
+    },
+    "About" : {
+      "comment" : "About section header in the menu bubble (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "About"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Informazioni"
+          }
+        }
+      }
+    },
+    "Always uses a dark background." : {
+      "comment" : "Theme picker row description for Dark (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Always uses a dark background."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa sempre uno sfondo scuro."
+          }
+        }
+      }
+    },
+    "Always uses a light background." : {
+      "comment" : "Theme picker row description for Light (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Always uses a light background."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usa sempre uno sfondo chiaro."
+          }
+        }
+      }
+    },
+    "Copy" : {
+      "comment" : "Copy button accessibility label in the bottom toolbar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copia"
+          }
+        }
+      }
+    },
+    "Copy text" : {
+      "comment" : "Copy button tooltip in the bottom toolbar (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy text"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copia il testo"
+          }
+        }
+      }
+    },
+    "Dark" : {
+      "comment" : "Theme picker row label — dark theme (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dark"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scuro"
+          }
+        }
+      }
+    },
+    "Decrease font size" : {
+      "comment" : "Font size decrease button accessibility label and tooltip (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decrease font size"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Riduci dimensione carattere"
+          }
+        }
+      }
+    },
+    "Follows your device appearance setting." : {
+      "comment" : "Theme picker row description for System (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Follows your device appearance setting."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Segue l'aspetto del dispositivo."
+          }
+        }
+      }
+    },
+    "Hide keyboard" : {
+      "comment" : "Close-keyboard button accessibility label and tooltip in the bottom toolbar (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide keyboard"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nascondi tastiera"
+          }
+        }
+      }
+    },
+    "Increase font size" : {
+      "comment" : "Font size increase button accessibility label and tooltip (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Increase font size"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aumenta dimensione carattere"
+          }
+        }
+      }
+    },
+    "Indent" : {
+      "comment" : "Indent button accessibility label and tooltip in the bottom toolbar (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Indent"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aumenta rientro"
+          }
+        }
+      }
+    },
+    "Light" : {
+      "comment" : "Theme picker row label — light theme (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Light"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chiaro"
+          }
+        }
+      }
+    },
+    "Menu" : {
+      "comment" : "Overflow menu button accessibility label in the top pill",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menu"
+          }
+        }
+      }
+    },
+    "No recent notes." : {
+      "comment" : "Empty state text in the recovery submenu (EC-02 / FR-12 / FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No recent notes."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nessuna nota recente."
+          }
+        }
+      }
+    },
+    "Not selected" : {
+      "comment" : "Accessibility deselected state for theme row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not selected"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Non selezionato"
+          }
+        }
+      }
+    },
+    "Open menu" : {
+      "comment" : "Overflow menu button tooltip in the top pill (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open menu"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apri il menu"
+          }
+        }
+      }
+    },
+    "Outdent" : {
+      "comment" : "De-indent button accessibility label and tooltip in the bottom toolbar (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Outdent"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Riduci rientro"
+          }
+        }
+      }
+    },
+    "Paste" : {
+      "comment" : "Paste button accessibility label in the bottom toolbar",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Incolla"
+          }
+        }
+      }
+    },
+    "Paste text" : {
+      "comment" : "Paste button tooltip in the bottom toolbar (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste text"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Incolla il testo"
+          }
+        }
+      }
+    },
+    "Recent notes" : {
+      "comment" : "Recovery submenu header label, accessibility label, and tooltip in the menu bubble (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent notes"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Note recenti"
+          }
+        }
+      }
+    },
+    "Report an issue" : {
+      "comment" : "About section issue link label (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Report an issue"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Segnala un problema"
+          }
+        }
+      }
+    },
+    "Restore note: %@, saved %@" : {
+      "comment" : "Recovery row accessibility label: restore note title and date (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restore note: %@, saved %@"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ripristina nota: %1$@, salvata il %2$@"
+          }
+        }
+      }
+    },
+    "Restore this note" : {
+      "comment" : "Recovery row tooltip (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restore this note"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ripristina questa nota"
+          }
+        }
+      }
+    },
+    "Selected" : {
+      "comment" : "Accessibility selected state for theme row",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selezionato"
+          }
+        }
+      }
+    },
+    "Share" : {
+      "comment" : "Share button accessibility label in the top pill",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Condividi"
+          }
+        }
+      }
+    },
+    "Share text" : {
+      "comment" : "Share button tooltip in the top pill (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share text"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Condividi il testo"
+          }
+        }
+      }
+    },
+    "System" : {
+      "comment" : "Theme picker row label — follow system setting (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "System"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sistema"
+          }
+        }
+      }
+    },
+    "Website" : {
+      "comment" : "About section website link label (FR-23)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Website"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sito web"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

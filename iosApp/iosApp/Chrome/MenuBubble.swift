@@ -226,7 +226,7 @@ struct MenuBubble: View {
             // {n}pt label — shows the actual point size for the current index.
             Text(
                 String(
-                    format: String(localized: "%dpt", comment: "Font size point label, e.g. '14pt' (FR-23)"),
+                    format: String(localized: "%d pt", comment: "Font size point label, e.g. '14 pt' (FR-23)"),
                     menuVM.fontSizePt
                 )
             )

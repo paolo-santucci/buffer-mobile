@@ -34,6 +34,9 @@
 		A10000F1 /* LifecycleSaveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000F0 /* LifecycleSaveCoordinator.swift */; };
 		A10000F3 /* LifecycleSaveCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000F2 /* LifecycleSaveCoordinatorTests.swift */; };
 		A10000F5 /* ContentViewLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000F4 /* ContentViewLifecycleTests.swift */; };
+		A10000F6 /* ThemeColorScheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000F7 /* ThemeColorScheme.swift */; };
+		A10000F8 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A10000F9 /* Localizable.xcstrings */; };
+		A10000FA /* ThemeResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000FB /* ThemeResolutionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -75,6 +78,9 @@
 		A10000F0 /* LifecycleSaveCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifecycleSaveCoordinator.swift; sourceTree = "<group>"; };
 		A10000F2 /* LifecycleSaveCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifecycleSaveCoordinatorTests.swift; sourceTree = "<group>"; };
 		A10000F4 /* ContentViewLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewLifecycleTests.swift; sourceTree = "<group>"; };
+		A10000F7 /* ThemeColorScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeColorScheme.swift; sourceTree = "<group>"; };
+		A10000F9 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		A10000FB /* ThemeResolutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeResolutionTests.swift; sourceTree = "<group>"; };
 		A1000086 /* iosAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iosAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -112,12 +118,14 @@
 				A1000010 /* iosAppApp.swift */,
 				A1000011 /* ContentView.swift */,
 				A10000F0 /* LifecycleSaveCoordinator.swift */,
+				A10000F7 /* ThemeColorScheme.swift */,
 				A1000060 /* TextOffsetBridge.swift */,
 				A1000062 /* BufferViewModel.swift */,
 				A1000064 /* BufferEditor.swift */,
 				A1000066 /* EditorPinchModifier.swift */,
 				A1000092 /* Chrome */,
 				A1000012 /* Assets.xcassets */,
+				A10000F9 /* Localizable.xcstrings */,
 				A1000013 /* Info.plist */,
 			);
 			path = iosApp;
@@ -160,6 +168,7 @@
 				A10000E6 /* IosRecoveryFactoryTests.swift */,
 				A10000F2 /* LifecycleSaveCoordinatorTests.swift */,
 				A10000F4 /* ContentViewLifecycleTests.swift */,
+				A10000FB /* ThemeResolutionTests.swift */,
 			);
 			path = iosAppTests;
 			sourceTree = "<group>";
@@ -230,6 +239,7 @@
 			knownRegions = (
 				en,
 				Base,
+				it,
 			);
 			mainGroup = A1000030;
 			packageReferences = (
@@ -251,6 +261,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000003 /* Assets.xcassets in Resources */,
+				A10000F8 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -264,6 +275,7 @@
 				A1000001 /* iosAppApp.swift in Sources */,
 				A1000002 /* ContentView.swift in Sources */,
 				A10000F1 /* LifecycleSaveCoordinator.swift in Sources */,
+				A10000F6 /* ThemeColorScheme.swift in Sources */,
 				A1000061 /* TextOffsetBridge.swift in Sources */,
 				A1000063 /* BufferViewModel.swift in Sources */,
 				A1000065 /* BufferEditor.swift in Sources */,
@@ -293,6 +305,7 @@
 				A10000E7 /* IosRecoveryFactoryTests.swift in Sources */,
 				A10000F3 /* LifecycleSaveCoordinatorTests.swift in Sources */,
 				A10000F5 /* ContentViewLifecycleTests.swift in Sources */,
+				A10000FA /* ThemeResolutionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

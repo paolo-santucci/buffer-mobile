@@ -68,3 +68,20 @@ jobs:
       # Spec refs: FR-14, FR-17, FR-20; R-01, AR-01, R-11; §5.3.
       - name: M5 Share & Lifecycle gate
         run: bash tool/m5_gate.sh
+
+      # M6 Localization & Theming structural gate: enforces the 12 invariants
+      # added in Milestone 6 — xcstrings-exists (git-tracked Localizable.xcstrings),
+      # xcstrings-has-it+en (catalog contains both "en" and "it"), xcstrings-registered
+      # (pbxproj has text.json.xcstrings PBXFileReference AND "it" in knownRegions),
+      # shared-zero-ui-strings (commonMain holds no display string literals, FR-24),
+      # preferredColorScheme-at-root (wired in ContentView.swift, FR-23),
+      # no-hardcoded-scheme (no literal .dark/.light at root, C-05),
+      # launch-colorset-has-dark (LaunchBackground.colorset luminosity dark variant),
+      # no-Text-verbatim-userfacing (no Text(verbatim:) in Chrome/Editor),
+      # tooltips-localized (zero "localized in M6" markers + String(localized: in
+      # TopPill/BottomToolbar), ThemeResolutionTests-registered (in pbxproj test
+      # Sources phase), tap-target-44 (frame(minWidth/minHeight: 44) in Chrome/),
+      # m1+m4+m5-still-pass (chains all three prior gates).
+      # Spec refs: FR-23, FR-24; NFR-04, NFR-05.
+      - name: M6 Localization & Theming gate
+        run: bash tool/m6_gate.sh

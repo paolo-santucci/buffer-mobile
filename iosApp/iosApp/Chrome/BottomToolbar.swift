@@ -139,7 +139,7 @@ struct BottomToolbar: View {
             String(localized: "Copy", comment: "Copy button accessibility label in the bottom toolbar")
         )
         .accessibilityAddTraits(.isButton)
-        // Tooltip (FR-23, EN literal — localized in M6).
+        // Tooltip (FR-23).
         .help(
             String(localized: "Copy text", comment: "Copy button tooltip in the bottom toolbar (FR-23)")
         )
@@ -167,7 +167,7 @@ struct BottomToolbar: View {
             String(localized: "Paste", comment: "Paste button accessibility label in the bottom toolbar")
         )
         .accessibilityAddTraits(.isButton)
-        // Tooltip (FR-23, EN literal — localized in M6).
+        // Tooltip (FR-23).
         .help(
             String(localized: "Paste text", comment: "Paste button tooltip in the bottom toolbar (FR-23)")
         )
@@ -193,7 +193,7 @@ struct BottomToolbar: View {
             String(localized: "Hide keyboard", comment: "Close-keyboard button accessibility label in the bottom toolbar (FR-23 new string)")
         )
         .accessibilityAddTraits(.isButton)
-        // Tooltip (FR-23, EN literal — localized in M6).
+        // Tooltip (FR-23).
         .help(
             String(localized: "Hide keyboard", comment: "Close-keyboard button tooltip in the bottom toolbar (FR-23)")
         )
@@ -224,7 +224,7 @@ struct BottomToolbar: View {
             String(localized: "Indent", comment: "Indent button accessibility label in the bottom toolbar (FR-23 new string)")
         )
         .accessibilityAddTraits(.isButton)
-        // Tooltip (FR-23, EN literal — localized in M6).
+        // Tooltip (FR-23).
         .help(
             String(localized: "Indent", comment: "Indent button tooltip in the bottom toolbar (FR-23)")
         )
@@ -253,7 +253,7 @@ struct BottomToolbar: View {
             String(localized: "Outdent", comment: "De-indent button accessibility label in the bottom toolbar (FR-23 new string)")
         )
         .accessibilityAddTraits(.isButton)
-        // Tooltip (FR-23, EN literal — localized in M6).
+        // Tooltip (FR-23).
         .help(
             String(localized: "Outdent", comment: "De-indent button tooltip in the bottom toolbar (FR-23)")
         )
