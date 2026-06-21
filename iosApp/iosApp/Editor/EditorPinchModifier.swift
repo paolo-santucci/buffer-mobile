@@ -28,6 +28,26 @@
 import SwiftUI
 import shared
 
+// MARK: - Transient gesture state
+
+/// Reference-type holder for the per-gesture anchor index.
+///
+/// This MUST be a class, not a `@State Int?`, because the value has to survive
+/// two distinct lifecycles where a bare `@State` value would be lost:
+///   1. **Production** — SwiftUI re-evaluates `body` during an active pinch
+///      (we mutate `viewModel.fontSizeIndex` live, which can trigger a re-render
+///      that re-creates this `ViewModifier` struct). `@State` keeps the *reference*
+///      stable across those re-creations; we mutate the referenced object, so the
+///      captured `startIndex` is not reset mid-gesture.
+///   2. **XCTest** — the seam methods are called directly on a non-rendered
+///      modifier. A `@State` *value* write on an unbound modifier is silently
+///      discarded (there is no SwiftUI storage location), so `startIndex` would
+///      never stick. Mutating a class property persists regardless of binding.
+private final class PinchGestureState {
+    /// The `fontSizeIndex` captured at gesture begin; `nil` when no gesture is active.
+    var startIndex: Int? = nil
+}
+
 // MARK: - EditorPinchModifier
 
 /// A `ViewModifier` that attaches a two-finger pinch gesture to the editor
@@ -87,9 +107,10 @@ struct EditorPinchModifier: ViewModifier {
 
     // MARK: - Internal gesture state
 
-    /// The `fontSizeIndex` captured at gesture begin.
-    /// `nil` means no gesture is in progress (seam not armed).
-    @State private var gestureStartIndex: Int? = nil
+    /// The transient gesture state (anchor index). Held by reference via `@State`
+    /// so mutations persist across body re-evaluations and direct seam calls.
+    /// `startIndex == nil` means no gesture is in progress (seam not armed).
+    @State private var gestureState = PinchGestureState()
 
     // MARK: - ViewModifier body
 
@@ -122,8 +143,8 @@ struct EditorPinchModifier: ViewModifier {
     ///
     /// - Parameter currentIndex: The `fontSizeIndex` to use as the zoom anchor.
     internal func onPinchBegan(currentIndex: Int) {
-        guard gestureStartIndex == nil else { return }
-        gestureStartIndex = currentIndex
+        guard gestureState.startIndex == nil else { return }
+        gestureState.startIndex = currentIndex
     }
 
     /// Called on each gesture update.
@@ -136,10 +157,10 @@ struct EditorPinchModifier: ViewModifier {
     ///   Kotlin object verbatim (Conformance Rule 9).
     internal func onPinchChanged(scale: CGFloat) {
         // Arm the seam on first update if not yet armed.
-        if gestureStartIndex == nil {
-            gestureStartIndex = viewModel.fontSizeIndex
+        if gestureState.startIndex == nil {
+            gestureState.startIndex = viewModel.fontSizeIndex
         }
-        guard let startIndex = gestureStartIndex else { return }
+        guard let startIndex = gestureState.startIndex else { return }
 
         // ALL arithmetic delegated to shared PinchZoom (FR-17, Conformance Rule 9).
         // `scale` is cast to Double for the Kotlin call; result is Int32 bridged to Swift.
@@ -160,7 +181,7 @@ struct EditorPinchModifier: ViewModifier {
     ///
     /// A cancelled or single-finger gesture must not reach this path.
     internal func onPinchEnded() {
-        guard gestureStartIndex != nil else {
+        guard gestureState.startIndex != nil else {
             // Seam was never armed — nothing to save.
             return
         }
@@ -169,6 +190,6 @@ struct EditorPinchModifier: ViewModifier {
         let updated = settings.load().setFontSizeIndex(index: Int32(viewModel.fontSizeIndex))
         settings.save(settings: updated)
         // Reset the seam so the next gesture starts clean.
-        gestureStartIndex = nil
+        gestureState.startIndex = nil
     }
 }

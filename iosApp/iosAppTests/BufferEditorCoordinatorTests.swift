@@ -114,14 +114,22 @@ final class BufferEditorCoordinatorTests: XCTestCase {
         )
     }
 
-    /// "- " (empty marker) + "\n" terminates the list; marker removed (FR-04 / EC-04).
+    /// Empty trailing marker + "\n" terminates the list; the dangling marker is removed
+    /// (FR-04 / EC-04).
+    ///
+    /// NOTE on the fixture: termination is gated on the shared `twoAboveStartsWith`
+    /// check, which deliberately returns false for a *lone first-line* marker (the
+    /// E-I2 quirk preserved verbatim from the Dart oracle — a lone first-line marker
+    /// *continues* rather than terminates). To exercise the real termination path we
+    /// need a genuine continued list: a preceding item, then the empty trailing marker.
     func test_shouldChange_continuation_emptyMarker_terminatesList() {
         let vm = BufferViewModel(settings: StubSettingsRepository())
         let (tv, coord) = makeCoordinator(viewModel: vm)
 
-        let line = "- "
-        tv.text = line
-        let range = NSRange(location: (line as NSString).length, length: 0)
+        // A list whose last line is a dangling empty marker.
+        let buffer = "- a\n- "
+        tv.text = buffer
+        let range = NSRange(location: (buffer as NSString).length, length: 0)
 
         let result = coord.textView(tv, shouldChangeTextIn: range, replacementText: "\n")
 
@@ -132,6 +140,11 @@ final class BufferEditorCoordinatorTests: XCTestCase {
         XCTAssertFalse(
             tv.text.hasSuffix("- "),
             "Empty-marker termination must remove the dangling marker (EC-04)"
+        )
+        // The surviving content keeps the first item and a trailing newline.
+        XCTAssertEqual(
+            tv.text, "- a\n",
+            "Termination removes only the dangling marker line, preserving prior items (EC-04)"
         )
     }
 
