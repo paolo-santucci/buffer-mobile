@@ -104,3 +104,14 @@ jobs:
       # Spec refs: FR-26, FR-27; §3.1.d invariant table.
       - name: M7 structural gate
         run: bash tool/m7_gate.sh
+
+      # SP Chrome Morph + Layout Polish source-scan gate: enforces the 7 §3.1
+      # pinned markers from qp-20260621-kmp-ios-chrome-morph-layout —
+      # (a) BottomToolbar.swift body order: closeKeyboardButton before copyButton,
+      # (b) BufferEditor.swift: textContainerInset present and not = .zero + lineFragmentPadding = 0,
+      # (c) ChromeOverlay.swift: no .popover( on code lines + GlassEffectContainer present
+      #     + glassEffectID present anywhere in Chrome/ + accessibilityReduceMotion present,
+      # (d) chains m4_gate.sh (+ m1) so no earlier invariant can regress while this gate is green.
+      # Spec refs: qp-20260621 §3.1; C-03, C-06, C-07, C-08; EC-14; NFR-01/02/03/04.
+      - name: SP Chrome Morph gate
+        run: bash tool/sp_chrome_morph_gate.sh

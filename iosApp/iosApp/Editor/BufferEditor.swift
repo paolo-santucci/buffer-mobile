@@ -23,6 +23,35 @@ import SwiftUI
 import shared
 
 // ---------------------------------------------------------------------------
+// MARK: - Editor inset constants (C-06 / §3.1 kEditorHInset / kEditorTopInset)
+// ---------------------------------------------------------------------------
+
+/// Horizontal (left + right) padding between the UITextView edge and the text column.
+///
+/// Applied via `textContainerInset` in `makeUIView` so the full-bleed UITextView fills the
+/// window (NFR-06 tap target) while text appears inset 16 pt.  `lineFragmentPadding` is kept
+/// at `0`, so the effective side inset is exactly this value (not 16 + the default 5).
+///
+/// Spec: §3.1 kEditorHInset; C-06 (inset via UIKit, not SwiftUI .padding()).
+private let kEditorHInset: CGFloat = 16
+
+/// STATIC top inset: positions the first line of text just below the floating pill.
+///
+/// Formula: `safeAreaTop + 16 (gap above pill) + 44 (pill height) + 8 (gap below pill)`
+///
+/// `safeAreaTop` is read once in `makeUIView` via `textView.window?.safeAreaInsets.top`.
+/// If the window is not yet attached at that point (rare during first layout), the fallback
+/// value `59` is used — a typical iPhone Face-ID / Dynamic-Island safe-area top on iOS 26.
+/// This inset is NEVER updated by `updateUIView` or driven by `ChromeVisibility`; it does
+/// NOT move when chrome auto-hides (C-06 STATIC constraint).
+///
+/// - Parameter safeAreaTop: The device safe-area top inset in points.
+/// - Returns: The total top inset to apply to `textContainerInset.top`.
+///
+/// Spec: §3.1 kEditorTopInset(safeAreaTop:); C-06.
+private func kEditorTopInset(safeAreaTop: CGFloat) -> CGFloat { safeAreaTop + 16 + 44 + 8 }
+
+// ---------------------------------------------------------------------------
 // MARK: - Font-size slot helper
 // ---------------------------------------------------------------------------
 
@@ -117,8 +146,23 @@ struct BufferEditor: UIViewRepresentable {
         // Replace with UIColor(named: "ViewBgColor") once the named asset is wired.
         textView.textColor = .label
 
-        // Remove the default container inset to let the full-bleed surface fill the window.
-        textView.textContainerInset = .zero
+        // Apply side insets (kEditorHInset = 16 pt) and a STATIC top inset that positions
+        // the first text line just below the floating pill.
+        //
+        // The top inset is computed once here in makeUIView and is NEVER updated in
+        // updateUIView — it does NOT move when ChromeVisibility hides/reveals the chrome
+        // (C-06 STATIC constraint).  lineFragmentPadding stays 0 so the effective side
+        // inset is exactly 16 pt, not 16 + the UIKit default 5 = 21 pt.
+        //
+        // safeAreaTop: read from the window if already attached; fallback 59 pt covers
+        // the typical iPhone Face-ID / Dynamic-Island safe-area height on iOS 26.
+        let safeAreaTop = textView.window?.safeAreaInsets.top ?? 59
+        textView.textContainerInset = UIEdgeInsets(
+            top: kEditorTopInset(safeAreaTop: safeAreaTop),
+            left: kEditorHInset,
+            bottom: 0,
+            right: kEditorHInset
+        )
         textView.textContainer.lineFragmentPadding = 0
 
         // — Monospace font at absolute slot size (FR-14 / FR-15) —

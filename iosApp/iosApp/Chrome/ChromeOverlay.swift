@@ -1,13 +1,20 @@
 // Chrome/ChromeOverlay.swift
-// Foglietto — KMP Milestone 4: Liquid Glass Chrome
+// Foglietto — KMP Milestone 4: Liquid Glass Chrome (T-01 morph + top-pad)
 //
 // Container view composing TopPill + MenuBubble over the editor.
 // Reads ChromeVisibility.isVisible and crossfades the chrome layer.
-// Hosts NO glass directly — delegates to TopPill and MenuBubble (children
-// own their own .glassEffect; this container is non-visual composition only).
+// Owns the GlassEffectContainer and morph namespace so the pill capsule
+// and the menu panel share one glass identity and morph capsule↔panel.
 //
-// EC-14: SM events (typing, scroll, keyboard) do NOT force the bubble closed.
-//        Only an outside-tap on the popover dismisses it.
+// EC-14: isMenuPresented is written by EXACTLY two sources —
+//   (1) the overflow toggle inside TopPill (via the $isMenuPresented binding)
+//   (2) the full-screen transparent tap-catcher rendered when the menu is open
+// SM events (injectTyping/injectScroll/injectKeyboardDismiss) and MenuViewModel
+// NEVER reference or mutate isMenuPresented. The tap-catcher (not a .popover)
+// is the outside-tap dismiss mechanism.
+//
+// EC-16: the tap-catcher sits INSIDE the chromeVisibility.isVisible crossfaded
+// layer, so the menu is dismissed together with the chrome when chrome hides.
 //
 // ChromeOverlay also owns the CoordinatorBox — a lightweight reference-type
 // bridge that lets ContentView publish the live BufferEditor.Coordinator to
@@ -17,12 +24,11 @@
 //
 // CANON GAP CG-1: native Liquid Glass material on the chrome layer supersedes
 // ui-design-bible §"Auto-hiding overlay chrome" --view-bg-color@90% fill (OQ-01).
-// This container is non-visual (no glass here); the CG-1 note is on TopPill +
-// MenuBubble which carry their own glass surfaces.
+// GlassEffectContainer is the single glass grouping for the pill + menu morph.
 //
 // Spec refs: FR-02, FR-18, FR-19, FR-20, NFR-01, NFR-07;
-//            EC-13, EC-14, EC-17; CG-1.
-// Contract: §4.1, §4.3.
+//            EC-13, EC-14, EC-16, EC-17; CG-1.
+// Contract: §3.1 (morph identity seam), §4.1, §4.3.
 
 import SwiftUI
 import shared
@@ -52,19 +58,28 @@ final class CoordinatorBox {
 ///
 /// Lays out:
 ///   - `TopPill` (top-trailing, within safe area) — Share + overflow `…` toggle.
-///   - `MenuBubble` (popover anchored to the pill) — presented when `isMenuPresented == true`.
+///   - `MenuBubble` (inline, morphing from the pill) — shown when `isMenuPresented`.
+///   - Transparent full-screen tap-catcher — rendered behind the bubble when open
+///     to handle outside-tap dismiss (EC-14).
 ///
 /// Reads `chromeVisibility.isVisible` to crossfade the entire chrome layer in/out.
-/// Applies `.opacity` + `.animation` so that SM transitions animate smoothly (FR-20).
+/// Applies `.opacity` + `.animation` so SM transitions animate smoothly (FR-20).
+///
+/// **Glass morph (§3.1 morph identity seam):**
+/// Owns `glassNamespace` (`@Namespace`) and the `chromeGlassID` string constant.
+/// Both `TopPill` and `MenuBubble` receive these values and attach
+/// `.glassEffectID(chromeGlassID, in: glassNamespace)` so the capsule morphs
+/// into the panel and back inside the single `GlassEffectContainer`.
+///
+/// **Reduce Motion (C-07):**
+/// Reads `@Environment(\.accessibilityReduceMotion)`. When true, the morph
+/// toggle uses an instantaneous `.identity` / `.opacity` transition instead of
+/// the capsule↔panel shape morph.
 ///
 /// **Bubble dismiss contract (EC-14):**
-/// The `isMenuPresented` state is local to `ChromeOverlay`. SM events
-/// (`injectTyping`, `injectScroll`, `injectKeyboardDismiss`) NEVER write to
-/// `isMenuPresented`. Only the popover's own outside-tap mechanism closes it.
-///
-/// **No glass here:**
-/// This view applies no `.glassEffect`/`GlassEffectContainer`/`.glass*` modifier.
-/// Glass is owned exclusively by `TopPill` and `MenuBubble` (NFR-01/02; gate check 2).
+/// `isMenuPresented` is written by EXACTLY two sources — the overflow toggle in
+/// `TopPill` and the tap-catcher below. SM events (`injectTyping`, `injectScroll`,
+/// `injectKeyboardDismiss`) and `MenuViewModel` NEVER write to `isMenuPresented`.
 struct ChromeOverlay: View {
 
     // MARK: - Inputs (from ContentView / composition root)
@@ -86,44 +101,112 @@ struct ChromeOverlay: View {
 
     // MARK: - Local state
 
-    /// Controls the `MenuBubble` popover presentation.
+    /// Controls the `MenuBubble` presented state.
     ///
-    /// EC-14: set only by the overflow button (toggle) and by the standard popover
-    /// dismiss gesture (set to false by SwiftUI) — NEVER by SM events.
+    /// EC-14: written by EXACTLY two sources —
+    ///   (1) the overflow button toggle inside `TopPill` (via `$isMenuPresented`)
+    ///   (2) the full-screen transparent tap-catcher (sets to `false`)
+    /// SM events and `MenuViewModel` NEVER mutate this state.
     @State private var isMenuPresented: Bool = false
+
+    // MARK: - Morph identity (§3.1 morph identity seam)
+
+    /// Namespace that binds the pill capsule and the menu panel into one
+    /// shared glass identity, enabling the capsule↔panel morph inside
+    /// `GlassEffectContainer` (iOS 26 native glass morph — C-03).
+    @Namespace private var glassNamespace
+
+    /// The shared glass effect ID passed to both `TopPill` and `MenuBubble`.
+    /// Both call `.glassEffectID(chromeGlassID, in: glassNamespace)` so the
+    /// material morphs between the pill's capsule shape and the menu panel shape.
+    private static let chromeGlassID = "chrome.morph"
+
+    // MARK: - Accessibility
+
+    /// When `true`, the morph animation is replaced by an instantaneous/opacity
+    /// transition (C-07 / `prefers-reduce-motion`).
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // MARK: - Body
 
     var body: some View {
-        // Full-overlay container respecting the safe area (FR-02).
-        // TopPill is positioned top-trailing within the safe area.
-        VStack {
-            HStack {
-                Spacer()
-                pillAndBubble
+        ZStack(alignment: .topTrailing) {
+            // Full-screen tap-catcher: rendered only when the menu is open,
+            // above the editor and behind the bubble (EC-14 outside-tap dismiss).
+            // Lives inside this crossfaded layer so EC-16 holds — when chrome
+            // crossfades out the tap-catcher disappears with it.
+            if isMenuPresented {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        // EC-14 writer #2: the tap-catcher closes the menu.
+                        withAnimation(reduceMotion ? nil : .spring(duration: 0.3)) {
+                            isMenuPresented = false
+                        }
+                    }
             }
-            Spacer()
+
+            // Chrome controls: pill + morph container, top-trailing.
+            VStack {
+                HStack {
+                    Spacer()
+                    pillAndBubble
+                }
+                Spacer()
+            }
+            .padding(.top, 6)
+            .padding(.horizontal, 16)
         }
-        .padding()
-        // Crossfade the chrome layer with ChromeVisibility.isVisible (FR-20).
+        // Crossfade the chrome layer (including the tap-catcher) with
+        // ChromeVisibility.isVisible (FR-20 / EC-16).
         // EC-14: crossfade is purely visual — it does NOT mutate isMenuPresented.
         .opacity(chromeVisibility.isVisible ? 1 : 0)
         .animation(.easeInOut(duration: 0.25), value: chromeVisibility.isVisible)
     }
 
-    // MARK: - Pill + bubble anchor
+    // MARK: - Pill + morph container (§3.1 morph identity seam)
 
-    /// The `TopPill` with the `MenuBubble` popover anchored to it.
+    /// `GlassEffectContainer` wrapping `TopPill` and (when open) `MenuBubble`.
     ///
-    /// The popover is presented via `.popover(isPresented:)` on the pill so it
-    /// grows from the pill's top-trailing corner (FR-09 / §4.1 anchor spec).
+    /// Both children attach `.glassEffectID(chromeGlassID, in: glassNamespace)`
+    /// so the iOS 26 glass system morphs the capsule shape into the panel shape
+    /// and back (native Liquid Glass matched-geometry-for-glass — C-03).
+    ///
+    /// The `withAnimation` wrapping `isMenuPresented` changes is Reduce-Motion
+    /// gated: when `reduceMotion` is true an instantaneous `.identity` animation
+    /// is used instead of the spring morph (C-07).
     @ViewBuilder
     private var pillAndBubble: some View {
-        TopPill(text: text, isMenuPresented: $isMenuPresented)
-            .popover(isPresented: $isMenuPresented, arrowEdge: .top) {
-                // MenuBubble is the popover content — wired with the shared menuVM
-                // and the local isMenuPresented binding (FR-09).
-                MenuBubble(menuVM: menuVM, isPresented: $isMenuPresented)
+        // CANON GAP CG-1: GlassEffectContainer is the iOS 26 native grouping
+        // API — no hand-rolled blur/fill/shadow (C-03 / NFR-01/02).
+        GlassEffectContainer {
+            VStack(alignment: .trailing, spacing: 8) {
+                TopPill(
+                    text: text,
+                    isMenuPresented: $isMenuPresented,
+                    glassNamespace: glassNamespace,
+                    glassID: Self.chromeGlassID
+                )
+                // Inline `withAnimation` happens at the toggle site in TopPill
+                // (overflow button) and at the tap-catcher site above.
+
+                if isMenuPresented {
+                    MenuBubble(
+                        menuVM: menuVM,
+                        isPresented: $isMenuPresented,
+                        glassNamespace: glassNamespace,
+                        glassID: Self.chromeGlassID
+                    )
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .asymmetric(
+                                insertion: .opacity.combined(with: .scale(scale: 0.9, anchor: .topTrailing)),
+                                removal:   .opacity.combined(with: .scale(scale: 0.9, anchor: .topTrailing))
+                              )
+                    )
+                }
             }
+        }
     }
 }

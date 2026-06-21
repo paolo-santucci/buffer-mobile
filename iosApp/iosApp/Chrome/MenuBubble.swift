@@ -1,9 +1,15 @@
 // Chrome/MenuBubble.swift
-// Foglietto — KMP Milestone 4: Liquid Glass Chrome
+// Foglietto — KMP Milestone 4: Liquid Glass Chrome (T-01 morph)
 //
-// Native iOS 26 Liquid Glass popover menu bubble.
-// Anchored to the pill's top-right corner (grows from corner, ~280pt wide).
-// Outside-tap dismiss via the standard popover dismiss mechanism.
+// Native iOS 26 Liquid Glass overflow menu panel.
+// Morphs from the pill capsule (grows inline, ~280pt wide).
+// Outside-tap dismiss via a full-screen transparent tap-catcher in
+// ChromeOverlay (EC-14 write-source #2) — NOT a .popover.
+//
+// Morph seam (§3.1): receives `glassNamespace` and `glassID` from ChromeOverlay
+// and attaches `.glassEffectID(glassID, in: glassNamespace)` to the menu panel
+// so the glass system can morph the TopPill capsule into this panel and back
+// inside the shared GlassEffectContainer (iOS 26 native glass morph — C-03).
 //
 // Layout top→bottom:
 //   1. Theme picker — description-only single-select rows System/Light/Dark (CG-2)
@@ -32,47 +38,68 @@
 // No #available fallback branch (min iOS 26.0 — NFR-02).
 // URL literals in About are NOT localized (FR-22 / gate check 12).
 //
-// Input surface for TASK-11 wiring:
+// Input surface:
 //   - menuVM: MenuViewModel    — ctor-injected, passed from ChromeOverlay
-//   - isPresented: Binding<Bool> — controls popover presentation from TopPill
+//   - isPresented: Binding<Bool> — controls presented state from ChromeOverlay
+//   - glassNamespace: Namespace.ID — morph namespace from ChromeOverlay (§3.1)
+//   - glassID: String           — shared glass effect ID from ChromeOverlay (§3.1)
 //
 // Spec refs: FR-01, FR-02, FR-09, FR-10, FR-11, FR-12, FR-13, FR-14,
 //            FR-22, FR-23, NFR-01, NFR-02, NFR-04, NFR-06;
-//            EC-02, EC-04, EC-05, EC-07, EC-08, EC-16, EC-19;
+//            EC-02, EC-04, EC-05, EC-07, EC-08, EC-14, EC-16, EC-19;
 //            CG-1, CG-2.
-// Contract: §4.1, §5.1.d.
+// Contract: §3.1 (morph identity seam — glassNamespace, glassID additive params).
 
 import SwiftUI
 import shared
 
 // MARK: - MenuBubble
 
-/// Native iOS 26 Liquid Glass overflow menu bubble.
+/// Native iOS 26 Liquid Glass overflow menu panel.
 ///
-/// **Input surface (for TASK-11 wiring):**
+/// **Input surface:**
 /// - `menuVM: MenuViewModel` — injected from `ChromeOverlay`; owns theme/font/recovery state.
-/// - `isPresented: Binding<Bool>` — the `@State` from `ChromeOverlay`; closing the bubble
+/// - `isPresented: Binding<Bool>` — the `@State` from `ChromeOverlay`; closing the panel
 ///   sets this to `false`.
+/// - `glassNamespace: Namespace.ID` — morph namespace from `ChromeOverlay` (§3.1 morph seam).
+/// - `glassID: String` — shared glass effect ID from `ChromeOverlay` (§3.1 morph seam).
+///
+/// The menu panel attaches `.glassEffectID(glassID, in: glassNamespace)` so the iOS 26
+/// glass system can morph the `TopPill` capsule into this panel and back inside the
+/// `GlassEffectContainer` owned by `ChromeOverlay` (C-03 / NFR-01/02).
+///
+/// **EC-14 dismiss contract:**
+/// `isPresented` is set to `false` here only by recovery-row tap (EC-15 analogue).
+/// The outside-tap dismiss is handled by the full-screen tap-catcher in `ChromeOverlay`
+/// (EC-14 write-source #2). No `.popover` dismiss mechanism is used.
 ///
 /// **Glass (NFR-01/02):**
-/// `.glassEffect` on the container + `.buttonStyle(.glass)` on interactive controls.
-/// Unconditional — min iOS 26.0. No `if #available` fallback.
+/// `.glassEffect` on the container + `.glassEffectID` for the morph + `.buttonStyle(.glass)`
+/// on interactive controls. Unconditional — min iOS 26.0. No `if #available` fallback.
 ///
 /// **Accessibility (NFR-04):**
 /// Every interactive control has `.accessibilityLabel` and `.accessibilityAddTraits(.isButton)`
 /// where appropriate. Touch targets ≥ 44×44 pt on button controls.
-///
-/// **English string literals (FR-23):**
-/// All user-facing text is introduced here as EN literals. Localization to EN+IT is M6.
 struct MenuBubble: View {
 
-    // MARK: - Inputs (TASK-11 wires these)
+    // MARK: - Inputs
 
     /// The view model backing the bubble. Ctor-injected by `ChromeOverlay` (DIP).
     @Bindable var menuVM: MenuViewModel
 
-    /// Controls the presented state of this popover. Bound from `ChromeOverlay`.
+    /// Controls the presented state of this panel. Bound from `ChromeOverlay`.
+    /// Set to `false` here only by recovery-row tap; outside-tap dismiss is handled
+    /// by ChromeOverlay's tap-catcher (EC-14 write-source #2).
     @Binding var isPresented: Bool
+
+    /// The morph namespace from `ChromeOverlay` (§3.1 morph identity seam).
+    /// Passed to `.glassEffectID(_:in:)` so the glass system morphs the TopPill
+    /// capsule into this panel and back inside the shared GlassEffectContainer.
+    let glassNamespace: Namespace.ID
+
+    /// The shared glass effect ID from `ChromeOverlay` (§3.1 morph identity seam).
+    /// Matches the ID used by `TopPill` so the two surfaces share one glass identity.
+    let glassID: String
 
     // MARK: - Local state
 
@@ -112,8 +139,11 @@ struct MenuBubble: View {
             .padding(.vertical, 8)
         }
         .frame(width: 280)
-        // Native iOS 26 Liquid Glass — no hand-rolled blur/fill/shadow (NFR-01/02).
+        // Native iOS 26 Liquid Glass panel — no hand-rolled blur/fill/shadow (NFR-01/02).
         .glassEffect(in: .rect(cornerRadius: 16))
+        // Morph identity: shared with TopPill inside ChromeOverlay's GlassEffectContainer
+        // so the glass system morphs the capsule into this panel and back (§3.1).
+        .glassEffectID(glassID, in: glassNamespace)
     }
 
     // MARK: - Theme picker (FR-10 / EC-08 / CG-2)
@@ -337,7 +367,7 @@ struct MenuBubble: View {
     ///   2. `recoveryVM.refresh()` is called immediately to re-fetch `recovery.list()` (FR-12).
     ///
     /// Rows render icon + previewTitle + dateSubtitle.
-    /// Tap → `recoveryVM.select(path:)` then dismiss the bubble (FR-13).
+    /// Tap → `recoveryVM.select(path:)` then dismiss the panel (FR-13).
     /// Empty state renders a text message when no notes exist (EC-02 / FR-12).
     ///
     /// No delete / delete-all / confirm dialog present (FR-14).
@@ -412,7 +442,7 @@ struct MenuBubble: View {
 
     /// A single recovery note row.
     ///
-    /// Tap → `rvm.select(path:)` (nil-tolerant — EC-04) then dismiss the bubble.
+    /// Tap → `rvm.select(path:)` (nil-tolerant — EC-04) then dismiss the panel.
     ///
     /// - Parameters:
     ///   - row: The `RecoveryRow` to display.
@@ -421,7 +451,7 @@ struct MenuBubble: View {
         Button {
             // FR-13: restore; nil-tolerant inside RecoveryListViewModel.select(path:) (EC-04).
             rvm.select(path: row.path)
-            // Dismiss the bubble after restore (EC-15 analogue: tap closes the menu).
+            // Dismiss the panel after restore (EC-14 / EC-16: tap closes the menu).
             isPresented = false
         } label: {
             HStack(spacing: 12) {
@@ -473,10 +503,10 @@ struct MenuBubble: View {
 #if DEBUG
 #Preview("MenuBubble") {
     // Preview requires stub dependencies — not wired to real DI in preview.
-    // TASK-11 wires the real instances from iosAppApp.init().
+    // ChromeOverlay wires the real instances from iosAppApp.init().
     Color.clear
         .overlay(
-            Text("Preview requires live DI wiring — see TASK-11.")
+            Text("Preview requires live DI wiring — see ChromeOverlay.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         )

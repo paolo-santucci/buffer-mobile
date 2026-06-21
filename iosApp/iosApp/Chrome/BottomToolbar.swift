@@ -2,7 +2,7 @@
 // Foglietto — KMP Milestone 4: Liquid Glass Chrome
 //
 // Five-button native iOS 26 Liquid Glass bottom toolbar.
-// Left→right: copy, paste, close-keyboard, indent, de-indent.
+// Left→right: close-keyboard, copy, paste, de-indent (outdent), indent.
 // All buttons are always-enabled (FR-15).
 //
 // CANON GAP CG-1: native Liquid Glass toolbar material supersedes
@@ -25,13 +25,13 @@ import SwiftUI
 /// Five-button native iOS 26 Liquid Glass bottom toolbar.
 ///
 /// **Button order (left → right):**
-/// 1. **Copy** — copies the current buffer text to `UIPasteboard.general`.
-/// 2. **Paste** — inserts the pasteboard string at the caret; no-op on an
+/// 1. **Hide keyboard** — resigns first responder on the live text view (FR-16).
+/// 2. **Copy** — copies the current buffer text to `UIPasteboard.general`.
+/// 3. **Paste** — inserts the pasteboard string at the caret; no-op on an
 ///    empty or nil clipboard (EC-03).
-/// 3. **Close keyboard** — resigns first responder on the live text view (FR-16).
-/// 4. **Indent** — routes through `viewModel.indent(in:of:)` then
+/// 4. **Outdent** — routes through `viewModel.outdent(in:of:)` then
 ///    `Coordinator.applyIndentResult(text:range:)` (FR-17; no VM-surface widening).
-/// 5. **De-indent** — same routing path via `viewModel.outdent(in:of:)` (FR-17).
+/// 5. **Indent** — same routing path via `viewModel.indent(in:of:)` (FR-17).
 ///
 /// **Input surface (for TASK-11 wiring):**
 ///
@@ -69,7 +69,7 @@ import SwiftUI
 ///
 /// **Accessibility (NFR-04, FR-23):**
 /// Every button has an English `.accessibilityLabel` literal:
-/// - "Copy", "Paste", "Hide keyboard", "Indent", "Outdent"
+/// - "Hide keyboard", "Copy", "Paste", "Outdent", "Indent"
 /// Touch targets enforced to ≥ 44×44 pt via `.frame(minWidth: 44, minHeight: 44)`.
 ///
 /// Hosted via `.safeAreaInset` by TASK-11 (FR-15, FR-18). No keyboard-accessory-bar pattern
@@ -107,11 +107,11 @@ struct BottomToolbar: View {
 
     var body: some View {
         HStack(spacing: 0) {
+            closeKeyboardButton
             copyButton
             pasteButton
-            closeKeyboardButton
-            indentButton
             deIndentButton
+            indentButton
         }
         // Native iOS 26 Liquid Glass — no hand-rolled blur/fill/shadow (NFR-01/02).
         .glassEffect(in: .capsule)

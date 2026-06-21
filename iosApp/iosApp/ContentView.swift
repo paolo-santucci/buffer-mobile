@@ -142,9 +142,10 @@ struct ContentView: View {
             .modifier(EditorPinchModifier(viewModel: viewModel, settings: settings))
 
             // ── Layer 2: ChromeOverlay (control/navigation, respects safe area) ─
-            // TopPill (top-trailing) + MenuBubble popover. No glass here —
+            // TopPill (top-trailing) morphs into MenuBubble via a single
+            // liquid-glass container (iOS 26). No glass here —
             // glass lives inside TopPill/MenuBubble (NFR-01/02; gate checks 1+2).
-            // EC-14: SM events never close the bubble — only outside-tap does.
+            // EC-14: SM events never close the bubble — only the tap-catcher does.
             ChromeOverlay(
                 text: viewModel.text,
                 menuVM: menuVM,
@@ -167,35 +168,44 @@ struct ContentView: View {
         // NOTE OQ-14: CI simulator may report keyboardHeight==0; .safeAreaInset
         // remains the correct idiom — it is trivially correct when keyboard==0.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            BottomToolbar(
-                onCopy: { [coordinatorBox] in
-                    coordinatorBox.coordinator?.copyToPasteboard()
-                },
-                onPaste: { [coordinatorBox] in
-                    coordinatorBox.coordinator?.pasteAtCaret()
-                },
-                onCloseKeyboard: { [coordinatorBox] in
-                    coordinatorBox.coordinator?.closeKeyboard()
-                },
-                onIndent: { [coordinatorBox, viewModel] in
-                    // FR-17 / §4.3: read selectedRange from live textView,
-                    // route through viewModel.indent, apply result back.
-                    guard let tv = coordinatorBox.coordinator?.textView else { return }
-                    let result = viewModel.indent(in: tv.selectedRange, of: tv.text ?? "")
-                    coordinatorBox.coordinator?.applyIndentResult(
-                        text: result.text,
-                        range: result.selection
-                    )
-                },
-                onOutdent: { [coordinatorBox, viewModel] in
-                    guard let tv = coordinatorBox.coordinator?.textView else { return }
-                    let result = viewModel.outdent(in: tv.selectedRange, of: tv.text ?? "")
-                    coordinatorBox.coordinator?.applyIndentResult(
-                        text: result.text,
-                        range: result.selection
-                    )
-                }
-            )
+            // Left-aligned floating pill: HStack pushes the self-sized capsule to the
+            // leading edge; 12pt leading + 12pt bottom padding gives the Apple-Notes
+            // floating feel. C-05: .safeAreaInset itself is KEPT — moving the toolbar
+            // into the ZStack would reintroduce manual keyboard-height arithmetic (EC-17).
+            HStack {
+                BottomToolbar(
+                    onCopy: { [coordinatorBox] in
+                        coordinatorBox.coordinator?.copyToPasteboard()
+                    },
+                    onPaste: { [coordinatorBox] in
+                        coordinatorBox.coordinator?.pasteAtCaret()
+                    },
+                    onCloseKeyboard: { [coordinatorBox] in
+                        coordinatorBox.coordinator?.closeKeyboard()
+                    },
+                    onIndent: { [coordinatorBox, viewModel] in
+                        // FR-17 / §4.3: read selectedRange from live textView,
+                        // route through viewModel.indent, apply result back.
+                        guard let tv = coordinatorBox.coordinator?.textView else { return }
+                        let result = viewModel.indent(in: tv.selectedRange, of: tv.text ?? "")
+                        coordinatorBox.coordinator?.applyIndentResult(
+                            text: result.text,
+                            range: result.selection
+                        )
+                    },
+                    onOutdent: { [coordinatorBox, viewModel] in
+                        guard let tv = coordinatorBox.coordinator?.textView else { return }
+                        let result = viewModel.outdent(in: tv.selectedRange, of: tv.text ?? "")
+                        coordinatorBox.coordinator?.applyIndentResult(
+                            text: result.text,
+                            range: result.selection
+                        )
+                    }
+                )
+                Spacer()
+            }
+            .padding(.leading, 12)
+            .padding(.bottom, 12)
         }
         // ── ScenePhase lifecycle wiring (FR-14 / M5) ─────────────────────────
         // SwiftUI delivers scene-phase changes on the main actor; dispatch to the
