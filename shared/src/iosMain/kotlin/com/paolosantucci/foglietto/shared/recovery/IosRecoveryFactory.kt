@@ -26,7 +26,7 @@ import platform.Foundation.NSTimeZone
  * fields of [RecoveryInstant]. No epoch arithmetic — no `timeIntervalSince1970`, no
  * `* 1000`, no `epochSeconds`/`epochMilliseconds`. Milliseconds are derived from the
  * `NSCalendarUnitNanosecond` component divided by 1 000 000 (nanosecond-field arithmetic,
- * not epoch math). The UTC timezone (`NSTimeZone.timeZoneForSecondsFromGMT(0)`) ensures
+ * not epoch math). The UTC timezone (`NSTimeZone.timeZoneWithName("UTC")`) ensures
  * filenames are timezone-independent and lexicographically chronological (FR-11, NFR-06).
  *
  * ## okio boundary (CM-4)
@@ -48,7 +48,10 @@ fun createIosRecoveryRepository(): RecoveryRepository =
         recoveryDir = recoveryBaseDir(),
         now = {
             val calendar = NSCalendar(calendarIdentifier = NSCalendarIdentifierGregorian)
-            calendar.timeZone = NSTimeZone.timeZoneForSecondsFromGMT(0)
+            // UTC so filenames are timezone-independent and lexicographically chronological.
+            // `timeZoneWithName("UTC")` is the reliably-bound Kotlin/Native companion factory
+            // (NSTimeZone.timeZoneForSecondsFromGMT is not generated in the Foundation interop).
+            calendar.timeZone = NSTimeZone.timeZoneWithName("UTC") ?: NSTimeZone.localTimeZone
             val units = NSCalendarUnitYear or
                 NSCalendarUnitMonth or
                 NSCalendarUnitDay or
