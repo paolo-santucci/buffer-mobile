@@ -7,6 +7,17 @@ on:
   pull_request:
     branches: [main, kmp-rewrite]
   workflow_dispatch:
+    inputs:
+      marketing_version:
+        description: "CFBundleShortVersionString override (e.g. 1.0.1). Blank = default."
+        required: false
+        type: string
+        default: ""
+      build_number_offset:
+        description: "Integer added to GITHUB_RUN_NUMBER for CFBundleVersion. Blank/0 = no offset."
+        required: false
+        type: string
+        default: ""
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -238,6 +249,11 @@ jobs:
           # Mask the UUID so it never appears in plain text in CI logs
           echo "::add-mask::$PROFILE_UUID"
 
+          # Non-fatal profile diagnostic — prints expiry + does-not-gate the run.
+          security cms -D -i "$RUNNER_TEMP/signing/profile.mobileprovision" \
+            | plutil -extract ExpirationDate raw - 2>/dev/null \
+            | sed 's/^/Provisioning profile ExpirationDate: /' || true
+
           PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILES_DIR"
           cp "$RUNNER_TEMP/signing/profile.mobileprovision" \
@@ -291,14 +307,25 @@ jobs:
           IOS_DEVELOPMENT_TEAM_ID: ${{ secrets.IOS_DEVELOPMENT_TEAM_ID }}
           NSUnbufferedIO: YES
         run: |
+          # MARKETING_VERSION: dispatch input > repo variable > literal default "1.0.0"
+          MV="${{ github.event.inputs.marketing_version }}"
+          [ -z "$MV" ] && MV="${{ vars.IOS_MARKETING_VERSION }}"
+          [ -z "$MV" ] && MV="1.0.0"
+
+          # build-number OFFSET: dispatch input > repo variable > 0
+          OFF="${{ github.event.inputs.build_number_offset }}"
+          [ -z "$OFF" ] && OFF="${{ vars.IOS_BUILD_NUMBER_OFFSET }}"
+          [ -z "$OFF" ] && OFF="0"
+          CPV=$(( GITHUB_RUN_NUMBER + OFF ))
+
           xcodebuild \
             -project iosApp/iosApp.xcodeproj \
             -scheme iosApp \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/iosApp.xcarchive" \
-            MARKETING_VERSION=1.0.0 \
-            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            MARKETING_VERSION="$MV" \
+            CURRENT_PROJECT_VERSION="$CPV" \
             DEVELOPMENT_TEAM="$IOS_DEVELOPMENT_TEAM_ID" \
             PROVISIONING_PROFILE_SPECIFIER="$PROFILE_UUID" \
             CODE_SIGN_STYLE=Manual \
