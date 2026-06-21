@@ -105,7 +105,7 @@ final class MenuViewModel {
         let current = settings.load()
         // EC-08: equal-value guard — no write when scheme is already active.
         if current.colorScheme == scheme { return }
-        settings.save(current.setColorScheme(scheme))
+        settings.save(settings: current.setColorScheme(scheme: scheme))
         colorScheme = scheme
     }
 
@@ -127,7 +127,7 @@ final class MenuViewModel {
         let clamped = max(0, min(20, currentIndex + delta))
         // EC-07: no-op when already at clamp end (or delta == 0).
         guard clamped != currentIndex else { return }
-        settings.save(current.setFontSizeIndex(index: Int32(clamped)))
+        settings.save(settings: current.setFontSizeIndex(index: Int32(clamped)))
         fontSizeIndex = clamped
     }
 

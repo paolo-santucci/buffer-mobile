@@ -52,7 +52,11 @@ private final class ControlledRecoveryRepository: RecoveryRepository {
         return readResult
     }
 
-    func save(text: String) {}
+    // Remaining RecoveryRepository members — inert; RecoveryListViewModel never calls them.
+    func save(text: String) -> String { "" }
+    func delete(path: String) {}
+    func deleteAll() {}
+    func trim(keep: Int32) {}
 }
 
 /// Minimal settings stub (inert — RecoveryListViewModel doesn't use settings).

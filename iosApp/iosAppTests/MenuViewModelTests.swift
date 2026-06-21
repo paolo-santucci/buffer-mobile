@@ -54,7 +54,10 @@ private final class StubSettingsRepository: SettingsRepository {
 private final class StubRecoveryRepository: RecoveryRepository {
     func list() -> [RecoveryNote] { [] }
     func read(path: String) -> String? { nil }
-    func save(text: String) {}
+    func save(text: String) -> String { "" }
+    func delete(path: String) {}
+    func deleteAll() {}
+    func trim(keep: Int32) {}
 }
 
 // ---------------------------------------------------------------------------
