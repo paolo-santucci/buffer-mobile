@@ -1,50 +1,58 @@
 schema-version: 2
-last-updated: "2026-06-21T15:30:00+02:00"
-active-plan: ".claude/docs/plans/sp-20260621-kmp-m4-liquid-glass-chrome-plan.md"
-last-plan: ".claude/docs/plans/archive/sp-20260621-kmp-m3-swiftui-editor-core-plan.md"
+last-updated: "2026-06-21T17:05:00+02:00"
+active-plan: ".claude/docs/plans/qp-20260621-kmp-m5-share-lifecycle.md"
+last-plan: ".claude/docs/plans/archive/sp-20260621-kmp-m4-liquid-glass-chrome-plan.md"
 
 short-plan:
-  feature: "KMP M4 — Liquid Glass Chrome: native iOS 26 Liquid Glass top-right pill (ShareLink + overflow), menu bubble (font-size control + description-only theme picker + inline expandable recovery submenu + Preferences/About), 5-button bottom toolbar (copy/paste/close-keyboard/indent/de-indent), auto-hide/reveal chrome state machine. Glass on control/nav layer only (NFR-06), no fallback (iOS 26.0)."
-  slug: "kmp-m4-liquid-glass-chrome"
+  feature: |
+    KMP Milestone 5 (Share & Lifecycle) — iOS-only MVP. SCOPED to the three Must FRs that are
+    CI-verifiable on the main app target with no external provisioning:
+      FR-14 — synchronous recovery save at ScenePhase.background (wrapped in beginBackgroundTask;
+              NO async Task); .active resets the ephemeral buffer + clears the per-session burst
+              guard; .inactive no-op; best-effort applicationWillTerminate save (R-11 unreliable,
+              documented). Reuses createIosRecoveryRepository() + SaveBufferToRecovery (synchronous,
+              returns path?/null). Save path lives OUTSIDE BufferViewModel (FR-12 / m4_gate check 5).
+      FR-17 — UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace in Info.plist.
+      FR-20 — outbound ShareLink in TopPill disabled on empty buffer (already met in M4; lock w/ gate).
+    DEFERRED carryforward: FR-19 (inbound Share Extension + App Group, a "Should") — needs a 2nd
+    bundle id, 2nd provisioning profile, App Group registration, and a 9th GitHub CI secret
+    (OQ-01/OQ-06, R-04 High/High): user-only external resources that do not exist yet; building it
+    now fails CI signing irrecoverably. Deferred to a fast-follow once provisioned. LP DoD permits
+    "explicitly deferred".
+  slug: "kmp-m5-share-lifecycle"
   auto: true
   request-type: feature
-  workflow: canonical
+  workflow: quick
   parent:
     spec: ".claude/docs/specs/lp-20260620-kotlin-multiplatform-rewrite-spec.md"
     plan: ".claude/docs/plans/lp-20260620-kotlin-multiplatform-rewrite-plan.md"
-    milestone: 4
-    frs: "FR-15, FR-16, FR-20, FR-21, FR-22, FR-25"
+    milestone: 5
+    frs: "FR-14, FR-17, FR-19, FR-20"
   paths:
-    spec: ".claude/docs/specs/sp-20260621-kmp-m4-liquid-glass-chrome-spec.md"
-    plan: ".claude/docs/plans/sp-20260621-kmp-m4-liquid-glass-chrome-plan.md"
-    assess-dir: ".claude/docs/specs/sp-20260621-kmp-m4-liquid-glass-chrome-assessment"
+    spec: null
+    plan: ".claude/docs/plans/qp-20260621-kmp-m5-share-lifecycle.md"
+    assess-dir: ".claude/docs/specs/sp-20260621-kmp-m5-share-lifecycle-assessment"
   phases:
     brainstorm: done
     assess: done
     triage: done
-    spec: done
+    spec: skipped
     plan: done
     build: pending
   approvals:
-    spec: approved
+    spec: null
     plan: approved
   rejection-note: null
   build-progress:
-    current-wave: 8
-    waves-completed: [1, 2, 3, 4, 5, 6, 7, 8]
-    tasks-completed:
-      - TASK-01  # setColorScheme (commonMain+jvmTest) — 2026-06-21, 20/20 jvmTest PASS
-      - TASK-02  # IosRecoveryFactory.kt + UTC now helper (iosMain) — 2026-06-21, ./gradlew check GREEN, iosMain host-guarded on Linux
-      - TASK-03  # tool/m4_gate.sh (Layer C Linux gate) — 2026-06-21, 12/13 pass on pre-M4 tree; check 4 (single-settings-instance) FAILS live (CM-1 bug); check 10 (populate-gate-removed) passes vacuously (M3 used shell gate for populate-uncalled, not XCTest counter strings)
-      - TASK-04  # iosAppApp.swift single-instance DI (CM-1) — 2026-06-21, m4_gate.sh 13/13 PASS; check 4 PASS; deviation: also removed createIosSettingsRepository() default params from BufferViewModel.init + EditorPinchModifier.init to satisfy gate "0 elsewhere" invariant (all callers already passed explicit args)
-      - TASK-07  # ChromeVisibility.swift @Observable SM + pbxproj Chrome group — 2026-06-21, m4_gate 12/13 PASS (check 4 is pre-existing CM-1 not introduced by TASK-07); ScrollDirection defined in ChromeVisibility.swift
-      - TASK-05  # BufferEditor.swift Coordinator hooks (CM-6) — 2026-06-21, m4_gate 13/13 PASS + m3_gate 16/16 PASS; weak var textView set in makeUIView; 4 action hooks + 3 SM callbacks; onScroll typed ((ScrollDirection) -> Void)? referencing module-level ScrollDirection from ChromeVisibility.swift (TASK-07 already landed that type); scrollViewDidScroll derives direction via lastContentOffsetY delta; onTyping emitted in textViewDidChange AND in shouldChangeTextIn continuation branch; onKeyboardDismiss from textViewDidEndEditing
-      - TASK-08  # TopPill.swift (NEW Chrome/) — 2026-06-21, m4_gate 13/13 PASS; ShareLink gated disabled on text.trimmedIsEmpty (EC-01/FR-08); always-enabled overflow ellipsis button with isMenuPresented binding; .glassEffect(in:.capsule) + .buttonStyle(.glass) native iOS 26 glass; both controls have minWidth/minHeight 44pt + .accessibilityLabel + .accessibilityAddTraits(.isButton) + .help tooltips; English string literals (FR-23); pbxproj: PBXFileReference A10000A0 + PBXBuildFile A10000A1; child in Chrome group A1000092 + Sources phase A1000005; CANON GAP CG-1 in file header.
-      - TASK-09  # BottomToolbar.swift (NEW Chrome/) — 2026-06-21, m4_gate 13/13 PASS; 5 always-enabled buttons left→right: copy/paste/close-keyboard/indent/de-indent; .glassEffect(in:.capsule) + .buttonStyle(.glass) native iOS 26 glass; all ≥44pt + .accessibilityLabel + .accessibilityAddTraits(.isButton) + .help tooltips; EN literals: "Copy"/"Paste"/"Hide keyboard"/"Indent"/"Outdent" (FR-23 new strings); closure input surface (onCopy/onPaste/onCloseKeyboard/onIndent/onOutdent) for TASK-11 wiring; TASK-11 wires indent/de-indent closures to read coordinator.textView?.selectedRange then call viewModel.indent/outdent then coordinator.applyIndentResult; pbxproj: PBXFileReference A10000B0 + PBXBuildFile A10000B1; child in Chrome group A1000092 + Sources phase A1000005; CANON GAP CG-1 in file header.
-      - TASK-10  # MenuBubble.swift + MenuViewModel.swift + RecoveryListViewModel.swift (NEW Chrome/) — 2026-06-21, m4_gate 13/13 PASS; MenuViewModel ctor-injected (settings/recovery/bufferVM), selectTheme equal-value guard (EC-08), stepFontSize clamp 0..20 (EC-07), makeRecoveryListViewModel() fresh per call (FR-12); RecoveryListViewModel refresh() re-fetches list() on every call (FR-12), RecoveryInstant subtitle from 7 Int fields no Date no epoch (NFR-06), select nil-tolerant (EC-04); MenuBubble native glass (.glassEffect + .glassButton) no fallback, layout theme→font→divider→About→Recovery, Preferences row OMITTED (no-op row; all settings inline = better UX), About shows GPL-3.0 + unlocalized URLs (FR-22/EC-19), no Find entry; pbxproj: MenuBubble A10000C0/C1, MenuViewModel A10000C2/C3, RecoveryListViewModel A10000C4/C5; CANON GAP CG-1+CG-2 in file headers.
-      - TASK-11  # ContentView.swift ZStack + ChromeOverlay.swift (NEW Chrome/) — 2026-06-21, m4_gate 13/13 PASS; ZStack: BufferEditor(.ignoresSafeArea)+ChromeOverlay(safe-area)+.safeAreaInset BottomToolbar; Coordinator seam: CoordinatorBox (final class, weak coordinator) in ChromeOverlay.swift, BufferEditor gains optional chromeVisibility+coordinatorBox params (default nil), sets box.coordinator in makeUIView, wires SM callbacks in updateUIView; MenuViewModel built in ContentView.init() from injected settings/recovery/viewModel (no new factory call — gate check 4 green); iosAppApp.body updated to pass recovery+chromeVisibility; pbxproj: ChromeOverlay A10000D0/D1; CANON GAP CG-1 note in ChromeOverlay header.
-      - TASK-12  # All new iosAppTests + test-target pbxproj membership — 2026-06-21, m4_gate 13/13 PASS; 4 new files: ChromeVisibilityTests.swift + MenuViewModelTests.swift + RecoveryListViewModelTests.swift + IosRecoveryFactoryTests.swift; additions to BufferEditorCoordinatorTests.swift (M4 Coordinator extension tests + OQ-12 UIWindow mount harness); pbxproj: FileRefs A10000E0/E2/E4/E6 + BuildFiles A10000E1/E3/E5/E7 in iosAppTests Sources A1000080 + group A1000089; ios.yml false-green guard is count-agnostic ('Executed 0 tests' check only) — no change needed; all stubs file-private per file; OQ-10 seam-only, OQ-11 synchronous read no async, OQ-12 UIWindow mount, OQ-14 manual NFR-03.
-      - TASK-13  # Terminal gate + CI wiring — 2026-06-21, ./gradlew check EXIT 0 (BUILD SUCCESSFUL, 5 actionable tasks), jvmTest suites: AppSettingsTest 20/20 + SourceScanGateTest 11/11 + all others 0 failures; m4_gate.sh 13/13 PASS EXIT 0; quality.yml M4 structural gate step added after M1 gate step; quality.yml triggers kmp-rewrite push+PR already present; ios.yml triggers kmp-rewrite push+PR already present; no commit/push (orchestrator owns git).
+    current-wave: 1
+    waves-completed:
+      - wave: 1
+        tasks:
+          - task: T-03
+            date: "2026-06-21T18:10:00+02:00"
+            status: complete
+            commit: "62e21b5"
+            summary: "FR-17 Files-app plist keys: UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace added to top-level Info.plist <dict>, alphabetically ordered near LSRequiresIPhoneOS, preserving literal-plist style and indentation."
 
 long-plan:
   feature: |
@@ -89,6 +97,8 @@ pending-consolidation: []
 
 recently-completed:
   - date: 2026-06-21
+    summary: "KMP Milestone 4 (Liquid Glass Chrome) BUILT, CI-GREEN & CLOSED on kmp-rewrite (HEAD 9985f73), via /short-plan-step --auto: 13 tasks / 8 waves. Native iOS 26 Liquid Glass chrome over the M3 editor: TopPill (ShareLink gated-disabled on empty buffer + overflow), MenuBubble (description-only System/Light/Dark theme picker + in-bubble font-size control + inline expandable 'Recent notes' recovery submenu re-fetching list() per expand & restoring via populate() tolerating vanished files + About/GPL-3.0; Preferences row omitted, settings inline per FR-21), 5-button BottomToolbar (copy/paste/close-keyboard/indent/de-indent via Coordinator hooks), ChromeVisibility @Observable auto-hide/reveal SM (1300ms idle-reveal debounce + synchronous inject* test seam; CG-3), ChromeOverlay+ContentView ZStack(editor+chrome)+.safeAreaInset toolbar (anti-additive keyboard avoidance via a CoordinatorBox weak-bridge). Glass on control/nav only (NFR-06), no fallback. Shared additions: AppSettings.setColorScheme (identity-stable) + iosMain createIosRecoveryRepository() (UTC NSCalendar->RecoveryInstant via NSTimeZone.timeZoneWithName) — both LP-IMPACT seams M5/M6 reuse (LP §8). CM-1 single Settings/Recovery instance in iosAppApp.init(); CM-6 Coordinator weak textView+hooks; CM-5 populate already callable. CANON GAPs CG-1 (native glass material) / CG-2 (description-only theme rows) / CG-3 (1300ms reveal) flagged for .claude/docs/decisions/. Verify: MC-01 ./gradlew check + m4_gate 13/13 (local); MC-02 build_ios XCFramework+archive GREEN; MC-03 test_ios iosAppTests+false-green-guard GREEN (run 27900809907); Quality GREEN (27900809913). quality.yml now runs m1_gate+m4_gate. 5 CI-driven fixes (commcomment greps, K/N NSTimeZone binding needing explicit platform.Foundation imports, Swift interop labels save(settings:)/setColorScheme(scheme:), test-stub RecoveryRepository conformance) — Swift/iosMain don't compile on the mac-less Linux host so these surfaced only on macos-26: commits 120d779/c24ecc8/1515214/9985f73. Spec+plan archived; §6.2 Spec Impact omitted (no canon delta) -> no pending-consolidation push."
+  - date: 2026-06-21
     summary: "KMP Milestone 3 (SwiftUI Editor Core) BUILT, CI-GREEN & CLOSED on branch kmp-rewrite. Build (8 waves, commit 30fd4d3) was complete but its LP marker was unflipped and CI red; this session drove M3 to green and closed it. UITextView editor via UIViewRepresentable + shouldChangeTextIn pre-edit hook (no post-edit diffing/latch), single UTF-16 offset boundary (TextOffsetBridge; shared Kotlin sole authority), @Observable BufferViewModel calling shared use cases, ephemeral buffer, font-size + pinch-to-zoom (all pinch math in shared PinchZoom). Four CI-red fixes: (1) M1 gate (j) commonMain-purity grep matched a comment in PinchZoom.kt naming UIKit/Foundation/SwiftUI -> reworded (791aafa). (2) Duplicate StubSettingsRepository across two iosAppTests files -> made the BufferViewModelTests copy private (791aafa). (3) Swift-6 strict-concurrency: BufferEditorCoordinatorTests/EditorPinchModifierTests + free makeCoordinator helper marked @MainActor (construct @MainActor UIViewRepresentable/ViewModifier, send non-Sendable VM/stub) (248782d). (4) EditorPinchModifier gesture anchor was @State Int? — discarded outside a SwiftUI render so the seam never armed; moved to a reference-type PinchGestureState held in @State (persists across body re-evals AND direct seam calls); also corrected the EC-04 empty-marker test fixture from a lone first-line '- ' (which hits the intentional E-I2 quirk: lone first-line marker CONTINUES) to a real continued list '- a\n- ' so termination actually fires (afaacba). CI GREEN: Quality (./gradlew check + M1 gate 12/12) + iOS run 27897956409 (build_ios archive = MC-02; test_ios 48 tests, 0 failures, false-green guard pass = MC-03). Local: m3_gate 16/16, ./gradlew check EXIT 0. Spec+plan archived; §6.2 Spec Impact omitted (faithful port of already-canonized text-editor/typography slices; no canon delta) -> no pending-consolidation push. LP §8 already carries the M3 LP-IMPACT (iosMain createIosSettingsRepository factory). M3 marker flipped to [x] completed in the LP-plan."
   - date: 2026-06-21
     summary: "KMP M2 (Shared Domain & Data) COMPLETE — commit 9f81622, branch kmp-rewrite. 7 tasks, 3 waves, 143 jvmTest PASS, ./gradlew check GREEN on Linux (JVM-only). recovery/settings/editor verbatim Dart->Kotlin port into platform-neutral shared/. ListContinuation preserves the E-I2 lone-first-line-marker-continues quirk verbatim (load-bearing; M3's EC-04 test fixture corrected to respect it)."
@@ -96,15 +106,14 @@ recently-completed:
     summary: "KMP MILESTONE 1 (Foundation & Scaffold) BUILT, CI-VERIFIED & CLOSED on kmp-rewrite (462ab99 + 585b1ea). KMP project in-place: shared/ jvm()+host-guarded iosArm64/iosSimulatorArm64/iosX64 -> XCFramework; iosApp/ SwiftUI shell over SPM .binaryTarget; Flutter removed; CI reworked (quality.yml ./gradlew check + M1 gate, ios.yml Gradle XCFramework -> xcodebuild archive macos-26/Xcode-26); tool/m1_gate.sh 12-check gate. Foglietto identity retained."
   - date: 2026-06-20
     summary: "Overflow-popover dual-axis clip morph (qp-20260620) BUILT/CLOSED/COMMITTED on main (25f211f), TAGGED v1.0.0-rc4 -> iOS deploy_testflight. _MorphedBubble rewritten as AnimatedBuilder dual-axis clip morph (ClipRRect BorderRadius.lerp + SizedBox width lerp + Align heightFactor + content Opacity). Full suite 1487/1487."
-  - date: 2026-06-20
-    summary: "SP-20260620 six liquid-glass chrome polish fixes BUILT/CLOSED/COMMITTED on main (9629e36), TAGGED v1.0.0-rc3. Pill higher, overflow morph, text higher, 0.68 glass translucency, toolbar<->keyboard gap, iOS KeyboardAccessoryBar. Full suite 1486/1486."
 
 in-progress:
-  - title: "KMP rewrite — M4 Wave 8 complete (TASK-13 done); ready for orchestrator git commit + push"
-    state: "All 8 waves complete (TASK-01 through TASK-13). TASK-13: ./gradlew check EXIT 0 + m4_gate.sh 13/13 PASS + quality.yml M4 gate step wired. Awaiting orchestrator: git commit + push to kmp-rewrite; CI macos-26 run (xcodebuild archive MC-02 + xcodebuild test MC-03) is the authoritative final gate."
+  - title: "KMP rewrite — M1-M4 closed & CI-green; M5 (Share & Lifecycle) next"
+    state: "M1-M4 built/closed on kmp-rewrite (HEAD 9985f73). CI green: Quality (./gradlew check + m1_gate + m4_gate) + iOS archive + iosAppTests on macos-26. shared/ is the stable contract; createIosRecoveryRepository() + createIosSettingsRepository() are the established iOS construction seams M5 reuses."
     touched:
-      - ".github/workflows/quality.yml"
-    next-step: "Orchestrator: git add + commit + push kmp-rewrite. CI ios.yml will run build_ios (MC-02) + test_ios (MC-03, iosAppTests incl. M4 tests). After CI green, flip M4 [x] in LP plan + update STATUS.yaml to close M4."
+      - "iosApp/iosApp/Chrome/"
+      - "shared/src/iosMain/kotlin/com/paolosantucci/foglietto/shared/recovery/IosRecoveryFactory.kt"
+    next-step: "Run /short-plan-step for KMP M5 (Share & Lifecycle): Share Extension + App Group inbound (no-flash cold-start seed), synchronous ScenePhase.background save (reuse createIosRecoveryRepository + SaveBufferToRecovery), outbound ShareLink lifecycle, Files-app Info.plist keys. Resolve OQ-01/OQ-06 (Share Extension in first build + extra provisioning profile/CI secret) at SP-spec."
     blocker: null
   - title: "Foglietto 1.0.0-rc4 (Flutter, main) — TestFlight + device validation pending"
     state: "Tag v1.0.0-rc4 (25f211f) on main; iOS deploy + device validation pending. Separate from the KMP rewrite."
@@ -115,11 +124,11 @@ in-progress:
     blocker: null
 
 next-steps:
-  - "KMP M3 DONE & CI-green. Next: run /short-plan-step for KMP Milestone 4 (Liquid Glass Chrome) on kmp-rewrite — native top-right pill (share + overflow), menu bubble (all settings + description-only theme picker + inline expandable recovery submenu + About), 5-button bottom toolbar (copy/paste/keyboard-dismiss/indent/de-indent wired to shared LineIndent), auto-hide/reveal chrome. Native SwiftUI .glassEffect/GlassEffectContainer on control/nav layer only, no fallback branch. Resolve OQ-05 (recovery read-side cap) at SP-spec time."
-  - "M4 prep: wire the named --view-bg-color asset token (CANON GAP from M3 — BufferEditor uses UIColor.systemBackground as a placeholder; replace with UIColor(named:) once the asset exists). Also surface the 0.68 translucency intent as a native-glass legibility note during M4, not against the retired Flutter spec."
-  - "Reconcile the launch-colour CANON GAP: retained Foglietto LaunchBackground #2D73BA/#330A3C diverges from ui-design-bible tokens (#f6d32d/#873000). Parent identity-retention is binding for now; log a decision in .claude/docs/decisions/ (OQ-02 of the M1 spec)."
-  - "Clean stray untracked working-tree cruft on kmp-rewrite (store/ untracked; docs/ci-cd.md + the M2 plan show as deletions not yet committed) — tidy before/with M4."
-  - "Later KMP open questions before their milestones: OQ-01/OQ-06 Share Extension in first TestFlight build + whether it needs a 2nd provisioning profile / new CI secret (M5)."
+  - "Flip the LP-plan M4 marker to [x] completed and run finalize-plan (drains pending-consolidation — empty for M4, no canon delta) — this is the short-plan-step tail still in progress."
+  - "KMP M5 (Share & Lifecycle): /short-plan-step on the LP-plan — Share Extension target + App Group inbound (no-flash cold-start seed), synchronous ScenePhase.background save (reuse createIosRecoveryRepository() + SaveBufferToRecovery), best-effort applicationWillTerminate save, outbound ShareLink, Files-app keys (UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace). Resolve OQ-01/OQ-06 (Share Extension in first build + 2nd provisioning profile / 9th CI secret) before its build."
+  - "Log the three M4 CANON GAP decisions in .claude/docs/decisions/: CG-1 (native Liquid Glass material supersedes ui-design-bible 90%-surface fill), CG-2 (description-only theme rows supersede the GNOME 3-swatch selector), CG-3 (1300ms idle-reveal debounce supersedes the bible 4s/2s desktop pointer-reveal)."
+  - "Wire a named --view-bg-color asset (CANON GAP carried from M3 — BufferEditor still uses UIColor.systemBackground); do it in M5/M6 chrome-theming work."
+  - "Reconcile the launch-colour CANON GAP: retained Foglietto LaunchBackground #2D73BA/#330A3C diverges from ui-design-bible tokens (#f6d32d/#873000). Parent identity-retention binding; log a decision (OQ-02 of the M1 spec)."
   - "Flutter app (main, separate from KMP): confirm v1.0.0-rc4 (25f211f) TestFlight landing, answer export-compliance, assign to internal testing, device-validate the overflow morph + six chrome fixes."
 
 known-issues:
