@@ -16,7 +16,8 @@ import shared
 
 /// Minimal stub that satisfies `SettingsRepository` without touching UserDefaults.
 /// Returns a configurable `AppSettings` from `load()` and records `save` call arguments.
-final class StubSettingsRepository: SettingsRepository {
+/// File-private so it cannot collide with the same-named stub in BufferEditorCoordinatorTests.
+private final class StubSettingsRepository: SettingsRepository {
 
     private let fontSizeIndexToReturn: Int32
     private(set) var savedSettings: [AppSettings] = []

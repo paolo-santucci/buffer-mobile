@@ -7,7 +7,7 @@ import kotlin.math.roundToInt
  * Pure pinch-to-zoom arithmetic shared between platforms.
  *
  * This is the ONLY M3 addition to the shared module (NFR-05 carve-out, OQ-02 resolution).
- * It contains zero UIKit / Foundation / SwiftUI / Apple dependencies — it is platform-neutral
+ * It contains zero Apple-framework or platform-specific dependencies — it is platform-neutral
  * commonMain code, fully jvmTest-coverable on Linux.
  *
  * Formula (spec §5.1.b, FR-17):
