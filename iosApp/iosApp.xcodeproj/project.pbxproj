@@ -11,7 +11,26 @@
 		A1000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000011 /* ContentView.swift */; };
 		A1000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000012 /* Assets.xcassets */; };
 		A1000004 /* SharedPackage in Frameworks */ = {isa = PBXBuildFile; productRef = A1000020 /* SharedPackage */; };
+		A1000061 /* TextOffsetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000060 /* TextOffsetBridge.swift */; };
+		A1000063 /* BufferViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000062 /* BufferViewModel.swift */; };
+		A1000065 /* BufferEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000064 /* BufferEditor.swift */; };
+		A1000067 /* EditorPinchModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000066 /* EditorPinchModifier.swift */; };
+		A1000071 /* TextOffsetBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000070 /* TextOffsetBridgeTests.swift */; };
+		A1000073 /* BufferViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000072 /* BufferViewModelTests.swift */; };
+		A1000075 /* BufferEditorCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000074 /* BufferEditorCoordinatorTests.swift */; };
+		A1000077 /* EditorPinchModifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000076 /* EditorPinchModifierTests.swift */; };
+		A1000079 /* SurrogatePairOffsetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000078 /* SurrogatePairOffsetTests.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A1000087 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1000008;
+			remoteInfo = iosApp;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		A1000009 /* iosApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -19,6 +38,16 @@
 		A1000011 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A1000012 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1000060 /* TextOffsetBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/TextOffsetBridge.swift; sourceTree = "<group>"; };
+		A1000062 /* BufferViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/BufferViewModel.swift; sourceTree = "<group>"; };
+		A1000064 /* BufferEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/BufferEditor.swift; sourceTree = "<group>"; };
+		A1000066 /* EditorPinchModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/EditorPinchModifier.swift; sourceTree = "<group>"; };
+		A1000070 /* TextOffsetBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextOffsetBridgeTests.swift; sourceTree = "<group>"; };
+		A1000072 /* BufferViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BufferViewModelTests.swift; sourceTree = "<group>"; };
+		A1000074 /* BufferEditorCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BufferEditorCoordinatorTests.swift; sourceTree = "<group>"; };
+		A1000076 /* EditorPinchModifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPinchModifierTests.swift; sourceTree = "<group>"; };
+		A1000078 /* SurrogatePairOffsetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurrogatePairOffsetTests.swift; sourceTree = "<group>"; };
+		A1000086 /* iosAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iosAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -30,6 +59,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1000081 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -37,6 +73,7 @@
 			isa = PBXGroup;
 			children = (
 				A1000031 /* iosApp */,
+				A1000089 /* iosAppTests */,
 				A1000032 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -46,6 +83,10 @@
 			children = (
 				A1000010 /* iosAppApp.swift */,
 				A1000011 /* ContentView.swift */,
+				A1000060 /* TextOffsetBridge.swift */,
+				A1000062 /* BufferViewModel.swift */,
+				A1000064 /* BufferEditor.swift */,
+				A1000066 /* EditorPinchModifier.swift */,
 				A1000012 /* Assets.xcassets */,
 				A1000013 /* Info.plist */,
 			);
@@ -56,8 +97,21 @@
 			isa = PBXGroup;
 			children = (
 				A1000009 /* iosApp.app */,
+				A1000086 /* iosAppTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A1000089 /* iosAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				A1000070 /* TextOffsetBridgeTests.swift */,
+				A1000072 /* BufferViewModelTests.swift */,
+				A1000074 /* BufferEditorCoordinatorTests.swift */,
+				A1000076 /* EditorPinchModifierTests.swift */,
+				A1000078 /* SurrogatePairOffsetTests.swift */,
+			);
+			path = iosAppTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -83,6 +137,23 @@
 			productReference = A1000009 /* iosApp.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A1000085 /* iosAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000084 /* Build configuration list for PBXNativeTarget "iosAppTests" */;
+			buildPhases = (
+				A1000080 /* Sources */,
+				A1000081 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A1000088 /* PBXTargetDependency */,
+			);
+			name = iosAppTests;
+			productName = iosAppTests;
+			productReference = A1000086 /* iosAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -95,6 +166,10 @@
 				TargetAttributes = {
 					A1000008 = {
 						CreatedOnToolsVersion = 16.0;
+					};
+					A1000085 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = A1000008;
 					};
 				};
 			};
@@ -115,6 +190,7 @@
 			projectRoot = "";
 			targets = (
 				A1000008 /* iosApp */,
+				A1000085 /* iosAppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -137,10 +213,34 @@
 			files = (
 				A1000001 /* iosAppApp.swift in Sources */,
 				A1000002 /* ContentView.swift in Sources */,
+				A1000061 /* TextOffsetBridge.swift in Sources */,
+				A1000063 /* BufferViewModel.swift in Sources */,
+				A1000065 /* BufferEditor.swift in Sources */,
+				A1000067 /* EditorPinchModifier.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000080 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000071 /* TextOffsetBridgeTests.swift in Sources */,
+				A1000073 /* BufferViewModelTests.swift in Sources */,
+				A1000075 /* BufferEditorCoordinatorTests.swift in Sources */,
+				A1000077 /* EditorPinchModifierTests.swift in Sources */,
+				A1000079 /* SurrogatePairOffsetTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A1000088 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1000008 /* iosApp */;
+			targetProxy = A1000087 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A1000041 /* Debug */ = {
@@ -150,6 +250,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
+				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = iosApp/Info.plist;
@@ -301,6 +402,41 @@
 			};
 			name = Release;
 		};
+		A1000082 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.paolosantucci.foglietto.iosAppTests;
+				PRODUCT_NAME = iosAppTests;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/iosApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/iosApp";
+			};
+			name = Debug;
+		};
+		A1000083 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.paolosantucci.foglietto.iosAppTests;
+				PRODUCT_NAME = iosAppTests;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/iosApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/iosApp";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -318,6 +454,15 @@
 			buildConfigurations = (
 				A1000051 /* Debug */,
 				A1000052 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000084 /* Build configuration list for PBXNativeTarget "iosAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000082 /* Debug */,
+				A1000083 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

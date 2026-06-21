@@ -72,6 +72,76 @@ jobs:
             archive
 
   # ---------------------------------------------------------------------------
+  # test_ios — runs on every push / PR on kmp-rewrite and main (not tag-gated).
+  # Proves MC-03: the iosAppTests XCTest target compiles and runs on an iOS
+  # Simulator, and the NFR-01 surrogate-pair XCTest passes.
+  # False-green guard: the job fails if zero tests execute.
+  # ---------------------------------------------------------------------------
+  test_ios:
+    runs-on: macos-26
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      # Assemble the shared XCFramework — required by iosApp which iosAppTests
+      # links against (TEST_HOST = iosApp binary, BUNDLE_LOADER = TEST_HOST).
+      - name: Assemble shared XCFramework
+        run: ./gradlew :shared:assembleSharedReleaseXCFramework --no-daemon
+
+      # Run the iosAppTests suite on the iOS 26 Simulator.
+      # -destination: prefer OS=latest with a named device for Xcode 26 / macos-26.
+      # CODE_SIGNING_ALLOWED=NO: unit tests don't require signing.
+      # -resultBundlePath: captures structured output for the false-green guard.
+      # set -o pipefail: ensures xcpretty/grep failure propagates.
+      - name: Run iosAppTests on iOS Simulator
+        env:
+          NSUnbufferedIO: YES
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,OS=latest,name=iPhone 16' \
+            -resultBundlePath "$RUNNER_TEMP/iosAppTests.xcresult" \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/xcodebuild-test.log"
+
+      # False-green guard: fail the job if zero tests executed.
+      # "Executed 0 tests" in the log means XCTest ran but found nothing —
+      # that would silently pass the xcodebuild exit code (0) and be a false green.
+      - name: False-green guard — assert at least 1 test executed
+        run: |
+          LOG="$RUNNER_TEMP/xcodebuild-test.log"
+
+          # Must contain a "Test Suite" passed/failed line (confirms XCTest ran).
+          if ! grep -q 'Test Suite .* \(passed\|failed\)' "$LOG"; then
+            echo "ERROR: No 'Test Suite ... passed/failed' line found — XCTest did not run." >&2
+            exit 1
+          fi
+
+          # Must NOT show "Executed 0 tests" — that is a false-green with no tests.
+          if grep -q 'Executed 0 tests' "$LOG"; then
+            echo "ERROR: xcodebuild reported 'Executed 0 tests' — iosAppTests suite is empty." >&2
+            exit 1
+          fi
+
+          echo "False-green guard PASSED — at least 1 test executed."
+
+  # ---------------------------------------------------------------------------
   # deploy_testflight — gated to v* tags only.
   # Full signing + export + TestFlight upload via xcrun altool.
   # The signing spine (steps 2–6 in assessment §3) is preserved VERBATIM from
