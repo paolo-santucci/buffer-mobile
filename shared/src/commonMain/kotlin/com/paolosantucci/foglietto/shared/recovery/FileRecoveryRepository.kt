@@ -150,10 +150,12 @@ class FileRecoveryRepository(
         val okioPath = path.toPath()
         if (!fileSystem.exists(okioPath)) return null
         return try {
-            fileSystem.source(okioPath).use { source ->
-                val buffer = Buffer()
-                source.read(buffer, Long.MAX_VALUE)
-                buffer.readUtf8()
+            // okio's FileSystem.read {} helper opens, buffers, and closes the source.
+            // Used in place of `source().use {}` because okio.Source extends okio.Closeable,
+            // which aliases java.io.Closeable (AutoCloseable) on JVM but NOT kotlin.AutoCloseable
+            // on Kotlin/Native — so `.use {}` fails to resolve on the iOS targets.
+            fileSystem.read(okioPath) {
+                readUtf8()
             }
         } catch (e: IOException) {
             // File may have vanished between the exists check and the read (tolerate)
@@ -202,9 +204,10 @@ class FileRecoveryRepository(
      */
     private fun readHead(path: Path): String {
         return try {
-            fileSystem.source(path).use { source ->
+            // okio's FileSystem.read {} helper (Native-safe; see note in read()).
+            fileSystem.read(path) {
                 val buffer = Buffer()
-                source.read(buffer, RecoveryPreview.PREVIEW_READ_LIMIT.toLong())
+                read(buffer, RecoveryPreview.PREVIEW_READ_LIMIT.toLong())
                 buffer.readUtf8()
             }
         } catch (e: IOException) {
