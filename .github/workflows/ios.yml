@@ -115,15 +115,7 @@ jobs:
           # is not tied to a fixed device name or OS version that may not be installed
           # on the macos-26 runner image.  If no simulator is found, print the list
           # and fail early with a clear error.
-          UDID=$(xcrun simctl list devices available -j | python3 -c "
-import json, sys
-d = json.load(sys.stdin)['devices']
-print(next(
-    (x['udid'] for rt in d for x in d[rt]
-     if x.get('isAvailable') and x['name'].startswith('iPhone')),
-    ''
-))
-")
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next((x['udid'] for rt in d for x in d[rt] if x.get('isAvailable') and x['name'].startswith('iPhone')), ''))")
           if [ -z "$UDID" ]; then
             echo 'ERROR: No available iPhone simulator found on this runner.' >&2
             xcrun simctl list devices available
