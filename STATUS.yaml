@@ -1,70 +1,37 @@
 schema-version: 2
-last-updated: "2026-06-21T17:05:00+02:00"
-active-plan: ".claude/docs/plans/qp-20260621-kmp-m5-share-lifecycle.md"
-last-plan: ".claude/docs/plans/archive/sp-20260621-kmp-m4-liquid-glass-chrome-plan.md"
+last-updated: "2026-06-21T21:05:00+02:00"
+active-plan: null
+last-plan: ".claude/docs/plans/archive/qp-20260621-kmp-m5-share-lifecycle.md"
 
 short-plan:
-  feature: |
-    KMP Milestone 5 (Share & Lifecycle) — iOS-only MVP. SCOPED to the three Must FRs that are
-    CI-verifiable on the main app target with no external provisioning:
-      FR-14 — synchronous recovery save at ScenePhase.background (wrapped in beginBackgroundTask;
-              NO async Task); .active resets the ephemeral buffer + clears the per-session burst
-              guard; .inactive no-op; best-effort applicationWillTerminate save (R-11 unreliable,
-              documented). Reuses createIosRecoveryRepository() + SaveBufferToRecovery (synchronous,
-              returns path?/null). Save path lives OUTSIDE BufferViewModel (FR-12 / m4_gate check 5).
-      FR-17 — UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace in Info.plist.
-      FR-20 — outbound ShareLink in TopPill disabled on empty buffer (already met in M4; lock w/ gate).
-    DEFERRED carryforward: FR-19 (inbound Share Extension + App Group, a "Should") — needs a 2nd
-    bundle id, 2nd provisioning profile, App Group registration, and a 9th GitHub CI secret
-    (OQ-01/OQ-06, R-04 High/High): user-only external resources that do not exist yet; building it
-    now fails CI signing irrecoverably. Deferred to a fast-follow once provisioned. LP DoD permits
-    "explicitly deferred".
-  slug: "kmp-m5-share-lifecycle"
-  auto: true
-  request-type: feature
-  workflow: quick
+  feature: null
+  slug: null
+  auto: false
+  request-type: null
+  workflow: null
   parent:
-    spec: ".claude/docs/specs/lp-20260620-kotlin-multiplatform-rewrite-spec.md"
-    plan: ".claude/docs/plans/lp-20260620-kotlin-multiplatform-rewrite-plan.md"
-    milestone: 5
-    frs: "FR-14, FR-17, FR-19, FR-20"
+    spec: null
+    plan: null
+    milestone: null
+    frs: null
   paths:
     spec: null
-    plan: ".claude/docs/plans/qp-20260621-kmp-m5-share-lifecycle.md"
-    assess-dir: ".claude/docs/specs/sp-20260621-kmp-m5-share-lifecycle-assessment"
+    plan: null
+    assess-dir: null
   phases:
-    brainstorm: done
-    assess: done
-    triage: done
-    spec: skipped
-    plan: done
+    brainstorm: pending
+    assess: pending
+    triage: pending
+    spec: pending
+    plan: pending
     build: pending
   approvals:
     spec: null
-    plan: approved
+    plan: null
   rejection-note: null
   build-progress:
-    current-wave: 3
-    waves-completed:
-      - wave: 1
-        tasks:
-          - task: T-03
-            date: "2026-06-21T18:10:00+02:00"
-            status: complete
-            commit: "62e21b5"
-            summary: "FR-17 Files-app plist keys: UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace added to top-level Info.plist <dict>, alphabetically ordered near LSRequiresIPhoneOS, preserving literal-plist style and indentation."
-          - task: T-01
-            date: "2026-06-21T19:00:00+02:00"
-            status: complete
-            commit: "pending"
-            summary: "FR-14 synchronous burst-guarded recovery-save core (TDD). LifecycleSaveCoordinator.swift four method bodies filled: onBackground() guard+beginBackgroundTask+synchronous SaveBufferToRecovery.invoke+endBackgroundTask+arm; onActive() resetBuffer('')+clear guard; onInactive() no-op; onTerminate() onTerminate() unguarded invoke. LifecycleSaveCoordinatorTests.swift verified: 6 tests, SpyRecoveryRepository with save(text:)->String and trim(keep:Int32) conformance, @MainActor class, no async/await/Task. Swift-6 strict-concurrency safe."
-      - wave: 2
-        tasks:
-          - task: T-02
-            date: "2026-06-21T20:00:00+02:00"
-            status: complete
-            commit: "c8cf7e9"
-            summary: "FR-14 lifecycle wiring (integration). iosAppApp.swift: AppDelegate(onTerminate) + @UIApplicationDelegateAdaptor; @State lifecycle: LifecycleSaveCoordinator constructed from recoveryRepo+vm in init() using _lifecycle = State(wrappedValue:) pattern; no new factory call (m4_gate check 4 green); lifecycle passed to ContentView; appDelegate.onTerminate set once in .onAppear{if == nil} guard. ContentView.swift: let lifecycle param added to init; @Environment(\.scenePhase) private var scenePhase; .onChange(of: scenePhase) calls ContentView.dispatchScenePhase(newPhase, to: lifecycle); @MainActor static func dispatchScenePhase(_:to:) switch .background->onBackground / .active->onActive / .inactive->onInactive / @unknown default no-op. ContentViewLifecycleTests.swift: 3 tests, LifecycleWiringSpyRepository (distinct name from T-01 SpyRecoveryRepository — M3 CI-red lesson), @MainActor, test_active_dispatchesOnActive / test_background_dispatchesOnBackground_withVMText / test_inactive_isNoOp. BufferViewModel.swift untouched. m1_gate 12/12 + m4_gate 13/13 green locally."
+    current-wave: null
+    waves-completed: []
 
 long-plan:
   feature: |
@@ -109,6 +76,8 @@ pending-consolidation: []
 
 recently-completed:
   - date: 2026-06-21
+    summary: "KMP Milestone 5 (Share & Lifecycle) BUILT, CI-GREEN & CLOSED on kmp-rewrite (HEAD abe6e5f), via /short-plan-step --auto (QUICK path, 4 tasks / 3 waves). SCOPED to FR-14 + FR-17 + FR-20; FR-19 (inbound Share Extension + App Group) EXPLICITLY DEFERRED to an M7-provisioned fast-follow (needs 2nd bundle id, 2nd provisioning profile, App Group registration, 9th CI secret — operator-only; LP DoD permits explicitly-deferred OQs). Delivered: new @MainActor LifecycleSaveCoordinator (T-01) — burst-guarded SYNCHRONOUS recovery save at ScenePhase.background (beginBackgroundTask-wrapped, NO async Task per R-01/AR-01; reuses the single injected RecoveryRepository + SaveBufferToRecovery(repository:).invoke(text:); save path lives OUTSIDE BufferViewModel per FR-12), .active resets the ephemeral buffer via viewModel.populate('') + clears the per-episode burst guard, .inactive no-op, best-effort onTerminate via @UIApplicationDelegateAdaptor applicationWillTerminate (R-11, unguarded). T-02 wiring: iosAppApp builds the coordinator in init() from recoveryRepo+vm (no new createIos*Repository() call, m4_gate check 4) + AppDelegate adaptor wired once via .onAppear guard; ContentView gains @Environment(\\.scenePhase) + .onChange -> @MainActor static dispatchScenePhase seam (testable). T-03: FR-17 Info.plist UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace. T-04: new tool/m5_gate.sh (8 checks incl. no-async-in-save-path grep + FR-20 ShareLink-disabled lock; invokes m1+m4) wired into quality.yml. Tests: LifecycleSaveCoordinatorTests (6) + ContentViewLifecycleTests (3), file-private spies, @MainActor, distinct names (M3 dup-stub lesson). Verify: m5_gate 8/8 + ./gradlew check local; CI GREEN — build_ios archive + test_ios iosAppTests+false-green-guard (run 27904926455), Quality gradlew check + m1/m4/m5 gates (run 27904926450). No shared/ change. QP archived; §9 Spec Impact omitted (faithful native realization of canonized recovery save; no canon delta) -> no pending-consolidation push. LP §8 carries the qp-20260621-kmp-m5 FR-19-deferral [LP-IMPACT]. LP M5 marker flipped to [x] completed."
+  - date: 2026-06-21
     summary: "KMP Milestone 4 (Liquid Glass Chrome) BUILT, CI-GREEN & CLOSED on kmp-rewrite (HEAD 9985f73), via /short-plan-step --auto: 13 tasks / 8 waves. Native iOS 26 Liquid Glass chrome over the M3 editor: TopPill (ShareLink gated-disabled on empty buffer + overflow), MenuBubble (description-only System/Light/Dark theme picker + in-bubble font-size control + inline expandable 'Recent notes' recovery submenu re-fetching list() per expand & restoring via populate() tolerating vanished files + About/GPL-3.0; Preferences row omitted, settings inline per FR-21), 5-button BottomToolbar (copy/paste/close-keyboard/indent/de-indent via Coordinator hooks), ChromeVisibility @Observable auto-hide/reveal SM (1300ms idle-reveal debounce + synchronous inject* test seam; CG-3), ChromeOverlay+ContentView ZStack(editor+chrome)+.safeAreaInset toolbar (anti-additive keyboard avoidance via a CoordinatorBox weak-bridge). Glass on control/nav only (NFR-06), no fallback. Shared additions: AppSettings.setColorScheme (identity-stable) + iosMain createIosRecoveryRepository() (UTC NSCalendar->RecoveryInstant via NSTimeZone.timeZoneWithName) — both LP-IMPACT seams M5/M6 reuse (LP §8). CM-1 single Settings/Recovery instance in iosAppApp.init(); CM-6 Coordinator weak textView+hooks; CM-5 populate already callable. CANON GAPs CG-1 (native glass material) / CG-2 (description-only theme rows) / CG-3 (1300ms reveal) flagged for .claude/docs/decisions/. Verify: MC-01 ./gradlew check + m4_gate 13/13 (local); MC-02 build_ios XCFramework+archive GREEN; MC-03 test_ios iosAppTests+false-green-guard GREEN (run 27900809907); Quality GREEN (27900809913). quality.yml now runs m1_gate+m4_gate. 5 CI-driven fixes (commcomment greps, K/N NSTimeZone binding needing explicit platform.Foundation imports, Swift interop labels save(settings:)/setColorScheme(scheme:), test-stub RecoveryRepository conformance) — Swift/iosMain don't compile on the mac-less Linux host so these surfaced only on macos-26: commits 120d779/c24ecc8/1515214/9985f73. Spec+plan archived; §6.2 Spec Impact omitted (no canon delta) -> no pending-consolidation push."
   - date: 2026-06-21
     summary: "KMP Milestone 3 (SwiftUI Editor Core) BUILT, CI-GREEN & CLOSED on branch kmp-rewrite. Build (8 waves, commit 30fd4d3) was complete but its LP marker was unflipped and CI red; this session drove M3 to green and closed it. UITextView editor via UIViewRepresentable + shouldChangeTextIn pre-edit hook (no post-edit diffing/latch), single UTF-16 offset boundary (TextOffsetBridge; shared Kotlin sole authority), @Observable BufferViewModel calling shared use cases, ephemeral buffer, font-size + pinch-to-zoom (all pinch math in shared PinchZoom). Four CI-red fixes: (1) M1 gate (j) commonMain-purity grep matched a comment in PinchZoom.kt naming UIKit/Foundation/SwiftUI -> reworded (791aafa). (2) Duplicate StubSettingsRepository across two iosAppTests files -> made the BufferViewModelTests copy private (791aafa). (3) Swift-6 strict-concurrency: BufferEditorCoordinatorTests/EditorPinchModifierTests + free makeCoordinator helper marked @MainActor (construct @MainActor UIViewRepresentable/ViewModifier, send non-Sendable VM/stub) (248782d). (4) EditorPinchModifier gesture anchor was @State Int? — discarded outside a SwiftUI render so the seam never armed; moved to a reference-type PinchGestureState held in @State (persists across body re-evals AND direct seam calls); also corrected the EC-04 empty-marker test fixture from a lone first-line '- ' (which hits the intentional E-I2 quirk: lone first-line marker CONTINUES) to a real continued list '- a\n- ' so termination actually fires (afaacba). CI GREEN: Quality (./gradlew check + M1 gate 12/12) + iOS run 27897956409 (build_ios archive = MC-02; test_ios 48 tests, 0 failures, false-green guard pass = MC-03). Local: m3_gate 16/16, ./gradlew check EXIT 0. Spec+plan archived; §6.2 Spec Impact omitted (faithful port of already-canonized text-editor/typography slices; no canon delta) -> no pending-consolidation push. LP §8 already carries the M3 LP-IMPACT (iosMain createIosSettingsRepository factory). M3 marker flipped to [x] completed in the LP-plan."
@@ -116,16 +85,14 @@ recently-completed:
     summary: "KMP M2 (Shared Domain & Data) COMPLETE — commit 9f81622, branch kmp-rewrite. 7 tasks, 3 waves, 143 jvmTest PASS, ./gradlew check GREEN on Linux (JVM-only). recovery/settings/editor verbatim Dart->Kotlin port into platform-neutral shared/. ListContinuation preserves the E-I2 lone-first-line-marker-continues quirk verbatim (load-bearing; M3's EC-04 test fixture corrected to respect it)."
   - date: 2026-06-20
     summary: "KMP MILESTONE 1 (Foundation & Scaffold) BUILT, CI-VERIFIED & CLOSED on kmp-rewrite (462ab99 + 585b1ea). KMP project in-place: shared/ jvm()+host-guarded iosArm64/iosSimulatorArm64/iosX64 -> XCFramework; iosApp/ SwiftUI shell over SPM .binaryTarget; Flutter removed; CI reworked (quality.yml ./gradlew check + M1 gate, ios.yml Gradle XCFramework -> xcodebuild archive macos-26/Xcode-26); tool/m1_gate.sh 12-check gate. Foglietto identity retained."
-  - date: 2026-06-20
-    summary: "Overflow-popover dual-axis clip morph (qp-20260620) BUILT/CLOSED/COMMITTED on main (25f211f), TAGGED v1.0.0-rc4 -> iOS deploy_testflight. _MorphedBubble rewritten as AnimatedBuilder dual-axis clip morph (ClipRRect BorderRadius.lerp + SizedBox width lerp + Align heightFactor + content Opacity). Full suite 1487/1487."
-
 in-progress:
-  - title: "KMP rewrite — M1-M4 closed & CI-green; M5 (Share & Lifecycle) next"
-    state: "M1-M4 built/closed on kmp-rewrite (HEAD 9985f73). CI green: Quality (./gradlew check + m1_gate + m4_gate) + iOS archive + iosAppTests on macos-26. shared/ is the stable contract; createIosRecoveryRepository() + createIosSettingsRepository() are the established iOS construction seams M5 reuses."
+  - title: "KMP rewrite — M1-M5 closed & CI-green; M6 (Localization & Theming) next"
+    state: "M1-M5 built/closed on kmp-rewrite (HEAD abe6e5f), CI green (build_ios archive + test_ios + Quality m1/m4/m5 gates). M6 + M5's deferred FR-19 fast-follow remain; M7 ships to TestFlight. shared/ stable; createIosSettingsRepository()/createIosRecoveryRepository() + LifecycleSaveCoordinator are the established iOS seams."
     touched:
-      - "iosApp/iosApp/Chrome/"
-      - "shared/src/iosMain/kotlin/com/paolosantucci/foglietto/shared/recovery/IosRecoveryFactory.kt"
-    next-step: "Run /short-plan-step for KMP M5 (Share & Lifecycle): Share Extension + App Group inbound (no-flash cold-start seed), synchronous ScenePhase.background save (reuse createIosRecoveryRepository + SaveBufferToRecovery), outbound ShareLink lifecycle, Files-app Info.plist keys. Resolve OQ-01/OQ-06 (Share Extension in first build + extra provisioning profile/CI secret) at SP-spec."
+      - "iosApp/iosApp/LifecycleSaveCoordinator.swift"
+      - "iosApp/iosApp/iosAppApp.swift"
+      - "tool/m5_gate.sh"
+    next-step: "Run /short-plan-step for KMP M6 (Localization & Theming): EN/IT Localizable.xcstrings, light/dark themes + per-theme launch surface, Dynamic Type + accessibility fallbacks (FR-23, FR-24)."
     blocker: null
   - title: "Foglietto 1.0.0-rc4 (Flutter, main) — TestFlight + device validation pending"
     state: "Tag v1.0.0-rc4 (25f211f) on main; iOS deploy + device validation pending. Separate from the KMP rewrite."
@@ -136,14 +103,22 @@ in-progress:
     blocker: null
 
 next-steps:
-  - "Flip the LP-plan M4 marker to [x] completed and run finalize-plan (drains pending-consolidation — empty for M4, no canon delta) — this is the short-plan-step tail still in progress."
-  - "KMP M5 (Share & Lifecycle): /short-plan-step on the LP-plan — Share Extension target + App Group inbound (no-flash cold-start seed), synchronous ScenePhase.background save (reuse createIosRecoveryRepository() + SaveBufferToRecovery), best-effort applicationWillTerminate save, outbound ShareLink, Files-app keys (UIFileSharingEnabled + LSSupportsOpeningDocumentsInPlace). Resolve OQ-01/OQ-06 (Share Extension in first build + 2nd provisioning profile / 9th CI secret) before its build."
+  - "KMP M6 (Localization & Theming): /short-plan-step on the LP-plan — EN/IT Localizable.xcstrings String Catalog (system locale, English fallback; shared Kotlin holds zero UI strings), light/dark themes with per-theme launch surface, Dynamic Type + Reduce Transparency/Increase Contrast/Reduce Motion fallbacks, tap targets >=44pt (FR-23, FR-24; NFR-04/05)."
+  - "FR-19 fast-follow (M5-deferred inbound Share Extension + App Group): provision the App-Group App ID + 2nd provisioning profile + 9th CI secret IOS_SHAREEXT_PROVISIONING_PROFILE_BASE64 (operator action), then add the Share Extension target (cold-start no-flash seed via populate()) and the M7 ExportOptions/ios.yml multi-target signing. Tracked as a [LP-IMPACT] in LP §8."
   - "Log the three M4 CANON GAP decisions in .claude/docs/decisions/: CG-1 (native Liquid Glass material supersedes ui-design-bible 90%-surface fill), CG-2 (description-only theme rows supersede the GNOME 3-swatch selector), CG-3 (1300ms idle-reveal debounce supersedes the bible 4s/2s desktop pointer-reveal)."
   - "Wire a named --view-bg-color asset (CANON GAP carried from M3 — BufferEditor still uses UIColor.systemBackground); do it in M5/M6 chrome-theming work."
   - "Reconcile the launch-colour CANON GAP: retained Foglietto LaunchBackground #2D73BA/#330A3C diverges from ui-design-bible tokens (#f6d32d/#873000). Parent identity-retention binding; log a decision (OQ-02 of the M1 spec)."
   - "Flutter app (main, separate from KMP): confirm v1.0.0-rc4 (25f211f) TestFlight landing, answer export-compliance, assign to internal testing, device-validate the overflow morph + six chrome fixes."
 
 known-issues:
+  - severity: warning
+    description: "FR-19 (inbound Share Extension + App Group) DEFERRED out of M5: the app cannot yet receive shared text from the iOS share sheet. Needs operator-only provisioning (2nd bundle id, 2nd profile, App Group registration, 9th CI secret) before the target can be signed/shipped."
+    impact: medium
+    workaround: "Fast-follow folded into M7 signing work; tracked in LP §8 [LP-IMPACT] and next-steps. Outbound share (ShareLink) is unaffected and works."
+  - severity: warning
+    description: "M5 lifecycle save (ScenePhase.background) verified only via CI-simulator unit tests (LifecycleSaveCoordinatorTests assert synchronous save+trim before return); not yet exercised by a real backgrounding/termination on a physical device. applicationWillTerminate is best-effort (R-11)."
+    impact: medium
+    workaround: "Device-validate the background-save + cold-start-empty behavior before the M7 TestFlight build."
   - severity: warning
     description: "KMP M3 BufferEditor uses UIColor.systemBackground for --view-bg-color (no named design-token asset wired yet). CANON GAP carried from M3; functional but not the canonical token."
     impact: low
