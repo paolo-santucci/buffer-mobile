@@ -25,7 +25,7 @@ private final class StubSettingsRepository: SettingsRepository {
     var storedSettings: AppSettings
 
     init(fontSizeIndex: Int32 = 8) {
-        storedSettings = AppSettings(fontSizeIndex: fontSizeIndex)
+        storedSettings = AppSettings(colorScheme: AppColorScheme.follow, fontSizeIndex: fontSizeIndex)
     }
 
     func load() -> AppSettings { storedSettings }
@@ -259,8 +259,8 @@ final class BufferEditorCoordinatorTests: XCTestCase {
             "'typed content', updateUIView does not overwrite the UITextView)")
 
         // Verify the expected font pt for index 5 (FR-14 / FR-15).
-        let pt5 = CGFloat(AppSettings(fontSizeIndex: 5).fontSizePt)
-        let pt8 = CGFloat(AppSettings(fontSizeIndex: 8).fontSizePt)
+        let pt5 = CGFloat(AppSettings(colorScheme: AppColorScheme.follow, fontSizeIndex: 5).fontSizePt)
+        let pt8 = CGFloat(AppSettings(colorScheme: AppColorScheme.follow, fontSizeIndex: 8).fontSizePt)
         XCTAssertNotEqual(pt5, pt8,
             "Font pt must differ between index 5 and 8 — confirming the font update path is distinct from the text-clear path (EC-12)")
     }

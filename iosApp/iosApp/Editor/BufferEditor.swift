@@ -42,7 +42,7 @@ private func fontPt(for index: Int) -> CGFloat {
     // CANON GAP: --view-bg-color is satisfied by UIColor.systemBackground below;
     // once a named design-token color asset is wired into Assets.xcassets, replace
     // UIColor.systemBackground with UIColor(named: "ViewBgColor") throughout this file.
-    return CGFloat(AppSettings(fontSizeIndex: Int32(index)).fontSizePt)
+    return CGFloat(AppSettings(colorScheme: AppColorScheme.follow, fontSizeIndex: Int32(index)).fontSizePt)
 }
 
 // ---------------------------------------------------------------------------

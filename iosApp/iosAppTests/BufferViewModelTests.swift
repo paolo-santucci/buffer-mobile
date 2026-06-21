@@ -9,6 +9,7 @@
 
 import XCTest
 import Foundation
+import shared
 @testable import iosApp
 
 // MARK: - Stub SettingsRepository
@@ -28,7 +29,7 @@ final class StubSettingsRepository: SettingsRepository {
         return AppSettings(colorScheme: .follow, fontSizeIndex: fontSizeIndexToReturn)
     }
 
-    func save(_ settings: AppSettings) {
+    func save(settings: AppSettings) {
         savedSettings.append(settings)
     }
 }

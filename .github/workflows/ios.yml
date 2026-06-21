@@ -111,11 +111,30 @@ jobs:
           NSUnbufferedIO: YES
         run: |
           set -o pipefail
+          # Dynamically select the first available iPhone simulator UDID so the job
+          # is not tied to a fixed device name or OS version that may not be installed
+          # on the macos-26 runner image.  If no simulator is found, print the list
+          # and fail early with a clear error.
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+import json, sys
+d = json.load(sys.stdin)['devices']
+print(next(
+    (x['udid'] for rt in d for x in d[rt]
+     if x.get('isAvailable') and x['name'].startswith('iPhone')),
+    ''
+))
+")
+          if [ -z "$UDID" ]; then
+            echo 'ERROR: No available iPhone simulator found on this runner.' >&2
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "Using simulator UDID: $UDID"
           xcodebuild test \
             -project iosApp/iosApp.xcodeproj \
             -scheme iosApp \
             -configuration Debug \
-            -destination 'platform=iOS Simulator,OS=latest,name=iPhone 16' \
+            -destination "platform=iOS Simulator,id=$UDID" \
             -resultBundlePath "$RUNNER_TEMP/iosAppTests.xcresult" \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee "$RUNNER_TEMP/xcodebuild-test.log"

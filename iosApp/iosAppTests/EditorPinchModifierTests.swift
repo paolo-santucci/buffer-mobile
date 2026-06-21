@@ -40,7 +40,7 @@ final class MockSettingsRepository: SettingsRepository {
         return AppSettings(colorScheme: storedScheme, fontSizeIndex: storedIndex)
     }
 
-    func save(_ settings: AppSettings) {
+    func save(settings: AppSettings) {
         saveCallCount += 1
         storedIndex = settings.fontSizeIndex
         storedScheme = settings.colorScheme
@@ -174,7 +174,7 @@ final class EditorPinchModifierTests: XCTestCase {
         let mockSettings = MockSettingsRepository()
         // Pre-seed a non-default colorScheme in the mock.
         // We do this by saving an AppSettings with a custom scheme first.
-        mockSettings.save(AppSettings(colorScheme: AppColorScheme.dark, fontSizeIndex: 8))
+        mockSettings.save(settings: AppSettings(colorScheme: AppColorScheme.dark, fontSizeIndex: 8))
         // Reset the call count after the seed.
         mockSettings.saveCallCount = 0
 

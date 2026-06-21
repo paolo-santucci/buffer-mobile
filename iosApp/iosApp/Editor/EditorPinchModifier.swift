@@ -167,7 +167,7 @@ struct EditorPinchModifier: ViewModifier {
         // Persist exactly once (EC-10): load current settings, update only
         // fontSizeIndex (identity-stable — preserves colorScheme), save.
         let updated = settings.load().setFontSizeIndex(index: Int32(viewModel.fontSizeIndex))
-        settings.save(updated)
+        settings.save(settings: updated)
         // Reset the seam so the next gesture starts clean.
         gestureStartIndex = nil
     }
