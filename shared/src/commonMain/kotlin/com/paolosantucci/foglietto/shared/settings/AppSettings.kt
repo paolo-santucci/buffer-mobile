@@ -71,7 +71,7 @@ data class AppSettings(
      * no-op guard (FR-10) without allocating a new instance.
      *
      * Non-suspend. Additive — no existing member changed or removed.
-     * No Foundation/UIKit dependency (commonMain).
+     * Platform-neutral (commonMain) — no Apple/JVM platform dependency.
      *
      * Spec FR-04, FR-24, NFR-08; closes CM-2. Contract §5.1.a.
      */

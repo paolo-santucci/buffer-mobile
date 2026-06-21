@@ -64,8 +64,8 @@ struct RecoveryRow: Identifiable {
 /// **List only — no delete (FR-14):**
 /// No `delete`, `deleteAll`, or confirmation affordance is present on this class.
 ///
-/// **No okio across the boundary:**
-/// `RecoveryRepository` is called directly; `okio.FileSystem`/`okio.Path` are
+/// **No filesystem types across the boundary:**
+/// `RecoveryRepository` is called directly; the underlying okio filesystem/path types are
 /// internal to the shared Kotlin module and are never referenced in Swift (OQ-07 decision).
 @Observable
 final class RecoveryListViewModel {

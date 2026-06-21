@@ -134,11 +134,11 @@ final class IosRecoveryFactoryTests: XCTestCase {
 
     /// The factory call site does not expose any okio type in Swift.
     /// This test is structural — if okio types leaked, this file would not compile
-    /// (no okio import is present). Calling the factory without import okio
+    /// (no such import statement is present). Calling the factory without importing okio
     /// proves the boundary is maintained (CM-4).
     func test_okioBoundary_factoryCallableWithoutOkioImport() {
-        // If okio crossed the boundary, IosRecoveryFactoryKt would require an okio import
-        // here. The fact this file compiles WITHOUT `import okio` proves CM-4 / FR-05.
+        // If okio crossed the boundary, IosRecoveryFactoryKt would require importing okio
+        // here. The fact this file compiles with no such import statement proves CM-4 / FR-05.
         let repo = IosRecoveryFactoryKt.createIosRecoveryRepository()
         // Call a method to confirm the returned type is usable as RecoveryRepository.
         let _ = repo.list()
