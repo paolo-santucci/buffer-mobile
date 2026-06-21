@@ -50,6 +50,8 @@ final class MockSettingsRepository: SettingsRepository {
 
 // MARK: - EditorPinchModifierTests
 
+/// `@MainActor`: constructs `EditorPinchModifier` (a `@MainActor` SwiftUI `ViewModifier`).
+@MainActor
 final class EditorPinchModifierTests: XCTestCase {
 
     // MARK: - Helpers

@@ -45,6 +45,8 @@ private final class UpdateTextSpy: BufferViewModel {
 }
 
 /// Helper that creates a live `Coordinator` bound to the given view model and a `UITextView`.
+/// `@MainActor`: constructs `BufferEditor` (a `@MainActor` UIViewRepresentable) and a UITextView.
+@MainActor
 private func makeCoordinator(viewModel: BufferViewModel) -> (UITextView, BufferEditor.Coordinator) {
     let textView = UITextView()
     let editor = BufferEditor(viewModel: viewModel)
@@ -58,6 +60,8 @@ private func makeCoordinator(viewModel: BufferViewModel) -> (UITextView, BufferE
 // ---------------------------------------------------------------------------
 
 /// Tests for the §5.1.d decision table and EC cases.
+/// `@MainActor`: exercises UIKit (`UITextView`) and `@MainActor` SwiftUI representable types.
+@MainActor
 final class BufferEditorCoordinatorTests: XCTestCase {
 
     // -----------------------------------------------------------------------
