@@ -63,7 +63,7 @@ short-plan:
           - task: T-02
             date: "2026-06-21T20:00:00+02:00"
             status: complete
-            commit: "pending"
+            commit: "c8cf7e9"
             summary: "FR-14 lifecycle wiring (integration). iosAppApp.swift: AppDelegate(onTerminate) + @UIApplicationDelegateAdaptor; @State lifecycle: LifecycleSaveCoordinator constructed from recoveryRepo+vm in init() using _lifecycle = State(wrappedValue:) pattern; no new factory call (m4_gate check 4 green); lifecycle passed to ContentView; appDelegate.onTerminate set once in .onAppear{if == nil} guard. ContentView.swift: let lifecycle param added to init; @Environment(\.scenePhase) private var scenePhase; .onChange(of: scenePhase) calls ContentView.dispatchScenePhase(newPhase, to: lifecycle); @MainActor static func dispatchScenePhase(_:to:) switch .background->onBackground / .active->onActive / .inactive->onInactive / @unknown default no-op. ContentViewLifecycleTests.swift: 3 tests, LifecycleWiringSpyRepository (distinct name from T-01 SpyRecoveryRepository — M3 CI-red lesson), @MainActor, test_active_dispatchesOnActive / test_background_dispatchesOnBackground_withVMText / test_inactive_isNoOp. BufferViewModel.swift untouched. m1_gate 12/12 + m4_gate 13/13 green locally."
 
 long-plan:
