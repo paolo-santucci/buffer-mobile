@@ -56,3 +56,15 @@ jobs:
       # Spec refs: NFR-01/02/05/06/08; TASK-13 (Wave 8, sp-kmp-m4 plan).
       - name: M4 structural gate
         run: bash tool/m4_gate.sh
+
+      # M5 Share & Lifecycle structural gate: enforces the 8 invariants added
+      # in Milestone 5 — coordinator-exists, no-async-in-save-path (R-01/AR-01
+      # synchronous background save), sync-save-uses-background-task, scenePhase-
+      # in-ContentView, scenePhase-not-in-VM (FR-12, reinforces m4 check 5),
+      # plist-filesharing (FR-17 UIFileSharingEnabled + LSSupportsOpeningDocuments
+      # InPlace), sharelink-empty-gate (FR-20 disabled ShareLink on empty buffer),
+      # m1+m4-still-pass (chains to m1_gate + m4_gate, cannot go green if earlier
+      # invariant regresses).
+      # Spec refs: FR-14, FR-17, FR-20; R-01, AR-01, R-11; §5.3.
+      - name: M5 Share & Lifecycle gate
+        run: bash tool/m5_gate.sh
