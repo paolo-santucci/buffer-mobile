@@ -15,13 +15,17 @@
 //   chromeVisibility into BufferEditor, which sets them in updateUIView.
 //   This keeps ContentView free of UIKit imports and avoids two-phase binding.
 //
-// Spec refs: FR-02, FR-18, FR-19, FR-20, NFR-01, NFR-07; EC-13, EC-14, EC-17.
+// Scene-phase lifecycle wiring (M5, FR-14):
+//   @Environment(\.scenePhase) drives .onChange(of: scenePhase) on the root ZStack.
+//   The dispatch logic lives in the @MainActor static `dispatchScenePhase(_:to:)` so
+//   tests can drive it directly without a SwiftUI scene event loop (T-02 seam).
+//   C-07: cold-start .active does NOT fire via .onChange(of:) → no spurious reset.
+//
+// Spec refs: FR-02, FR-14, FR-18, FR-19, FR-20, NFR-01, NFR-07; EC-13, EC-14, EC-17.
 // §4.1 composition root / §4.3 data flow.
 //
 // CANON GAP: retained launch identity #2D73BA/#330A3C != bible Colour-&-branding
 // launch tokens; binding per parent spec §5.3 identity-retention; OQ-02 deferred.
-//
-// No ScenePhase save wiring in this file (M5, FR-14).
 
 import SwiftUI
 import shared
@@ -54,6 +58,23 @@ struct ContentView: View {
     /// Owned as @State in iosAppApp; passed here for ZStack wiring.
     let chromeVisibility: ChromeVisibility
 
+    /// The lifecycle save coordinator (FR-14).
+    ///
+    /// Constructed once at the composition root (`iosAppApp.init()`) from the single
+    /// `recovery` instance and the `viewModel`'s text-provider / reset closures.
+    /// Driven here via `@Environment(\.scenePhase)` + `.onChange(of: scenePhase)`.
+    /// The save path lives OUTSIDE `BufferViewModel` (FR-12 / m4_gate check 5).
+    let lifecycle: LifecycleSaveCoordinator
+
+    // MARK: - Scene phase observation (FR-14)
+
+    /// Current scene phase injected by SwiftUI.  The `.onChange(of: scenePhase)`
+    /// modifier on the root ZStack dispatches transitions to the coordinator.
+    ///
+    /// C-07: SwiftUI does NOT fire `.onChange(of:)` for the initial `.active` on cold
+    /// start, so there is no spurious buffer reset at launch.
+    @Environment(\.scenePhase) private var scenePhase
+
     // MARK: - Coordinator bridge
 
     /// Reference-type box bridging the live `BufferEditor.Coordinator` to the
@@ -85,12 +106,14 @@ struct ContentView: View {
         viewModel: BufferViewModel,
         settings: SettingsRepository,
         recovery: RecoveryRepository,
-        chromeVisibility: ChromeVisibility
+        chromeVisibility: ChromeVisibility,
+        lifecycle: LifecycleSaveCoordinator
     ) {
         self.viewModel = viewModel
         self.settings = settings
         self.recovery = recovery
         self.chromeVisibility = chromeVisibility
+        self.lifecycle = lifecycle
         // Build the menu VM from the already-constructed repositories (DIP).
         _menuVM = State(wrappedValue: MenuViewModel(
             settings: settings,
@@ -165,6 +188,51 @@ struct ContentView: View {
                     )
                 }
             )
+        }
+        // ── ScenePhase lifecycle wiring (FR-14 / M5) ─────────────────────────
+        // SwiftUI delivers scene-phase changes on the main actor; dispatch to the
+        // coordinator via the testable static seam so unit tests can drive it without
+        // a real SwiftUI scene event loop (T-02 / QP §3.1).
+        //
+        // C-07: .onChange(of:) does NOT fire for the initial .active on cold start
+        // → no spurious buffer reset on launch; the editor shows empty as designed.
+        .onChange(of: scenePhase) { _, newPhase in
+            ContentView.dispatchScenePhase(newPhase, to: lifecycle)
+        }
+    }
+
+    // MARK: - Scene-phase dispatch seam (testable; FR-14)
+
+    /// Routes a `ScenePhase` value to the matching zero-arg coordinator method.
+    ///
+    /// Extracted from the `.onChange` closure so tests can drive the mapping
+    /// directly without a SwiftUI scene event loop (T-02 seam contract).
+    ///
+    /// - `.background` → `coordinator.onBackground()` (synchronous save, FR-14)
+    /// - `.active`     → `coordinator.onActive()` (reset buffer + clear guard, FR-14)
+    /// - `.inactive`   → `coordinator.onInactive()` (no-op, FR-14)
+    /// - `@unknown default` → no-op (future OS phases handled gracefully)
+    ///
+    /// `@MainActor`: mirrors `LifecycleSaveCoordinator`'s isolation.  The method is
+    /// called from `.onChange(of: scenePhase)` (already on the main actor) and from
+    /// `@MainActor` test methods, so the annotation is consistent and required by
+    /// Swift-6 strict concurrency.
+    @MainActor
+    static func dispatchScenePhase(
+        _ phase: ScenePhase,
+        to coordinator: LifecycleSaveCoordinator
+    ) {
+        switch phase {
+        case .background:
+            coordinator.onBackground()
+        case .active:
+            coordinator.onActive()
+        case .inactive:
+            coordinator.onInactive()
+        @unknown default:
+            // Future ScenePhase values are silently ignored — adding a case here
+            // requires an OS update that will surface in a CI job update first.
+            break
         }
     }
 }
