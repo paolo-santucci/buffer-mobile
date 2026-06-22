@@ -1,66 +1,37 @@
 schema-version: 2
-last-updated: "2026-06-22T00:40:00+02:00"
+last-updated: "2026-06-22T22:06:00+02:00"
 active-plan: null
-last-plan: ".claude/docs/plans/archive/qp-20260621-kmp-ios-chrome-morph-layout.md"
+last-plan: ".claude/docs/plans/archive/qp-20260622-apple-notes-chrome-restyle.md"
 
 short-plan:
-  feature: |
-    Restyle Foglietto's iOS chrome to match Apple Notes (iOS 26) VISUAL LANGUAGE ONLY (keep all Foglietto
-    functions + menu contents), and FIX the pill->menu animation so the pill visibly TRANSFORMS into the menu
-    instead of a popup appearing below it.
-    1. TOP PILL: keep the single top-right glass CAPSULE (share square.and.arrow.up + ellipsis); NO back chevron.
-       Restyle to Apple-Notes glass-control look (capsule shape/dimensions, SF-Symbol icon weight/sizing). The
-       WHOLE pill is the morph source.
-    2. MORPH FIX (verified w/ swift-swiftui-frontend-engineer + online refs): keep native GlassEffectContainer +
-       @Namespace + .glassEffectID("chrome.morph") (gate-required; .popover stays forbidden). REMOVE the competing
-       explicit MenuBubble .transition(.scale 0.9 anchor:.topTrailing + .opacity) in ChromeOverlay.swift:200-208
-       (it forces the popup feel and fights the geometry morph). Let glassEffectID own the geometry; drive BOTH
-       toggle write-sites (TopPill overflow toggle + ChromeOverlay tap-catcher) with under-damped spring
-       withAnimation(.spring(response:0.5, dampingFraction:0.6)); fade-in ONLY the inner menu rows via
-       .transition(.opacity). REJECT the doc's .ultraThinMaterial/matchedGeometryEffect approach.
-    3. BOTTOM TOOLBAR: keep Foglietto's 5 functions + order (hide-keyboard, copy, paste, outdent, indent);
-       restyle the glass capsule dimensions/icon-weight/spacing to match Apple Notes' bottom toolbar. No compose
-       button.
-    4. MENU PANEL: style container/rows (rounded glass panel, row typography, dividers, leading icons) to read
-       like Apple Notes' menu while keeping Foglietto's richer controls (theme picker, font stepper, about,
-       recent-notes submenu).
-    5. PRESERVE all gate invariants: native glass only (m4_gate), GlassEffectContainer present + no .popover
-       (sp_chrome_morph_gate), glass scoped to Chrome/, no #available, reduce-motion branch, 44pt tap targets,
-       lineFragmentPadding=0, static editor top-inset (track any pill dimension change).
-  slug: "apple-notes-chrome-restyle"
+  feature: null
+  slug: null
   auto: false
-  request-type: feature
-  workflow: quick
+  request-type: null
+  workflow: null
   parent:
     spec: null
     plan: null
     milestone: null
     frs: null
   paths:
-    spec: ".claude/docs/specs/sp-20260622-apple-notes-chrome-restyle-spec.md"
-    plan: ".claude/docs/plans/qp-20260622-apple-notes-chrome-restyle.md"
-    assess-dir: ".claude/docs/specs/sp-20260622-apple-notes-chrome-restyle-assessment"
+    spec: null
+    plan: null
+    assess-dir: null
   phases:
-    brainstorm: done
-    assess: done
-    triage: done
-    spec: skipped
-    plan: done
+    brainstorm: pending
+    assess: pending
+    triage: pending
+    spec: pending
+    plan: pending
     build: pending
   approvals:
     spec: null
-    plan: approved
+    plan: null
   rejection-note: null
   build-progress:
-    current-wave: 2
-    waves-completed: [1]
-    wave-1-tasks:
-      T-01: done   # ChromeMetrics.swift created + registered in pbxproj; ChromeOverlay morph fix (panel .transition removed, both write-sites .spring(0.5,0.6), seam passed to TopPill); gate 8/8
-      T-02: done   # TopPill menuToggleAnimation seam + AN restyle (icon weight .medium, capsule spacing); m6_gate 12/12
-      T-03: done   # BottomToolbar AN restyle (spacing/padding/icon-weight); order frozen; sp_chrome_morph_gate 8/8 + m6_gate 12/12
-      T-04: done   # MenuBubble AN restyle + .transition(.opacity) on inner rows only; glassEffectID intact; sp_chrome_morph_gate 8/8 + m4_gate 13/13
-    wave-2-tasks:
-      T-05: in-progress   # integration: local gates GREEN (sp_chrome_morph 8/8, m6 12/12, gradlew SourceScanGateTest pass); doc-sweep no-op (tree clean); CI push+watch pending
+    current-wave: null
+    waves-completed: []
 
 long-plan:
   feature: |
@@ -105,6 +76,8 @@ pending-consolidation: []
 
 recently-completed:
   - date: 2026-06-22
+    summary: "SP apple-notes-chrome-restyle (Apple-Notes iOS chrome restyle, VISUAL-ONLY, + native pill->menu MORPH FIX) BUILT & CI-GREEN on kmp-rewrite (HEAD f749b53), via /short-plan (QUICK path, 5 tasks / 2 waves all green). Brainstorm settled 3 forks: visual-style-only (keep all Foglietto functions/menu), keep single capsule pill (whole pill morphs), no back chevron. Operator-requested verification of the user's 'Liquid Glass morphing effect.md' with swift-swiftui-frontend-engineer + online refs: REJECTED the doc's .ultraThinMaterial + matchedGeometryEffect (violates the native-iOS-26-Liquid-Glass hard constraint / m4_gate); CONFIRMED the existing GlassEffectContainer + @Namespace + .glassEffectID('chrome.morph') is the Apple-sanctioned native morph; diagnosed the 'popup below the pill' feel as an explicit MenuBubble .scale(0.9 anchor:.topTrailing)+.opacity panel transition FIGHTING the geometry morph. Delivered (T-01..T-04 swift-swiftui-frontend-engineer): ChromeMetrics.swift NEW token struct (non-gated style values only — panel width 280/radius 20, row paddings, capsule spacing, icon weight .medium; registered in pbxproj); ChromeOverlay morph fix — REMOVED the panel .transition (glassEffectID now owns geometry), both isMenuPresented write-sites use identical under-damped .spring(response:0.5,dampingFraction:0.6) reduce-motion-gated, resolved Animation? computed once + passed to TopPill via additive menuToggleAnimation param (NO 2nd reduce-motion reader — C-06); TopPill AN capsule restyle + seam (pill height stays 44pt so editor inset untouched — C-01); BottomToolbar AN restyle (spacing/padding/icon-weight; order frozen closeKeyboardButton-before-copyButton); MenuBubble AN menu-panel restyle (rounded glass, row typography, dividers, leading icons) + .transition(.opacity) on INNER rows only. T-05 (general-purpose): integration — local gates green, doc-sweep NO-OP (tree clean), commit+push, CI watch. Gated literals (minWidth/minHeight: 44, lineFragmentPadding=0) kept inline (NOT tokenized) per the m6/morph-gate literal-grep trap. Verify GREEN: iOS run 27977820821 (build_ios 3m9s XCFramework+Archive Swift-compile + test_ios 6m41s iosAppTests+false-green-guard; deploy_testflight dormant/v*-gated) + Quality run 27977820594 (gradlew + m1/m4/m5/m6/m7 + SP Chrome Morph gate). No CI-driven Swift fix needed. Ready to close (QP has no Spec Impact -> no pending-consolidation push; faithful native UI restyle of already-canonized chrome)."
+  - date: 2026-06-22
     summary: "KMP v1.0.0 — FIRST-EVER signed TestFlight upload SHIPPED (LP Definition of Done §7 / M7 MC-03 MET). Operator explicitly authorized the live ship (lifting the M7 operator-gate). Pushed git tag v1.0.0 on kmp-rewrite HEAD 6295bb4 -> ios.yml deploy_testflight run 27919278008 GREEN: Assemble shared XCFramework + Archive iosApp (signed, Apple Distribution, manual profile) + Export IPA + Validate IPA (icon+plist) + Validate app (server-side) + Upload to TestFlight (xcrun altool --upload-app) all PASS in 6m12s; build_ios + test_ios also green. Version/build resolution: marketing 1.0.0 (default) + CFBundleVersion = GITHUB_RUN_NUMBER + 0 (no repo vars set; operator chose 'push v1.0.0 defaults & react to 409'). NO 409 collision occurred — the build number did NOT clash with the Flutter rc1-rc4 namespace on the shared prod ASC app com.paolosantucci.foglietto. All 7 LP milestones now code-complete AND shipped; LP M7 marker [~] -> [x]. REMAINING: Apple server-side processing (~mins) then the build appears in TestFlight; first signed build will need the export-compliance answer in App Store Connect; on-device validation still pending (no device in this env)."
   - date: 2026-06-22
     summary: "SP kmp-ios-chrome-morph-layout (Apple-Notes iOS chrome polish) BUILT & CI-GREEN on kmp-rewrite (HEAD 09bfdff), via /short-plan --resume build (QUICK path, 5 tasks / 2 waves all green). Agent selection: operator chose the newly-available swift-swiftui-frontend-engineer for T-01/T-02/T-03 (native SwiftUI/UIKit) over the plan's general-purpose residual; T-04/T-05 general-purpose. Delivered: (T-01) ChromeOverlay pill->menu Liquid Glass MORPH — single GlassEffectContainer + @Namespace glassNamespace + shared chromeGlassID('chrome.morph') replacing the system .popover; capsule<->panel morph via .glassEffectID on TopPill capsule + MenuBubble panel (additive glassNamespace/glassID params); hand-built full-screen Color.clear tap-catcher preserves EC-14 outside-tap dismiss + EC-16 dismiss-with-chrome (isMenuPresented still exactly 2 writers: overflow toggle + tap-catcher); Reduce-Motion gated (@Environment accessibilityReduceMotion -> opacity transition); container top pad .padding(.top,6)+.padding(.horizontal,16). (T-02) BufferEditor static textContainerInset = UIEdgeInsets(top: kEditorTopInset(safeAreaTop:)=safeAreaTop+16+44+8, left/right kEditorHInset=16, bottom 0) in makeUIView ONLY; safeAreaTop via textView.window?.safeAreaInsets.top ?? 59; lineFragmentPadding=0 retained; applyFont untouched (C-06 static). (T-03) BottomToolbar body reorder closeKeyboardButton,copyButton,pasteButton,deIndentButton,indentButton (whole computed-vars moved, closures bound by name); ContentView .safeAreaInset(edge:.bottom) RETAINED, left-aligned via HStack{BottomToolbar;Spacer()}.padding(.leading,12).padding(.bottom,12) (EC-17 anti-additive keyboard avoidance intact, C-05); 10 String(localized:) + 5 SF symbols intact (m6_gate). (T-04) new tool/sp_chrome_morph_gate.sh 8 checks (chains m4+m1) wired into quality.yml. (T-05) orchestrator-driven: local gate 8/8 + ./gradlew check 0 (shared/ untouched), doc-comment sweep fixed a stale 'MenuBubble popover' comment in ContentView (rewording first tripped m4_gate check 2 'glass symbol outside Chrome/' on the literal GlassEffectContainer token -> reworded to lowercase 'liquid-glass'). NO CI-driven Swift fix required (budgeted >=1, not needed). Verify GREEN: iOS run 27918773251 (build_ios 3m8s XCFramework+archive + test_ios 6m23s iosAppTests+false-green-guard; deploy_testflight dormant/v*-gated) + Quality run 27918773249 (gradlew check + m1/m4/m5/m6/m7 + sp_chrome_morph_gate). No shared/ change. Ready to close (QP has no Spec Impact -> no pending-consolidation push; faithful native UI-polish of already-canonized chrome)."
@@ -112,10 +85,13 @@ recently-completed:
     summary: "KMP Milestone 7 (CI to TestFlight & Hardening, LP Phase 6) HARDENED, ARMED & CI-GREEN on kmp-rewrite (HEAD 11ff4b8), via /short-plan-step --auto (QUICK path, 4 tasks / 3 waves). FR-26 + FR-27. The signed deploy_testflight pipeline (wired since M1, NEVER run on KMP — all M1-M6 CI was unsigned) is now hardened to CI-green-unsigned and ARMED for the operator. DELIBERATELY NOT SHIPPED: the live signed TestFlight upload (MC-01/02/03) to the SHARED production ASC app com.paolosantucci.foglietto is OPERATOR-GATED — outward-facing/irreversible, first-ever KMP signed path, prior Flutter rc1-rc4 ships do not durably authorize a first KMP signed upload (operator declined to pre-authorize when asked via AskUserQuestion). Delivered: (T-01, flutter-devops) ios.yml deploy_testflight operator ship-time levers — marketing_version + build_number_offset workflow_dispatch inputs + vars.IOS_MARKETING_VERSION/vars.IOS_BUILD_NUMBER_OFFSET repo-var fallbacks (resolution dispatch>var>literal; defaults BYTE-PRESERVE 1.0.0 / $GITHUB_RUN_NUMBER) — the no-code-edit lever to clear the shared ASC build-number namespace and avoid a 409 collision (assessment's #1 first-signed-run landmine); non-fatal provisioning-profile ExpirationDate diagnostic in the Install-profile step; ExportOptions.plist.template + manageAppVersionAndBuildNumber=false (anti silent build-number rewrite). (T-02, technical-writer) decision records D-009 (build-number/version pre-flight policy: query ASC max CFBundleVersion before the v* tag), D-010 (operator-gated-push rationale), D-011 (M4 canon gaps CG-1/2/3 — closes the parked next-step). (T-03, flutter-devops) new tool/m7_gate.sh — 13 invariants wired into quality.yml after the M6 step. QP archived (no Spec Impact -> no pending-consolidation push). LP M7 marker set to [~] (MC-03 live build is operator-gated)."
   - date: 2026-06-21
     summary: "KMP Milestone 6 (Localization & Theming, LP Phase 5) BUILT & CI-GREEN on kmp-rewrite (HEAD b454a15), via /short-plan-step --auto (QUICK path, 4 tasks / 3 waves). FR-23 + FR-24 + NFR-04/05. Delivered: chrome tooltips localized in TopPill+BottomToolbar; AppColorScheme.swiftUIColorScheme extension + .preferredColorScheme on ContentView root; tool/m6_gate.sh 12 checks chains m1+m4+m5; hand-authored Localizable.xcstrings (EN+IT, 27 keys) + registered ThemeColorScheme.swift/xcstrings/ThemeResolutionTests in pbxproj. ONE CI-driven fix: @unknown default -> plain default: in ThemeColorScheme.swift. Commits 51245a2 + b454a15. QP archived; no pending-consolidation push. LP M6 marker flipped to [x] completed."
-  - date: 2026-06-21
-    summary: "KMP Milestone 5 (Share & Lifecycle) BUILT, CI-GREEN & CLOSED on kmp-rewrite (HEAD abe6e5f), via /short-plan-step --auto (QUICK path, 4 tasks / 3 waves). FR-14+FR-17+FR-20. FR-19 inbound Share Extension EXPLICITLY DEFERRED (operator provisioning required). Delivered: @MainActor LifecycleSaveCoordinator (background save synchronous, beginBackgroundTask-wrapped), wiring in iosAppApp+ContentView, UIFileSharingEnabled+LSSupportsOpeningDocumentsInPlace plist, tool/m5_gate.sh 8 checks. Tests: LifecycleSaveCoordinatorTests (6) + ContentViewLifecycleTests (3). Verify GREEN: m5_gate 8/8 + CI ios run 27904926455 + Quality 27904926450. QP archived; no pending-consolidation push. LP M5 marker flipped to [x] completed."
 
-in-progress:
+  - title: "pill->menu morph ROOT CAUSE FIX — on-device confirmed popup; fix applied, gates green, awaiting CI + device re-validation"
+    state: "On-device validation of v1.0.0-rc6 revealed 'menu pops under pill — no morph'. Root cause: VStack in ChromeOverlay.pillAndBubble kept TopPill ALWAYS mounted alongside conditionally-inserted MenuBubble; two bearers of the same glassEffectID coexisted so the iOS 26 glass system skipped the geometry interpolation. Fix: replaced VStack with if/else inside GlassEffectContainer so source and destination are mutually exclusive. sp_chrome_morph_gate 8/8 + m6_gate 12/12 pass. No secondary file changes needed (TopPill/MenuBubble unmodified). Commit + CI push pending."
+    touched:
+      - "iosApp/iosApp/Chrome/ChromeOverlay.swift"
+    next-step: "Commit + push; watch iOS CI green; then tag + deploy to TestFlight for on-device re-validation of the capsule→panel morph and the reduce-motion instantaneous swap."
+    blocker: null
   - title: "KMP v1.0.0 — SHIPPED to TestFlight; awaiting Apple processing + on-device validation"
     state: "LP DoD MET: tag v1.0.0 -> deploy_testflight run 27919278008 GREEN, signed IPA uploaded via altool (no 409). All 7 LP milestones shipped; M7 marker [x]. Build now in Apple server-side processing."
     touched:
@@ -148,9 +124,9 @@ known-issues:
     impact: medium
     workaround: "Device-validate the background-save + cold-start-empty behavior before the M7 TestFlight build."
   - severity: warning
-    description: "Future KMP TestFlight ships must use CFBundleVersion > the v1.0.0 build (= GITHUB_RUN_NUMBER at run 27919278008, ~43) under marketing 1.0.0, or bump the marketing version. The first signed upload succeeded with no 409, so the shared ASC namespace is now known-clear up to that build; a later ship at a lower/equal build would 409."
+    description: "Future KMP TestFlight ships must use CFBundleVersion > 47 (the v1.0.0-rc6 build = GITHUB_RUN_NUMBER 47) under marketing 1.0.0, or bump the marketing version. v1.0.0 shipped at build ~43, v1.0.0-rc6 at 47 — both no-409; the shared ASC namespace is known-clear up to 47. A later ship at a lower/equal build would 409."
     impact: low
-    workaround: "Set vars.IOS_BUILD_NUMBER_OFFSET (or bump vars.IOS_MARKETING_VERSION) before the next v* tag if GITHUB_RUN_NUMBER could regress below the shipped build. See D-009."
+    workaround: "Set vars.IOS_BUILD_NUMBER_OFFSET (or bump vars.IOS_MARKETING_VERSION) before the next v* tag if GITHUB_RUN_NUMBER could regress below 47. See D-009."
   - severity: warning
     description: "Recovery settings key strings transcribed best-effort, not cross-checked against the live upstream GNOME Buffer gschema. A mismatch means stored values are never found."
     impact: medium

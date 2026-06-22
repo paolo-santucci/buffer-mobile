@@ -179,21 +179,47 @@ struct ChromeOverlay: View {
 
     // MARK: - Pill + morph container (§3.1 morph identity seam)
 
-    /// `GlassEffectContainer` wrapping `TopPill` and (when open) `MenuBubble`.
+    /// `GlassEffectContainer` wrapping either `TopPill` (closed) or `MenuBubble`
+    /// (open) — never both simultaneously.
+    ///
+    /// iOS 26 `glassEffectID` morph requires the source and destination glass
+    /// surfaces to be **mutually exclusive**: exactly one view bears the shared ID
+    /// at any point in time. When `isMenuPresented` flips, SwiftUI removes the
+    /// old view and inserts the new one inside the same transaction; the glass
+    /// system interpolates the capsule geometry into the panel geometry and back.
+    ///
+    /// If both children were mounted together (e.g. in a VStack) the system
+    /// would find two views with the same ID and skip the morph entirely,
+    /// producing the "panel pops in below the pill" symptom observed on-device.
     ///
     /// Both children attach `.glassEffectID(chromeGlassID, in: glassNamespace)`
-    /// so the iOS 26 glass system morphs the capsule shape into the panel shape
-    /// and back (native Liquid Glass matched-geometry-for-glass — C-03).
+    /// internally (TopPill.swift:123 / MenuBubble.swift:164) — no change needed
+    /// in their bodies.
     ///
     /// The `withAnimation` wrapping `isMenuPresented` changes is Reduce-Motion
-    /// gated: when `reduceMotion` is true an instantaneous `.identity` animation
-    /// is used instead of the spring morph (C-07).
+    /// gated: when `reduceMotion` is true `menuToggleAnimation` is `nil` and
+    /// the swap is instantaneous (C-07).
     @ViewBuilder
     private var pillAndBubble: some View {
         // CANON GAP CG-1: GlassEffectContainer is the iOS 26 native grouping
         // API — no hand-rolled blur/fill/shadow (C-03 / NFR-01/02).
         GlassEffectContainer {
-            VStack(alignment: .trailing, spacing: 8) {
+            if isMenuPresented {
+                // Menu open — panel is the sole bearer of chromeGlassID.
+                // No explicit .transition on the panel container: .glassEffectID
+                // owns the capsule↔panel geometry morph (C-04). Inner menu rows
+                // carry .transition(.opacity) in MenuBubble.swift (T-04).
+                MenuBubble(
+                    menuVM: menuVM,
+                    isPresented: $isMenuPresented,
+                    glassNamespace: glassNamespace,
+                    glassID: Self.chromeGlassID
+                )
+            } else {
+                // Menu closed — pill is the sole bearer of chromeGlassID.
+                // withAnimation at the overflow toggle site is applied inside
+                // TopPill using the resolved menuToggleAnimation from here (C-06).
+                // The tap-catcher above uses the same spring value (C-05).
                 TopPill(
                     text: text,
                     isMenuPresented: $isMenuPresented,
@@ -201,21 +227,6 @@ struct ChromeOverlay: View {
                     glassID: Self.chromeGlassID,
                     menuToggleAnimation: menuToggleAnimation
                 )
-                // withAnimation at the overflow toggle site is applied inside TopPill
-                // using the resolved menuToggleAnimation passed from here (C-06).
-                // The tap-catcher above uses the same inline expression (C-05).
-
-                if isMenuPresented {
-                    // No explicit panel .transition here — .glassEffectID owns the
-                    // capsule↔panel geometry morph (C-04). Inner menu rows carry
-                    // .transition(.opacity) (added by T-04 in MenuBubble.swift).
-                    MenuBubble(
-                        menuVM: menuVM,
-                        isPresented: $isMenuPresented,
-                        glassNamespace: glassNamespace,
-                        glassID: Self.chromeGlassID
-                    )
-                }
             }
         }
     }
