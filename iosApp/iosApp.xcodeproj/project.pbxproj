@@ -22,6 +22,7 @@
 		A10000C3 /* MenuViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000C2 /* MenuViewModel.swift */; };
 		A10000C5 /* RecoveryListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000C4 /* RecoveryListViewModel.swift */; };
 		A10000D1 /* ChromeOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000D0 /* ChromeOverlay.swift */; };
+		A10000D3 /* ChromeMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000D2 /* ChromeMetrics.swift */; };
 		A1000071 /* TextOffsetBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000070 /* TextOffsetBridgeTests.swift */; };
 		A1000073 /* BufferViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000072 /* BufferViewModelTests.swift */; };
 		A1000075 /* BufferEditorCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000074 /* BufferEditorCoordinatorTests.swift */; };
@@ -66,6 +67,7 @@
 		A10000C2 /* MenuViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuViewModel.swift; sourceTree = "<group>"; };
 		A10000C4 /* RecoveryListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryListViewModel.swift; sourceTree = "<group>"; };
 		A10000D0 /* ChromeOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeOverlay.swift; sourceTree = "<group>"; };
+		A10000D2 /* ChromeMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChromeMetrics.swift; sourceTree = "<group>"; };
 		A1000070 /* TextOffsetBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextOffsetBridgeTests.swift; sourceTree = "<group>"; };
 		A1000072 /* BufferViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BufferViewModelTests.swift; sourceTree = "<group>"; };
 		A1000074 /* BufferEditorCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BufferEditorCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -141,6 +143,7 @@
 				A10000C2 /* MenuViewModel.swift */,
 				A10000C4 /* RecoveryListViewModel.swift */,
 				A10000D0 /* ChromeOverlay.swift */,
+				A10000D2 /* ChromeMetrics.swift */,
 			);
 			path = Chrome;
 			sourceTree = "<group>";
@@ -287,6 +290,7 @@
 				A10000C3 /* MenuViewModel.swift in Sources */,
 				A10000C5 /* RecoveryListViewModel.swift in Sources */,
 				A10000D1 /* ChromeOverlay.swift in Sources */,
+				A10000D3 /* ChromeMetrics.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

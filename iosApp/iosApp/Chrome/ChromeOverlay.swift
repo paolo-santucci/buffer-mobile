@@ -127,6 +127,18 @@ struct ChromeOverlay: View {
     /// transition (C-07 / `prefers-reduce-motion`).
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    // MARK: - Animation seam (§3.1 / C-05 / C-06)
+
+    /// Resolved morph animation — computed once so BOTH `isMenuPresented` write-sites
+    /// (C-05) use an identical spring, and `TopPill` receives the same value without
+    /// needing its own `@Environment(\.accessibilityReduceMotion)` reader (C-06).
+    ///
+    /// `nil` when Reduce Motion is enabled (instantaneous toggle); under-damped spring
+    /// otherwise to drive the glass capsule↔panel morph.
+    private var menuToggleAnimation: Animation? {
+        reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.6)
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -140,7 +152,8 @@ struct ChromeOverlay: View {
                     .contentShape(Rectangle())
                     .onTapGesture {
                         // EC-14 writer #2: the tap-catcher closes the menu.
-                        withAnimation(reduceMotion ? nil : .spring(duration: 0.3)) {
+                        // Same spring constant as the TopPill overflow toggle (C-05).
+                        withAnimation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.6)) {
                             isMenuPresented = false
                         }
                     }
@@ -185,25 +198,22 @@ struct ChromeOverlay: View {
                     text: text,
                     isMenuPresented: $isMenuPresented,
                     glassNamespace: glassNamespace,
-                    glassID: Self.chromeGlassID
+                    glassID: Self.chromeGlassID,
+                    menuToggleAnimation: menuToggleAnimation
                 )
-                // Inline `withAnimation` happens at the toggle site in TopPill
-                // (overflow button) and at the tap-catcher site above.
+                // withAnimation at the overflow toggle site is applied inside TopPill
+                // using the resolved menuToggleAnimation passed from here (C-06).
+                // The tap-catcher above uses the same inline expression (C-05).
 
                 if isMenuPresented {
+                    // No explicit panel .transition here — .glassEffectID owns the
+                    // capsule↔panel geometry morph (C-04). Inner menu rows carry
+                    // .transition(.opacity) (added by T-04 in MenuBubble.swift).
                     MenuBubble(
                         menuVM: menuVM,
                         isPresented: $isMenuPresented,
                         glassNamespace: glassNamespace,
                         glassID: Self.chromeGlassID
-                    )
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .asymmetric(
-                                insertion: .opacity.combined(with: .scale(scale: 0.9, anchor: .topTrailing)),
-                                removal:   .opacity.combined(with: .scale(scale: 0.9, anchor: .topTrailing))
-                              )
                     )
                 }
             }

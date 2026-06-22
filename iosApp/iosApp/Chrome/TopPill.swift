@@ -10,6 +10,11 @@
 // so the glass system can morph the capsule into the MenuBubble panel and back
 // inside the shared GlassEffectContainer (iOS 26 native glass morph — C-03).
 //
+// Animation seam (§3.1 T-02): receives `menuToggleAnimation` from ChromeOverlay
+// so the overflow toggle uses the SAME animation (and reduce-motion gate) as
+// ChromeOverlay's tap-catcher dismiss. Reduce-motion authority stays in
+// ChromeOverlay (C-06) — TopPill adds no @Environment(\.accessibilityReduceMotion).
+//
 // EC-14: the overflow button is write-source #1 for `isMenuPresented`. The
 // outside-tap dismiss is handled by a full-screen tap-catcher in ChromeOverlay
 // (write-source #2) — NOT by a .popover. This view owns NO dismiss logic beyond
@@ -20,9 +25,14 @@
 // color-mix fill + hairline ring. 0.68 / 90% survive as legibility intent
 // only (NFR-03). Decision logged per spec §8 OQ-01.
 //
+// Apple-Notes-26 restyle (T-02): icon weight -> ChromeMetrics.iconScaleWeight
+// (.medium); inter-icon spacing -> ChromeMetrics.capsuleControlSpacing.
+// Rendered pill HEIGHT is invariant at 44pt (C-01 — BufferEditor hard-codes
+// kEditorTopInset = safeAreaTop + 16 + 44 + 8; untouched by this restyle).
+//
 // Spec refs: FR-01, FR-02, FR-08, FR-23, NFR-01, NFR-02, NFR-04;
 //            EC-01, EC-14; CG-1.
-// Contract: §3.1 (morph identity seam — glassNamespace, glassID additive params).
+// Contract: §3.1 (morph identity seam — glassNamespace, glassID, menuToggleAnimation additive params).
 
 import SwiftUI
 
@@ -35,6 +45,9 @@ import SwiftUI
 /// - `isMenuPresented`: binding toggled by the overflow button tap (EC-14 write-source #1).
 /// - `glassNamespace`: the `@Namespace.ID` passed from `ChromeOverlay` (§3.1 morph seam).
 /// - `glassID`: the shared glass effect ID passed from `ChromeOverlay` (§3.1 morph seam).
+/// - `menuToggleAnimation`: the resolved `Animation?` passed from `ChromeOverlay` (§3.1
+///   animation seam). `nil` under Reduce Motion, `.spring(response:0.5,dampingFraction:0.6)`
+///   otherwise — reduce-motion authority stays in ChromeOverlay (C-06).
 ///
 /// The pill capsule attaches `.glassEffectID(glassID, in: glassNamespace)` so the
 /// iOS 26 glass system can morph it into the `MenuBubble` panel and back inside the
@@ -50,6 +63,11 @@ import SwiftUI
 /// Both buttons use `.buttonStyle(.glass)` (iOS 26 native glass button style).
 /// Unconditional — min deployment target iOS 26.0, no availability guard needed (NFR-02).
 ///
+/// **Apple-Notes-26 restyle (CANON GAP CG-1):**
+/// Icon weight uses `ChromeMetrics.iconScaleWeight` (.medium); inter-icon spacing
+/// uses `ChromeMetrics.capsuleControlSpacing`. Rendered pill height is invariant
+/// at 44pt (C-01 — BufferEditor hard-codes 44 and is out of scope).
+///
 /// **Accessibility:**
 /// Every control has an `.accessibilityLabel` and `.accessibilityAddTraits(.isButton)`.
 /// Touch targets are enforced to ≥ 44×44 pt via `.frame(minWidth: 44, minHeight: 44)`.
@@ -64,8 +82,8 @@ struct TopPill: View {
     let text: String
 
     /// Controls the menu bubble's presented state.
-    /// EC-14 write-source #1: the overflow button toggles this binding.
-    /// Write-source #2 is the tap-catcher in ChromeOverlay.
+    /// EC-14 write-source #1: the overflow button toggles this binding via
+    /// `withAnimation(menuToggleAnimation)`. Write-source #2 is the tap-catcher in ChromeOverlay.
     @Binding var isMenuPresented: Bool
 
     /// The morph namespace from `ChromeOverlay` (§3.1 morph identity seam).
@@ -76,6 +94,11 @@ struct TopPill: View {
     /// The shared glass effect ID from `ChromeOverlay` (§3.1 morph identity seam).
     /// Matches the ID used by `MenuBubble` so the two surfaces share one glass identity.
     let glassID: String
+
+    /// The resolved animation for the overflow toggle (§3.1 animation seam).
+    /// Passed from ChromeOverlay — `nil` under Reduce Motion, an under-damped spring
+    /// otherwise. TopPill does NOT read `accessibilityReduceMotion` directly (C-06).
+    let menuToggleAnimation: Animation?
 
     // MARK: - Derived state
 
@@ -88,7 +111,8 @@ struct TopPill: View {
     // MARK: - Body
 
     var body: some View {
-        HStack(spacing: 0) {
+        // Apple-Notes-26: inter-icon spacing via ChromeMetrics token (non-gated, C-02).
+        HStack(spacing: ChromeMetrics.capsuleControlSpacing) {
             shareButton
             overflowButton
         }
@@ -107,10 +131,12 @@ struct TopPill: View {
     /// SF Symbol `square.and.arrow.up` (FR-08).
     private var shareButton: some View {
         ShareLink(item: text) {
+            // Apple-Notes-26: icon weight via ChromeMetrics token (non-gated, C-02).
             Image(systemName: "square.and.arrow.up")
+                .fontWeight(ChromeMetrics.iconScaleWeight)
                 .imageScale(.medium)
         }
-        // ≥ 44×44 pt touch target (NFR-04/HIG).
+        // ≥ 44×44 pt touch target (NFR-04/HIG). Literal kept inline — m6_gate check 11 (C-02).
         .frame(minWidth: 44, minHeight: 44)
         // Gated disable — NOT try/catch (EC-01/FR-08).
         .disabled(isShareDisabled)
@@ -136,12 +162,19 @@ struct TopPill: View {
     private var overflowButton: some View {
         Button {
             // EC-14 write-source #1: overflow toggle.
-            isMenuPresented.toggle()
+            // Animation seam (§3.1 C-05/C-06): uses the pre-resolved Animation? from
+            // ChromeOverlay (nil under Reduce Motion; spring otherwise) — identical to
+            // the tap-catcher write in ChromeOverlay. No second reduce-motion reader here.
+            withAnimation(menuToggleAnimation) {
+                isMenuPresented.toggle()
+            }
         } label: {
+            // Apple-Notes-26: icon weight via ChromeMetrics token (non-gated, C-02).
             Image(systemName: "ellipsis")
+                .fontWeight(ChromeMetrics.iconScaleWeight)
                 .imageScale(.medium)
         }
-        // ≥ 44×44 pt touch target (NFR-04/HIG).
+        // ≥ 44×44 pt touch target (NFR-04/HIG). Literal kept inline — m6_gate check 11 (C-02).
         .frame(minWidth: 44, minHeight: 44)
         // Always enabled (FR-08 — overflow is never gated).
         // Native glass button style (iOS 26).
@@ -163,14 +196,27 @@ struct TopPill: View {
 #if DEBUG
 #Preview("TopPill — non-empty buffer") {
     // Previews use a dummy namespace; morph behaviour requires a live GlassEffectContainer.
+    // menuToggleAnimation: pass the full spring as previews run without Reduce Motion gating.
     @Namespace var ns
-    return TopPill(text: "Hello, Foglietto!", isMenuPresented: .constant(false), glassNamespace: ns, glassID: "preview.morph")
-        .padding()
+    return TopPill(
+        text: "Hello, Foglietto!",
+        isMenuPresented: .constant(false),
+        glassNamespace: ns,
+        glassID: "preview.morph",
+        menuToggleAnimation: .spring(response: 0.5, dampingFraction: 0.6)
+    )
+    .padding()
 }
 
 #Preview("TopPill — empty buffer (Share disabled)") {
     @Namespace var ns
-    return TopPill(text: "", isMenuPresented: .constant(false), glassNamespace: ns, glassID: "preview.morph")
-        .padding()
+    return TopPill(
+        text: "",
+        isMenuPresented: .constant(false),
+        glassNamespace: ns,
+        glassID: "preview.morph",
+        menuToggleAnimation: .spring(response: 0.5, dampingFraction: 0.6)
+    )
+    .padding()
 }
 #endif

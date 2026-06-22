@@ -106,13 +106,15 @@ struct BottomToolbar: View {
     // MARK: - Body
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: ChromeMetrics.toolbarItemSpacing) {
             closeKeyboardButton
             copyButton
             pasteButton
             deIndentButton
             indentButton
         }
+        // Horizontal inset keeps icons off the capsule edges (Apple-Notes look).
+        .padding(.horizontal, ChromeMetrics.toolbarHorizontalPadding)
         // Native iOS 26 Liquid Glass — no hand-rolled blur/fill/shadow (NFR-01/02).
         .glassEffect(in: .capsule)
     }
@@ -128,6 +130,7 @@ struct BottomToolbar: View {
         Button(action: onCopy) {
             Image(systemName: "doc.on.doc")
                 .imageScale(.medium)
+                .fontWeight(ChromeMetrics.iconScaleWeight)
         }
         // ≥ 44×44 pt touch target (NFR-04/HIG).
         .frame(minWidth: 44, minHeight: 44)
@@ -157,6 +160,7 @@ struct BottomToolbar: View {
         Button(action: onPaste) {
             Image(systemName: "doc.on.clipboard")
                 .imageScale(.medium)
+                .fontWeight(ChromeMetrics.iconScaleWeight)
         }
         // ≥ 44×44 pt touch target (NFR-04/HIG).
         .frame(minWidth: 44, minHeight: 44)
@@ -184,6 +188,7 @@ struct BottomToolbar: View {
         Button(action: onCloseKeyboard) {
             Image(systemName: "keyboard.chevron.compact.down")
                 .imageScale(.medium)
+                .fontWeight(ChromeMetrics.iconScaleWeight)
         }
         // ≥ 44×44 pt touch target (NFR-04/HIG).
         .frame(minWidth: 44, minHeight: 44)
@@ -215,6 +220,7 @@ struct BottomToolbar: View {
         Button(action: onIndent) {
             Image(systemName: "increase.indent")
                 .imageScale(.medium)
+                .fontWeight(ChromeMetrics.iconScaleWeight)
         }
         // ≥ 44×44 pt touch target (NFR-04/HIG).
         .frame(minWidth: 44, minHeight: 44)
@@ -243,6 +249,7 @@ struct BottomToolbar: View {
         Button(action: onOutdent) {
             Image(systemName: "decrease.indent")
                 .imageScale(.medium)
+                .fontWeight(ChromeMetrics.iconScaleWeight)
         }
         // ≥ 44×44 pt touch target (NFR-04/HIG).
         .frame(minWidth: 44, minHeight: 44)

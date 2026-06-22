@@ -4,34 +4,63 @@ active-plan: null
 last-plan: ".claude/docs/plans/archive/qp-20260621-kmp-ios-chrome-morph-layout.md"
 
 short-plan:
-  feature: null
-  slug: null
+  feature: |
+    Restyle Foglietto's iOS chrome to match Apple Notes (iOS 26) VISUAL LANGUAGE ONLY (keep all Foglietto
+    functions + menu contents), and FIX the pill->menu animation so the pill visibly TRANSFORMS into the menu
+    instead of a popup appearing below it.
+    1. TOP PILL: keep the single top-right glass CAPSULE (share square.and.arrow.up + ellipsis); NO back chevron.
+       Restyle to Apple-Notes glass-control look (capsule shape/dimensions, SF-Symbol icon weight/sizing). The
+       WHOLE pill is the morph source.
+    2. MORPH FIX (verified w/ swift-swiftui-frontend-engineer + online refs): keep native GlassEffectContainer +
+       @Namespace + .glassEffectID("chrome.morph") (gate-required; .popover stays forbidden). REMOVE the competing
+       explicit MenuBubble .transition(.scale 0.9 anchor:.topTrailing + .opacity) in ChromeOverlay.swift:200-208
+       (it forces the popup feel and fights the geometry morph). Let glassEffectID own the geometry; drive BOTH
+       toggle write-sites (TopPill overflow toggle + ChromeOverlay tap-catcher) with under-damped spring
+       withAnimation(.spring(response:0.5, dampingFraction:0.6)); fade-in ONLY the inner menu rows via
+       .transition(.opacity). REJECT the doc's .ultraThinMaterial/matchedGeometryEffect approach.
+    3. BOTTOM TOOLBAR: keep Foglietto's 5 functions + order (hide-keyboard, copy, paste, outdent, indent);
+       restyle the glass capsule dimensions/icon-weight/spacing to match Apple Notes' bottom toolbar. No compose
+       button.
+    4. MENU PANEL: style container/rows (rounded glass panel, row typography, dividers, leading icons) to read
+       like Apple Notes' menu while keeping Foglietto's richer controls (theme picker, font stepper, about,
+       recent-notes submenu).
+    5. PRESERVE all gate invariants: native glass only (m4_gate), GlassEffectContainer present + no .popover
+       (sp_chrome_morph_gate), glass scoped to Chrome/, no #available, reduce-motion branch, 44pt tap targets,
+       lineFragmentPadding=0, static editor top-inset (track any pill dimension change).
+  slug: "apple-notes-chrome-restyle"
   auto: false
-  request-type: null
-  workflow: null
+  request-type: feature
+  workflow: quick
   parent:
     spec: null
     plan: null
     milestone: null
     frs: null
   paths:
-    spec: null
-    plan: null
-    assess-dir: null
+    spec: ".claude/docs/specs/sp-20260622-apple-notes-chrome-restyle-spec.md"
+    plan: ".claude/docs/plans/qp-20260622-apple-notes-chrome-restyle.md"
+    assess-dir: ".claude/docs/specs/sp-20260622-apple-notes-chrome-restyle-assessment"
   phases:
-    brainstorm: pending
-    assess: pending
-    triage: pending
-    spec: pending
-    plan: pending
+    brainstorm: done
+    assess: done
+    triage: done
+    spec: skipped
+    plan: done
     build: pending
   approvals:
     spec: null
-    plan: null
+    plan: approved
   rejection-note: null
   build-progress:
-    current-wave: null
-    waves-completed: []
+    current-wave: 2
+    waves-completed: [1]
+    wave-1-tasks:
+      T-01: done   # ChromeMetrics.swift created + registered in pbxproj; ChromeOverlay morph fix (panel .transition removed, both write-sites .spring(0.5,0.6), seam passed to TopPill); gate 8/8
+      T-02: done   # TopPill menuToggleAnimation seam + AN restyle (icon weight .medium, capsule spacing); m6_gate 12/12
+      T-03: done   # BottomToolbar AN restyle (spacing/padding/icon-weight); order frozen; sp_chrome_morph_gate 8/8 + m6_gate 12/12
+      T-04: done   # MenuBubble AN restyle + .transition(.opacity) on inner rows only; glassEffectID intact; sp_chrome_morph_gate 8/8 + m4_gate 13/13
+    wave-2-tasks:
+      T-05: in-progress   # integration: local gates GREEN (sp_chrome_morph 8/8, m6 12/12, gradlew SourceScanGateTest pass); doc-sweep no-op (tree clean); CI push+watch pending
 
 long-plan:
   feature: |
