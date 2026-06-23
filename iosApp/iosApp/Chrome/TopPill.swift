@@ -58,7 +58,7 @@ import SwiftUI
 /// not a try/catch, not a runtime guard on the `ShareLink` action.
 ///
 /// **Native glass:**
-/// `.glassEffect(.regular.interactive(), in: .capsule)` is applied to the pill
+/// `.glassEffect(.regular, in: .capsule)` is applied to the pill
 /// container (the SINGLE glass shape); the morph ID is overlaid via
 /// `.glassEffectID(glassID, in: glassNamespace)`. Both inner buttons use
 /// `.buttonStyle(.plain)` so they do NOT add nested glass (no per-icon gray
@@ -119,13 +119,21 @@ struct TopPill: View {
             overflowButton
         }
         // Native iOS 26 Liquid Glass capsule — no hand-rolled blur/fill/shadow (NFR-01/02).
-        // `.interactive()` adds the reactive squish on touch (Liquid Glass morph ref).
         // The pill is a SINGLE glass shape: the inner Share/overflow controls use
         // `.buttonStyle(.plain)` (NOT `.glass`) so they do NOT create their own nested
         // glass surfaces. Nested glass inside the morphing shape makes iOS skip the
         // capsule↔panel geometry handoff (the rc7 "no morph" suspect). One bearer of
         // the glass shape ⇒ one clean morph into the MenuBubble panel.
-        .glassEffect(.regular.interactive(), in: .capsule)
+        //
+        // NOTE: `.interactive()` is deliberately NOT used here. Applied to this
+        // container HStack it installs a touch-reactive gesture on the glass capsule
+        // that wins gesture arbitration against the inner `.buttonStyle(.plain)`
+        // controls — the pill squished on touch but the overflow button's
+        // `isMenuPresented.toggle()` never fired, so the menu never opened. The
+        // capsule↔panel morph spring (ChromeOverlay.menuToggleAnimation) carries the
+        // liquid feel instead. Re-introducing `.interactive()` requires moving it onto
+        // a single glass *button* shape, not this multi-button container.
+        .glassEffect(.regular, in: .capsule)
         // Morph identity: shared with MenuBubble inside ChromeOverlay's GlassEffectContainer
         // so the glass system morphs this capsule into the menu panel and back (§3.1).
         .glassEffectID(glassID, in: glassNamespace)
