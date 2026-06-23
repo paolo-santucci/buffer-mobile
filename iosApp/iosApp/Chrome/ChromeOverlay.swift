@@ -3,7 +3,7 @@
 //
 // Container view composing TopPill + MenuBubble over the editor.
 // Reads ChromeVisibility.isVisible and crossfades the chrome layer.
-// Owns the GlassEffectContainer and morph namespace so the pill capsule
+// Owns the GlassEffectContainer and morph namespace so the overflow control
 // and the menu panel share one glass identity and morph capsule↔panel.
 //
 // EC-14: isMenuPresented is written by EXACTLY two sources —
@@ -26,15 +26,15 @@
 // ui-design-bible §"Auto-hiding overlay chrome" --view-bg-color@90% fill (OQ-01).
 // GlassEffectContainer is the single glass grouping for the pill + menu morph.
 //
+// NOTE (tap-routing fix): the pill is NOT a single glass capsule. TopPill renders
+// the Share + overflow controls as independent glass elements fused via
+// glassEffectUnion, with the morph glassEffectID on the overflow control only.
+// ChromeOverlay's job is unchanged: own the GlassEffectContainer + namespace and
+// swap TopPill (closed) ↔ MenuBubble (open). See TopPill.swift header for why.
+//
 // Spec refs: FR-02, FR-18, FR-19, FR-20, NFR-01, NFR-07;
 //            EC-13, EC-14, EC-16, EC-17; CG-1.
 // Contract: §3.1 (morph identity seam), §4.1, §4.3.
-//
-// ⚠️ DEBUG HARNESS (TEMPORARY — REMOVE BEFORE MERGE)
-// This file has a diagnostic harness bolted on to find why the overflow menu
-// does not open. Everything debug-related is grouped in the "DEBUG HARNESS"
-// MARK sections and gated by the three flags in `DebugFlags` below. Set
-// `enableDebug = false` (or delete the marked regions) to restore production.
 
 import SwiftUI
 import shared
@@ -64,7 +64,7 @@ final class CoordinatorBox {
 ///
 /// Lays out:
 ///   - `TopPill` (top-trailing, within safe area) — Share + overflow `…` toggle.
-///   - `MenuBubble` (inline, morphing from the pill) — shown when `isMenuPresented`.
+///   - `MenuBubble` (inline, morphing from the overflow control) — shown when `isMenuPresented`.
 ///   - Transparent full-screen tap-catcher — rendered behind the bubble when open
 ///     to handle outside-tap dismiss (EC-14).
 ///
@@ -73,9 +73,9 @@ final class CoordinatorBox {
 ///
 /// **Glass morph (§3.1 morph identity seam):**
 /// Owns `glassNamespace` (`@Namespace`) and the `chromeGlassID` string constant.
-/// Both `TopPill` and `MenuBubble` receive these values and attach
-/// `.glassEffectID(chromeGlassID, in: glassNamespace)` so the capsule morphs
-/// into the panel and back inside the single `GlassEffectContainer`.
+/// Both `TopPill` (on its overflow control) and `MenuBubble` receive these values
+/// and attach `.glassEffectID(chromeGlassID, in: glassNamespace)` so the overflow
+/// capsule morphs into the panel and back inside the single `GlassEffectContainer`.
 ///
 /// **Reduce Motion (C-07):**
 /// Reads `@Environment(\.accessibilityReduceMotion)`. When true, the morph
@@ -117,14 +117,14 @@ struct ChromeOverlay: View {
 
     // MARK: - Morph identity (§3.1 morph identity seam)
 
-    /// Namespace that binds the pill capsule and the menu panel into one
+    /// Namespace that binds the overflow capsule and the menu panel into one
     /// shared glass identity, enabling the capsule↔panel morph inside
     /// `GlassEffectContainer` (iOS 26 native glass morph — C-03).
     @Namespace private var glassNamespace
 
     /// The shared glass effect ID passed to both `TopPill` and `MenuBubble`.
-    /// Both call `.glassEffectID(chromeGlassID, in: glassNamespace)` so the
-    /// material morphs between the pill's capsule shape and the menu panel shape.
+    /// TopPill attaches it to its overflow control and `MenuBubble` to its panel,
+    /// so the material morphs between the overflow capsule and the menu panel shape.
     private static let chromeGlassID = "chrome.morph"
 
     // MARK: - Accessibility
@@ -149,47 +149,6 @@ struct ChromeOverlay: View {
         reduceMotion ? nil : .bouncy(duration: 0.45, extraBounce: 0.15)
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-    // MARK: - DEBUG HARNESS · flags
-    // ════════════════════════════════════════════════════════════════════════
-    //
-    // Run order:
-    //   1. Leave only `enableDebug = true`. Tap the `…`. Read the console + screen.
-    //   2. Based on what you see, flip ONE of the other two flags and re-run.
-    //
-    // What each console line / colour tells you is documented at each call site
-    // and summarised in the chat message that produced this file.
-    private enum DebugFlags {
-        /// Master switch: console prints (state flips, lifecycle, taps) + a
-        /// purple full-screen tint shown whenever `isMenuPresented == true`.
-        /// The tint is INSIDE the crossfaded layer on purpose: if tapping also
-        /// collapses `chromeVisibility.isVisible`, you'll see purple flash then
-        /// vanish — that means chrome auto-hide is eating the menu.
-        static let enableDebug = true
-
-        /// Flip to `true` if the console shows `isMenuPresented = true` but you
-        /// see no menu. Replaces `MenuBubble` with an opaque red placeholder that
-        /// carries the SAME glassEffectID. If the red box appears and morphs, the
-        /// bug is INSIDE MenuBubble (layout / `menuVM` DI), not the morph plumbing.
-        /// If the red box does NOT appear either, the bug is the morph/container.
-        static let useDebugPanel = false
-
-        /// Flip to `true` if NOTHING prints and no purple appears on tap. Replaces
-        /// `TopPill` with a bare, glass-free `Button`. If the bare button opens the
-        /// menu, the glass pill is stealing the tap from its inner `.plain` buttons
-        /// (the structural hit-testing problem) — fix is to make the glass a
-        /// background sibling, not the ancestor of the buttons.
-        static let useBareToggleButton = true
-    }
-
-    /// Gated logger — the print is compiled out of release builds entirely.
-    private func dbg(_ message: @autoclosure () -> String) {
-        #if DEBUG
-        if DebugFlags.enableDebug { print("🟣 [ChromeOverlay]", message()) }
-        #endif
-    }
-    // ════════════════════════════════════════════════════════════════════════
-
     // MARK: - Body
 
     var body: some View {
@@ -204,22 +163,11 @@ struct ChromeOverlay: View {
                     .onTapGesture {
                         // EC-14 writer #2: the tap-catcher closes the menu.
                         // Identical bouncy curve to the TopPill overflow toggle (C-05).
-                        dbg("tap-catcher → dismiss")   // DEBUG
                         withAnimation(menuToggleAnimation) {
                             isMenuPresented = false
                         }
                     }
             }
-
-            // ───────────── DEBUG: purple "isMenuPresented" state marker ─────────────
-            // No hit-testing, so it never interferes with taps. It sits INSIDE the
-            // .opacity(...) layer below, so it also reveals chrome-visibility collapse.
-            if DebugFlags.enableDebug && isMenuPresented {
-                Color.purple.opacity(0.35)
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
-            }
-            // ────────────────────────────────────────────────────────────────────────
 
             // Chrome controls: pill + morph container, top-trailing.
             VStack {
@@ -237,18 +185,6 @@ struct ChromeOverlay: View {
         // EC-14: crossfade is purely visual — it does NOT mutate isMenuPresented.
         .opacity(chromeVisibility.isVisible ? 1 : 0)
         .animation(.easeInOut(duration: 0.25), value: chromeVisibility.isVisible)
-        // ───────────────────────────── DEBUG: state probes ─────────────────────────
-        // (1) Does the toggle actually flip the state when you tap the `…`?
-        .onChange(of: isMenuPresented) { oldValue, newValue in
-            dbg("isMenuPresented: \(oldValue) → \(newValue)")
-        }
-        // (2) Does tapping secretly collapse the chrome layer (opacity → 0)?
-        //     If isVisible flips to false on tap, a *working* menu would still
-        //     vanish. They report seeing the pill, so this should stay true.
-        .onChange(of: chromeVisibility.isVisible) { oldValue, newValue in
-            dbg("chromeVisibility.isVisible: \(oldValue) → \(newValue)")
-        }
-        // ────────────────────────────────────────────────────────────────────────────
     }
 
     // MARK: - Pill + morph container (§3.1 morph identity seam)
@@ -260,15 +196,16 @@ struct ChromeOverlay: View {
     /// surfaces to be **mutually exclusive**: exactly one view bears the shared ID
     /// at any point in time. When `isMenuPresented` flips, SwiftUI removes the
     /// old view and inserts the new one inside the same transaction; the glass
-    /// system interpolates the capsule geometry into the panel geometry and back.
+    /// system interpolates the overflow capsule geometry into the panel geometry
+    /// and back.
     ///
     /// If both children were mounted together (e.g. in a VStack) the system
     /// would find two views with the same ID and skip the morph entirely,
     /// producing the "panel pops in below the pill" symptom observed on-device.
     ///
-    /// Both children attach `.glassEffectID(chromeGlassID, in: glassNamespace)`
-    /// internally (TopPill.swift:123 / MenuBubble.swift:164) — no change needed
-    /// in their bodies.
+    /// The shared `.glassEffectID(chromeGlassID, in: glassNamespace)` lives on
+    /// TopPill's overflow control and on MenuBubble's panel — no change needed in
+    /// their bodies.
     ///
     /// The `withAnimation` wrapping `isMenuPresented` changes is Reduce-Motion
     /// gated: when `reduceMotion` is true `menuToggleAnimation` is `nil` and
@@ -285,94 +222,29 @@ struct ChromeOverlay: View {
         // "menu pops under the pill" symptom. 30–45 matches the Apple Notes feel.
         GlassEffectContainer(spacing: 35) {
             if isMenuPresented {
-                openContent
+                // Menu open — panel is the sole bearer of chromeGlassID.
+                // No explicit .transition on the panel container: .glassEffectID
+                // owns the capsule↔panel geometry morph (C-04). Inner menu rows
+                // carry .transition(.opacity) in MenuBubble.swift (T-04).
+                MenuBubble(
+                    menuVM: menuVM,
+                    isPresented: $isMenuPresented,
+                    glassNamespace: glassNamespace,
+                    glassID: Self.chromeGlassID
+                )
             } else {
-                closedContent
+                // Menu closed — TopPill's overflow control is the sole bearer of
+                // chromeGlassID. withAnimation at the overflow toggle site is applied
+                // inside TopPill using the resolved menuToggleAnimation from here (C-06).
+                // The tap-catcher above uses the same spring value (C-05).
+                TopPill(
+                    text: text,
+                    isMenuPresented: $isMenuPresented,
+                    glassNamespace: glassNamespace,
+                    glassID: Self.chromeGlassID,
+                    menuToggleAnimation: menuToggleAnimation
+                )
             }
         }
     }
-
-    // MARK: Open state (menu)
-
-    /// The destination glass surface when the menu is open.
-    /// Normally `MenuBubble`; swapped for a debug placeholder when
-    /// `DebugFlags.useDebugPanel` is set (see flags).
-    @ViewBuilder
-    private var openContent: some View {
-        if DebugFlags.useDebugPanel {
-            // DEBUG: opaque placeholder carrying the SAME morph id, to test the
-            // container/morph independently of MenuBubble's internals.
-            debugPanel
-                .onAppear { dbg("debugPanel onAppear") }
-                .onDisappear { dbg("debugPanel onDisappear") }
-        } else {
-            // Menu open — panel is the sole bearer of chromeGlassID.
-            // No explicit .transition on the panel container: .glassEffectID
-            // owns the capsule↔panel geometry morph (C-04). Inner menu rows
-            // carry .transition(.opacity) in MenuBubble.swift (T-04).
-            MenuBubble(
-                menuVM: menuVM,
-                isPresented: $isMenuPresented,
-                glassNamespace: glassNamespace,
-                glassID: Self.chromeGlassID
-            )
-            .onAppear { dbg("MenuBubble onAppear") }     // DEBUG
-            .onDisappear { dbg("MenuBubble onDisappear") } // DEBUG
-        }
-    }
-
-    // MARK: Closed state (pill)
-
-    /// The source glass surface when the menu is closed.
-    /// Normally `TopPill`; swapped for a bare glass-free `Button` when
-    /// `DebugFlags.useBareToggleButton` is set (see flags).
-    @ViewBuilder
-    private var closedContent: some View {
-        if DebugFlags.useBareToggleButton {
-            // DEBUG: no glass, no morph id — pure hit-testing probe.
-            // If THIS opens the menu but TopPill doesn't, the glass pill is
-            // swallowing the tap meant for its inner .plain buttons.
-            Button("TAP (debug)") {
-                dbg("bare debug button tapped")
-                withAnimation(menuToggleAnimation) { isMenuPresented.toggle() }
-            }
-            .padding(.horizontal, 16)
-            .frame(minHeight: 44)
-            .onAppear { dbg("bare debug button onAppear") }
-        } else {
-            // Menu closed — pill is the sole bearer of chromeGlassID.
-            // withAnimation at the overflow toggle site is applied inside
-            // TopPill using the resolved menuToggleAnimation from here (C-06).
-            // The tap-catcher above uses the same spring value (C-05).
-            TopPill(
-                text: text,
-                isMenuPresented: $isMenuPresented,
-                glassNamespace: glassNamespace,
-                glassID: Self.chromeGlassID,
-                menuToggleAnimation: menuToggleAnimation
-            )
-            .onAppear { dbg("TopPill onAppear") }   // DEBUG
-        }
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    // MARK: - DEBUG HARNESS · views  (delete this whole region to go back to prod)
-    // ════════════════════════════════════════════════════════════════════════
-
-    /// Opaque red placeholder used when `DebugFlags.useDebugPanel` is set.
-    /// Carries the same morph id as MenuBubble so the capsule↔panel morph still
-    /// has a destination. If this appears and morphs, MenuBubble's internals are
-    /// the suspect, not the morph plumbing.
-    private var debugPanel: some View {
-        Color.red.opacity(0.9)
-            .frame(width: 280, height: 320)
-            .overlay(
-                Text("DEBUG PANEL")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-            )
-            .glassEffect(in: .rect(cornerRadius: 28))
-            .glassEffectID(Self.chromeGlassID, in: glassNamespace)
-    }
-    // ════════════════════════════════════════════════════════════════════════
 }
