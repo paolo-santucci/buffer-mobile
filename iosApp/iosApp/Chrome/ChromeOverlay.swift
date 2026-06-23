@@ -171,7 +171,7 @@ struct ChromeOverlay: View {
     .opacity(chromeVisibility.isVisible ? 1 : 0)
     .animation(.easeInOut(duration: 0.25), value: chromeVisibility.isVisible)
 
-            }
+          //  }
 
             // Chrome controls: pill + morph container, top-trailing.
             VStack {
