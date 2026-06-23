@@ -7,10 +7,11 @@
 // Outside-tap dismiss via a full-screen transparent tap-catcher in
 // ChromeOverlay (EC-14 write-source #2) — NOT a .popover.
 //
-// Morph seam (§3.1): receives `glassNamespace` and `glassID` from ChromeOverlay
+// Morph seam (§3.1 rc18): receives `glassNamespace` and `glassID` from ChromeOverlay
 // and attaches `.glassEffectID(glassID, in: glassNamespace)` to the menu panel
-// so the glass system can morph the TopPill capsule into this panel and back
+// so the glass system can morph the overflow `…` capsule into this panel and back
 // inside the shared GlassEffectContainer (iOS 26 native glass morph — C-03).
+// Morph source is the overflow button in ChromeOverlay; Share persists separately.
 //
 // Row crossfade (T-04): inner menu rows carry `.transition(.opacity)` so they
 // fade in mid-stretch during the morph. The PANEL CONTAINER does NOT carry an
@@ -75,10 +76,14 @@ import shared
 ///   sets this to `false`.
 /// - `glassNamespace: Namespace.ID` — morph namespace from `ChromeOverlay` (§3.1 morph seam).
 /// - `glassID: String` — shared glass effect ID from `ChromeOverlay` (§3.1 morph seam).
+/// - `dismissAnimation: Animation?` — the resolved close spring from `ChromeOverlay` (C-05/C-06).
+///   Used by recovery-row dismiss so closing from a row tap morphs smoothly (same spring as the
+///   tap-catcher). `nil` under Reduce Motion.
 ///
 /// The menu panel attaches `.glassEffectID(glassID, in: glassNamespace)` so the iOS 26
-/// glass system can morph the `TopPill` capsule into this panel and back inside the
-/// `GlassEffectContainer` owned by `ChromeOverlay` (C-03 / NFR-01/02).
+/// glass system can morph the overflow `…` button (in `ChromeOverlay`) into this panel
+/// and back inside the `GlassEffectContainer` owned by `ChromeOverlay` (C-03 / NFR-01/02).
+/// As of rc18, the morph source is the overflow button in `ChromeOverlay` — not `TopPill`.
 ///
 /// **EC-14 dismiss contract:**
 /// `isPresented` is set to `false` here only by recovery-row tap (EC-15 analogue).
@@ -110,8 +115,13 @@ struct MenuBubble: View {
     let glassNamespace: Namespace.ID
 
     /// The shared glass effect ID from `ChromeOverlay` (§3.1 morph identity seam).
-    /// Matches the ID used by `TopPill` so the two surfaces share one glass identity.
+    /// Matches the ID used by the overflow button so the two surfaces share one glass identity.
     let glassID: String
+
+    /// The resolved close animation from `ChromeOverlay` (§3.1 animation seam — C-05/C-06).
+    /// Used by recovery-row dismiss so closing from a row tap morphs smoothly (same spring
+    /// as the tap-catcher dismiss). `nil` under Reduce Motion (instantaneous close).
+    let dismissAnimation: Animation?
 
     // MARK: - Local state
 
@@ -158,9 +168,10 @@ struct MenuBubble: View {
         // Native iOS 26 Liquid Glass panel — no hand-rolled blur/fill/shadow (NFR-01/02).
         // Corner radius from ChromeMetrics.menuPanelCornerRadius (Apple-Notes look).
         .glassEffect(in: .rect(cornerRadius: ChromeMetrics.menuPanelCornerRadius))
-        // Morph identity: shared with TopPill inside ChromeOverlay's GlassEffectContainer
-        // so the glass system morphs the capsule into this panel and back (§3.1).
-        // No explicit .transition on the panel — glassEffectID owns the geometry morph (C-04).
+        // Morph identity: shared with the overflow button (rc18: in ChromeOverlay, not TopPill)
+        // inside ChromeOverlay's GlassEffectContainer. The glass system morphs the overflow
+        // capsule into this panel and back (§3.1). ChromeOverlay adds .transition(.identity)
+        // on the MenuBubble insertion — geometry morph is driven by glassEffectID (C-04).
         .glassEffectID(glassID, in: glassNamespace)
     }
 
@@ -535,7 +546,9 @@ struct MenuBubble: View {
 
     /// A single recovery note row (Apple Notes style: leading icon, title+date stacked).
     ///
-    /// Tap → `rvm.select(path:)` (nil-tolerant — EC-04) then dismiss the panel.
+    /// Tap → `rvm.select(path:)` (nil-tolerant — EC-04) then dismiss the panel via
+    /// `withAnimation(dismissAnimation)` so the close morphs smoothly (same spring as
+    /// the tap-catcher dismiss — C-05/C-06).
     ///
     /// - Parameters:
     ///   - row: The `RecoveryRow` to display.
@@ -544,8 +557,11 @@ struct MenuBubble: View {
         Button {
             // FR-13: restore; nil-tolerant inside RecoveryListViewModel.select(path:) (EC-04).
             rvm.select(path: row.path)
-            // Dismiss the panel after restore (EC-14 / EC-16: tap closes the menu).
-            isPresented = false
+            // Dismiss the panel with the same morph spring as the tap-catcher (C-05/C-06).
+            // Without withAnimation(dismissAnimation) the close would snap instead of morphing.
+            withAnimation(dismissAnimation) {
+                isPresented = false
+            }
         } label: {
             HStack(alignment: .center, spacing: ChromeMetrics.menuRowHorizontalPadding) {
                 // Icon for a note (FR-12 row anatomy — Apple Notes look).
