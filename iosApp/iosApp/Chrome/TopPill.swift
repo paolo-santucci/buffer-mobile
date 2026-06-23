@@ -6,29 +6,28 @@
 // no #available fallback (min target iOS 26.0).
 //
 // ┌─ HOW THE CAPSULE + MORPH ACTUALLY WORK (read before changing) ────────────┐
-// │ ONE CAPSULE, TWO BUTTONS:                                                    │
+// │ ONE CAPSULE, TWO BUTTONS, WHOLE-CAPSULE MORPH:                               │
 // │  • Share and overflow are TWO independent glass buttons (`.buttonStyle(     │
 // │    .glass)`), each with its own gesture handler (independently hit-testable) │
 // │  • `.glassEffectUnion(id: pillUnionID, namespace:)` on BOTH fuses their     │
 // │    glass outlines into one even capsule shape. Union is visual only —        │
 // │    it does NOT affect gesture routing or morph geometry.                    │
-// │  • The container's `spacing` (GlassEffectContainer in ChromeOverlay) drives │
-// │    the metaball merge and the liquid teardrop stretch during morph.          │
+// │  • `.glassEffectID(glassID, ...)` is on the OUTER HStack (the whole         │
+// │    TopPill body), NOT on a single button. The morph source/destination is   │
+// │    the HStack's layout frame — the FULL capsule width — so the whole blob   │
+// │    [Share | ...] deforms into the panel (Option C / Apple Notes feel).      │
+// │  • Do NOT put `.glassEffectID` on just the overflow button: the morph        │
+// │    source would be the small overflow frame only, and Share would abruptly   │
+// │    disappear rather than being absorbed into the stretch.                   │
 // │  • Do NOT wrap the HStack in `.glassEffect(.capsule)` — that merges the     │
 // │    two controls into one interactive glass surface and iOS 26 routes the    │
 // │    merged group's taps to the first child, swallowing the overflow tap.     │
-// │                                                                            │
-// │ ONLY THE OVERFLOW MORPHS:                                                    │
-// │  • The overflow button carries `.glassEffectID(glassID, ...)` — the morph   │
-// │    source/destination is the overflow button's LAYOUT FRAME (not the union  │
-// │    blob). `.glassEffectUnion` and `.glassEffectID` are orthogonal.          │
-// │  • ChromeOverlay swaps the WHOLE TopPill↔MenuBubble (whole-view swap). When │
-// │    closed, TopPill is freshly inserted at a known top-trailing position, so  │
-// │    the overflow button's frame is stable and resolved when the glass morph   │
-// │    animates to it. Both buttons are ALWAYS present here — TopPill's size    │
-// │    is deterministic, which is what makes the morph destination predictable. │
+// │  • The container's `spacing` (GlassEffectContainer in ChromeOverlay) drives │
+// │    the metaball merge and the liquid teardrop stretch during morph.          │
 // │                                                                            │
 // │ HISTORY of what NOT to re-introduce:                                        │
+// │  • `.glassEffectID` on overflowButton only (rc16) — small-frame morph;      │
+// │    Share abruptly vanishes instead of being absorbed into the stretch.       │
 // │  • NO `.glassEffect(.regular, in: .capsule)` on the HStack — tap swallow.    │
 // │  • NO `if !isMenuPresented { overflowButton }` inside TopPill (eeeb7a0) —   │
 // │    caused HStack reflow (Share slides) and morph-destination frame race     │
@@ -37,9 +36,9 @@
 // └──────────────────────────────────────────────────────────────────────────┘
 //
 // Morph seam (§3.1): receives `glassNamespace` and `glassID` from ChromeOverlay.
-// The overflow button attaches `.glassEffectID(glassID, in: glassNamespace)`; the
-// MenuBubble (in ChromeOverlay) attaches the same id. Both live in the one
-// GlassEffectContainer ChromeOverlay owns, so the morph crosses the view boundary.
+// The outer HStack (the whole capsule) attaches `.glassEffectID(glassID, in:
+// glassNamespace)`; the MenuBubble (in ChromeOverlay) attaches the same id. Both live
+// in the one GlassEffectContainer ChromeOverlay owns, so the morph crosses the view boundary.
 //
 // Animation seam (§3.1 T-02): receives `menuToggleAnimation` from ChromeOverlay
 // so the overflow toggle uses the SAME animation (and reduce-motion gate) as
@@ -89,10 +88,12 @@ import SwiftUI
 ///   animation seam). `nil` under Reduce Motion, an under-damped spring otherwise.
 ///
 /// **Glass architecture:** see the header box. Two independent `.buttonStyle(.glass)`
-/// buttons, fused visually by `.glassEffectUnion` into one even capsule. The overflow
-/// additionally carries `.glassEffectID` — the morph source/destination is the overflow
-/// button's layout frame. ChromeOverlay performs the whole-view TopPill↔MenuBubble
-/// swap; both buttons are always present here so TopPill's size is deterministic.
+/// buttons, fused visually by `.glassEffectUnion` into one even capsule. The outer
+/// HStack carries `.glassEffectID` — the morph source/destination is the FULL capsule
+/// frame, so the whole `[Share | ...]` blob deforms into the panel (Option C). The
+/// overflow button itself does NOT carry `.glassEffectID`. ChromeOverlay performs the
+/// whole-view TopPill↔MenuBubble swap; both buttons are always present here so
+/// TopPill's size is deterministic.
 ///
 /// **Disabled-share gate (EC-01/FR-08):**
 /// The Share control is `.disabled(text.trimmed.isEmpty)` — a declarative gate,
@@ -116,12 +117,12 @@ struct TopPill: View {
 
     /// The morph namespace from `ChromeOverlay` (§3.1 morph identity seam).
     /// Used by `.glassEffectUnion` (visual fusion of both controls) and by
-    /// `.glassEffectID` on the overflow button (capsule↔panel morph).
+    /// `.glassEffectID` on the outer HStack (whole-capsule↔panel morph).
     let glassNamespace: Namespace.ID
 
     /// The shared glass effect ID from `ChromeOverlay` (§3.1 morph identity seam).
-    /// Matches the ID used by `MenuBubble` so the overflow control and the panel
-    /// share one morph identity.
+    /// Matches the ID used by `MenuBubble` so the whole capsule (the outer HStack)
+    /// and the panel share one morph identity.
     let glassID: String
 
     /// The resolved animation for the overflow toggle (§3.1 animation seam).
@@ -133,8 +134,8 @@ struct TopPill: View {
 
     /// Shared union id that fuses Share + overflow glass shapes into one rendered
     /// capsule while keeping their gesture handlers independent (visual only).
-    /// Does NOT affect morph geometry — `.glassEffectID` on the overflow button
-    /// uses that button's layout frame as the morph source/destination.
+    /// Does NOT affect morph geometry — `.glassEffectID` on the outer HStack
+    /// uses the FULL capsule layout frame as the morph source/destination.
     private static let pillUnionID = "chrome.pill.union"
 
     // MARK: - Derived state
@@ -150,10 +151,15 @@ struct TopPill: View {
     var body: some View {
         // Apple-Notes-26: inter-icon spacing via ChromeMetrics token (non-gated, C-02).
         //
-        // NO `.glassEffect(...)` or `.glassEffectID(...)` on this HStack.
-        // Each child is its own glass element; `.glassEffectUnion` on each child fuses
-        // their outlines into one even capsule. The overflow button additionally carries
-        // `.glassEffectID` so it morphs into MenuBubble.
+        // `.glassEffectID` is on the OUTER HStack so the morph source/destination
+        // is the FULL capsule frame (both Share + overflow). Without this, the morph
+        // source is only the overflow button's small frame and Share abruptly vanishes
+        // instead of being absorbed into the liquid stretch (rc16 symptom).
+        //
+        // NO `.glassEffect(...)` on the HStack itself — that would create an interactive
+        // glass surface on the HStack and route all taps to the first child (tap swallow).
+        // Each child independently carries `.buttonStyle(.glass)` for its own gesture
+        // handling. `.glassEffectUnion` on each child fuses their outlines visually.
         //
         // BOTH buttons are always rendered here. ChromeOverlay's whole-view swap removes
         // the entire TopPill when the menu opens — TopPill never needs to know.
@@ -163,6 +169,10 @@ struct TopPill: View {
             shareButton
             overflowButton
         }
+        // Morph identity on the HStack = full capsule frame as morph source/destination.
+        // `.glassEffectUnion` on the children fuses their glass outlines; this ID uses
+        // the HStack layout frame (whole capsule width) for the morph geometry.
+        .glassEffectID(glassID, in: glassNamespace)
     }
 
     // MARK: - Share control (FR-08, EC-01)
@@ -170,7 +180,9 @@ struct TopPill: View {
     /// `ShareLink` exporting the current buffer text, as its own glass element.
     ///
     /// Disabled (gated, not try/catch) when `text.trimmed.isEmpty` (EC-01).
-    /// Does NOT carry `.glassEffectID` — Share never morphs.
+    /// Does NOT carry `.glassEffectID` — morph identity is on the outer HStack in
+    /// `body` (full capsule frame). Share is absorbed into the morph because the HStack
+    /// frame spans both buttons; it does not need its own morph ID.
     /// Carries `.glassEffectUnion` to visually fuse with the overflow into one even
     /// capsule (union is visual only; gesture routing is unaffected).
     private var shareButton: some View {
@@ -200,13 +212,13 @@ struct TopPill: View {
 
     // MARK: - Overflow button (FR-08, EC-14)
 
-    /// The `…` overflow button — the SOLE element that morphs into MenuBubble.
+    /// The `…` overflow button — EC-14 write-source #1 for `isMenuPresented`.
     ///
-    /// EC-14 write-source #1: toggles `isMenuPresented` (the binding from ChromeOverlay).
-    /// Carries `.glassEffectUnion` (visual fusion with Share into one capsule) AND
-    /// `.glassEffectID` (morph identity). The two modifiers are orthogonal: union
-    /// controls the rendered glass outline; glassEffectID uses this button's LAYOUT
-    /// FRAME as the morph source/destination, independent of the union blob.
+    /// Carries `.glassEffectUnion` (visual fusion with Share into one capsule).
+    /// Does NOT carry `.glassEffectID` — the morph identity is on the outer HStack
+    /// in `body`, so the morph source/destination is the FULL capsule frame (both
+    /// buttons as one blob). Putting `.glassEffectID` here would restrict the morph
+    /// to this button's small frame only (rc16 symptom: Share abruptly vanishes).
     private var overflowButton: some View {
         Button {
             // EC-14 write-source #1: overflow toggle.
@@ -227,10 +239,8 @@ struct TopPill: View {
         .frame(minWidth: 44, minHeight: 44)
         .buttonStyle(.glass)          // own glass element ⇒ own gesture handler
         // Visual fusion with Share into one even capsule (look only — gestures independent).
+        // `.glassEffectID` is on the outer HStack, not here (see body comment).
         .glassEffectUnion(id: Self.pillUnionID, namespace: glassNamespace)
-        // Morph identity: shared with MenuBubble inside ChromeOverlay's GlassEffectContainer.
-        // Applied after union; the morph source/destination is this button's layout frame.
-        .glassEffectID(glassID, in: glassNamespace)
         .accessibilityLabel(
             String(localized: "Menu", comment: "Overflow menu button accessibility label in the top pill")
         )
