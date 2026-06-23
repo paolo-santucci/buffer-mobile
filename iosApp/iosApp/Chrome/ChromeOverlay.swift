@@ -161,6 +161,16 @@ struct ChromeOverlay: View {
                             isMenuPresented = false
                         }
                     }
+    if isMenuPresented {                     // marcatore a prova di bomba
+            Color.purple.opacity(0.4)
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+        }
+    }
+    .onChange(of: isMenuPresented) { _, v in print("🟣 isMenuPresented =", v) }
+    .opacity(chromeVisibility.isVisible ? 1 : 0)
+    .animation(.easeInOut(duration: 0.25), value: chromeVisibility.isVisible)
+
             }
 
             // Chrome controls: pill + morph container, top-trailing.

@@ -125,7 +125,7 @@ struct MenuBubble: View {
     // MARK: - Body
 
     var body: some View {
-       // ScrollView {
+        ScrollView {
             // Inner rows carry .transition(.opacity) so they fade in mid-stretch
             // during the capsule→panel morph. The panel container itself does NOT
             // carry a transition — geometry is owned by .glassEffectID (C-04 / T-04).
@@ -153,7 +153,7 @@ struct MenuBubble: View {
                     .transition(.opacity)
             }
             .padding(.vertical, ChromeMetrics.menuRowVerticalPadding)
-       // }
+        }
         .frame(width: ChromeMetrics.menuPanelWidth)
         // Native iOS 26 Liquid Glass panel — no hand-rolled blur/fill/shadow (NFR-01/02).
         // Corner radius from ChromeMetrics.menuPanelCornerRadius (Apple-Notes look).
