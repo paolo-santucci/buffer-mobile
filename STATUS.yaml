@@ -1,5 +1,5 @@
 schema-version: 2
-last-updated: "2026-06-23T19:05:00+02:00"
+last-updated: "2026-06-23T19:20:00+02:00"
 active-plan: null
 last-plan: ".claude/docs/plans/archive/qp-20260622-apple-notes-chrome-restyle.md"
 
@@ -88,7 +88,7 @@ recently-completed:
 
 in-progress:
   - title: "v1.0.0-rc17 (kmp-rewrite) shipped — Apple-Notes whole-capsule liquid morph; awaiting CI/Apple/on-device validation"
-    state: "Tag v1.0.0-rc17 -> iOS deploy_testflight run 28042542700 (in progress). Moves .glassEffectID from the overflow Button to the outer pill HStack so the WHOLE [Share|…] capsule morphs as one blob (Option C). No tap regression (HStack carries only the ID, not .glassEffect). Gates m4 13/13, sp_chrome_morph 8/8. Code+symptom, not a device run."
+    state: "Tag v1.0.0-rc17 -> iOS deploy_testflight run 28042542700 GREEN (test 12m55s + build 4m56s + deploy 6m52s; signed IPA uploaded to TestFlight). Awaiting Apple processing + on-device. Moves .glassEffectID from the overflow Button to the outer pill HStack so the WHOLE [Share|…] capsule morphs as one blob (Option C). No tap regression (HStack carries only the ID, not .glassEffect). Gates m4 13/13, sp_chrome_morph 8/8. Code+symptom, not a device run."
     touched:
       - "iosApp/iosApp/Chrome/TopPill.swift"
       - "iosApp/iosApp/Chrome/ChromeOverlay.swift"
