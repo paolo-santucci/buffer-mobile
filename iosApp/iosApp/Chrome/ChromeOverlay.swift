@@ -1,10 +1,31 @@
 // Chrome/ChromeOverlay.swift
 // Foglietto — KMP Milestone 4: Liquid Glass Chrome (T-01 morph + top-pad)
 //
-// Container view composing TopPill + MenuBubble over the editor.
-// Reads ChromeVisibility.isVisible and crossfades the chrome layer.
-// Owns the GlassEffectContainer and morph namespace so the overflow control
-// and the menu panel share one glass identity and morph capsule↔panel.
+// Container view composing the top toolbar (TopPill) + the morphing menu panel
+// (MenuBubble) over the editor. Reads ChromeVisibility.isVisible and crossfades
+// the chrome layer. Owns the single GlassEffectContainer + morph namespace.
+//
+// ┌─ MORPH LAYOUT (read before changing) ─────────────────────────────────────┐
+// │ ONE GlassEffectContainer holds a VStack:                                    │
+// │     ┌ TopPill ──────────────┐   ← toolbar row: [Share] [overflow]           │
+// │     └ MenuBubble (if open) ─┘   ← panel, BELOW the toolbar                   │
+// │                                                                            │
+// │  • The container's `spacing` fuses adjacent glass: it merges Share +        │
+// │    overflow into one capsule, and it lets the overflow morph DOWN into the  │
+// │    panel (the liquid teardrop). This is the single knob for both effects.   │
+// │  • Only the overflow (in TopPill) and the panel (MenuBubble) carry the       │
+// │    shared `chromeGlassID`, and they are MUTUALLY EXCLUSIVE: the overflow is  │
+// │    shown only while closed (TopPill hides it when `isMenuPresented`), the    │
+// │    panel only while open. So the glass system does a clean matched-geometry  │
+// │    morph from the overflow's frame to the panel's frame and back.            │
+// │  • Share is PERSISTENT (always in TopPill) and never morphs — keeping it     │
+// │    out of the swap is what fixed the "panel lands mid-screen on close" bug   │
+// │    (previously the WHOLE pill was swapped, relaying the morph source frame). │
+// │                                                                            │
+// │ DO NOT swap TopPill↔MenuBubble (old design — relays the morph source).       │
+// │ DO NOT wrap the toolbar in a single `.glassEffect(.capsule)` or add          │
+// │ `.glassEffectUnion` (tap swallow / broken morph respectively).               │
+// └──────────────────────────────────────────────────────────────────────────┘
 //
 // EC-14: isMenuPresented is written by EXACTLY two sources —
 //   (1) the overflow toggle inside TopPill (via the $isMenuPresented binding)
@@ -24,13 +45,6 @@
 //
 // CANON GAP CG-1: native Liquid Glass material on the chrome layer supersedes
 // ui-design-bible §"Auto-hiding overlay chrome" --view-bg-color@90% fill (OQ-01).
-// GlassEffectContainer is the single glass grouping for the pill + menu morph.
-//
-// NOTE (tap-routing fix): the pill is NOT a single glass capsule. TopPill renders
-// the Share + overflow controls as independent glass elements fused via
-// glassEffectUnion, with the morph glassEffectID on the overflow control only.
-// ChromeOverlay's job is unchanged: own the GlassEffectContainer + namespace and
-// swap TopPill (closed) ↔ MenuBubble (open). See TopPill.swift header for why.
 //
 // Spec refs: FR-02, FR-18, FR-19, FR-20, NFR-01, NFR-07;
 //            EC-13, EC-14, EC-16, EC-17; CG-1.
@@ -43,11 +57,6 @@ import shared
 
 /// Lightweight reference-type bridge that publishes the live `BufferEditor.Coordinator`
 /// once it is available (set by `BufferEditor.makeUIView`).
-///
-/// This avoids a hard dependency between `ContentView`/`ChromeOverlay` and the
-/// internal `UIViewRepresentable` coordinator lifecycle. The box is owned as `@State`
-/// in `ContentView` and passed to both `BufferEditor` (which writes) and
-/// `ChromeOverlay` (which reads for toolbar-closure wiring).
 ///
 /// `coordinator` is declared `weak` so the box does not extend the coordinator's
 /// lifetime beyond the UIViewRepresentable's natural teardown.
@@ -62,30 +71,21 @@ final class CoordinatorBox {
 
 /// Non-visual composition container for the Liquid Glass chrome controls.
 ///
-/// Lays out:
-///   - `TopPill` (top-trailing, within safe area) — Share + overflow `…` toggle.
-///   - `MenuBubble` (inline, morphing from the overflow control) — shown when `isMenuPresented`.
-///   - Transparent full-screen tap-catcher — rendered behind the bubble when open
-///     to handle outside-tap dismiss (EC-14).
+/// Lays out (top-trailing, within safe area), inside ONE `GlassEffectContainer`:
+///   - `TopPill` — toolbar row: persistent Share + overflow `…` (the latter only when closed).
+///   - `MenuBubble` — the menu panel, BELOW the toolbar, shown when `isMenuPresented`.
+///     Morphs up/down out of the overflow via the shared `chromeGlassID`.
+///   - Transparent full-screen tap-catcher — outside-tap dismiss (EC-14).
 ///
-/// Reads `chromeVisibility.isVisible` to crossfade the entire chrome layer in/out.
-/// Applies `.opacity` + `.animation` so SM transitions animate smoothly (FR-20).
+/// **Glass morph (§3.1):** see the header box. Container spacing fuses the toolbar
+/// capsule and drives the overflow↔panel teardrop. Only the overflow + panel carry
+/// the shared id; Share is persistent.
 ///
-/// **Glass morph (§3.1 morph identity seam):**
-/// Owns `glassNamespace` (`@Namespace`) and the `chromeGlassID` string constant.
-/// Both `TopPill` (on its overflow control) and `MenuBubble` receive these values
-/// and attach `.glassEffectID(chromeGlassID, in: glassNamespace)` so the overflow
-/// capsule morphs into the panel and back inside the single `GlassEffectContainer`.
+/// **Reduce Motion (C-07):** when `accessibilityReduceMotion` is true the toggle
+/// animation is `nil` (instantaneous) instead of the spring morph.
 ///
-/// **Reduce Motion (C-07):**
-/// Reads `@Environment(\.accessibilityReduceMotion)`. When true, the morph
-/// toggle uses an instantaneous `.identity` / `.opacity` transition instead of
-/// the capsule↔panel shape morph.
-///
-/// **Bubble dismiss contract (EC-14):**
-/// `isMenuPresented` is written by EXACTLY two sources — the overflow toggle in
-/// `TopPill` and the tap-catcher below. SM events (`injectTyping`, `injectScroll`,
-/// `injectKeyboardDismiss`) and `MenuViewModel` NEVER write to `isMenuPresented`.
+/// **Bubble dismiss contract (EC-14):** `isMenuPresented` is written by EXACTLY two
+/// sources — the overflow toggle in `TopPill` and the tap-catcher below.
 struct ChromeOverlay: View {
 
     // MARK: - Inputs (from ContentView / composition root)
@@ -108,43 +108,40 @@ struct ChromeOverlay: View {
     // MARK: - Local state
 
     /// Controls the `MenuBubble` presented state.
-    ///
-    /// EC-14: written by EXACTLY two sources —
-    ///   (1) the overflow button toggle inside `TopPill` (via `$isMenuPresented`)
-    ///   (2) the full-screen transparent tap-catcher (sets to `false`)
-    /// SM events and `MenuViewModel` NEVER mutate this state.
+    /// EC-14: written by EXACTLY two sources — the overflow toggle in `TopPill`
+    /// and the tap-catcher. SM events and `MenuViewModel` NEVER mutate this.
     @State private var isMenuPresented: Bool = false
 
     // MARK: - Morph identity (§3.1 morph identity seam)
 
-    /// Namespace that binds the overflow capsule and the menu panel into one
-    /// shared glass identity, enabling the capsule↔panel morph inside
-    /// `GlassEffectContainer` (iOS 26 native glass morph — C-03).
+    /// Namespace binding the overflow capsule and the menu panel into one shared
+    /// glass identity for the capsule↔panel morph inside `GlassEffectContainer` (C-03).
     @Namespace private var glassNamespace
 
-    /// The shared glass effect ID passed to both `TopPill` and `MenuBubble`.
-    /// TopPill attaches it to its overflow control and `MenuBubble` to its panel,
-    /// so the material morphs between the overflow capsule and the menu panel shape.
+    /// Shared glass effect ID — on TopPill's overflow control and on MenuBubble's panel.
     private static let chromeGlassID = "chrome.morph"
+
+    /// Container merge threshold. This ONE value does two jobs (header box):
+    /// (1) fuses Share + overflow into a single capsule, and (2) drives the
+    /// overflow↔panel liquid teardrop. Larger = stronger stretch / stickier fuse.
+    /// If Share visually bleeds into the panel when open, lower this.
+    private static let glassSpacing: CGFloat = 40
+
+    /// Vertical gap between the toolbar row and the panel. Keep it small so the
+    /// overflow and the panel stay within `glassSpacing` and the teardrop connects.
+    private static let toolbarToPanelGap: CGFloat = 8
 
     // MARK: - Accessibility
 
-    /// When `true`, the morph animation is replaced by an instantaneous/opacity
-    /// transition (C-07 / `prefers-reduce-motion`).
+    /// When `true`, the morph animation is replaced by an instantaneous transition (C-07).
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     // MARK: - Animation seam (§3.1 / C-05 / C-06)
 
     /// Resolved morph animation — computed once so BOTH `isMenuPresented` write-sites
     /// (C-05) use an identical spring, and `TopPill` receives the same value without
-    /// needing its own `@Environment(\.accessibilityReduceMotion)` reader (C-06).
-    ///
-    /// `nil` when Reduce Motion is enabled (instantaneous toggle); a bouncy spring
-    /// otherwise to drive the glass capsule↔panel morph.
-    ///
-    /// The `.bouncy` curve is the elastic settle that sells the liquid-glass
-    /// "drop" feel (per the Liquid Glass morph reference); a linear/critically-
-    /// damped curve kills the metaball stretch.
+    /// its own reduce-motion reader (C-06). `nil` under Reduce Motion; a bouncy spring
+    /// otherwise (the elastic settle that sells the liquid-glass "drop").
     private var menuToggleAnimation: Animation? {
         reduceMotion ? nil : .bouncy(duration: 0.45, extraBounce: 0.15)
     }
@@ -153,23 +150,20 @@ struct ChromeOverlay: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            // Full-screen tap-catcher: rendered only when the menu is open,
-            // above the editor and behind the bubble (EC-14 outside-tap dismiss).
-            // Lives inside this crossfaded layer so EC-16 holds — when chrome
-            // crossfades out the tap-catcher disappears with it.
+            // Full-screen tap-catcher: only when the menu is open, behind the bubble
+            // (EC-14 outside-tap dismiss). Inside the crossfaded layer so EC-16 holds.
             if isMenuPresented {
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture {
-                        // EC-14 writer #2: the tap-catcher closes the menu.
-                        // Identical bouncy curve to the TopPill overflow toggle (C-05).
+                        // EC-14 writer #2 — same bouncy curve as the overflow toggle (C-05).
                         withAnimation(menuToggleAnimation) {
                             isMenuPresented = false
                         }
                     }
             }
 
-            // Chrome controls: pill + morph container, top-trailing.
+            // Chrome controls: toolbar + morphing panel, top-trailing.
             VStack {
                 HStack {
                     Spacer()
@@ -180,63 +174,27 @@ struct ChromeOverlay: View {
             .padding(.top, 6)
             .padding(.horizontal, 16)
         }
-        // Crossfade the chrome layer (including the tap-catcher) with
-        // ChromeVisibility.isVisible (FR-20 / EC-16).
-        // EC-14: crossfade is purely visual — it does NOT mutate isMenuPresented.
+        // Crossfade the chrome layer (incl. tap-catcher) with ChromeVisibility (FR-20 / EC-16).
         .opacity(chromeVisibility.isVisible ? 1 : 0)
         .animation(.easeInOut(duration: 0.25), value: chromeVisibility.isVisible)
     }
 
-    // MARK: - Pill + morph container (§3.1 morph identity seam)
+    // MARK: - Toolbar + morphing panel (§3.1 morph identity seam)
 
-    /// `GlassEffectContainer` wrapping either `TopPill` (closed) or `MenuBubble`
-    /// (open) — never both simultaneously.
+    /// The single `GlassEffectContainer`. A trailing-aligned VStack stacks the
+    /// persistent toolbar (`TopPill`) on top and the menu panel (`MenuBubble`)
+    /// directly below it. The overflow (inside TopPill, shown only while closed)
+    /// and the panel share `chromeGlassID` and are mutually exclusive, so the glass
+    /// system morphs the overflow DOWN into the panel and back — Share stays put.
     ///
-    /// iOS 26 `glassEffectID` morph requires the source and destination glass
-    /// surfaces to be **mutually exclusive**: exactly one view bears the shared ID
-    /// at any point in time. When `isMenuPresented` flips, SwiftUI removes the
-    /// old view and inserts the new one inside the same transaction; the glass
-    /// system interpolates the overflow capsule geometry into the panel geometry
-    /// and back.
-    ///
-    /// If both children were mounted together (e.g. in a VStack) the system
-    /// would find two views with the same ID and skip the morph entirely,
-    /// producing the "panel pops in below the pill" symptom observed on-device.
-    ///
-    /// The shared `.glassEffectID(chromeGlassID, in: glassNamespace)` lives on
-    /// TopPill's overflow control and on MenuBubble's panel — no change needed in
-    /// their bodies.
-    ///
-    /// The `withAnimation` wrapping `isMenuPresented` changes is Reduce-Motion
-    /// gated: when `reduceMotion` is true `menuToggleAnimation` is `nil` and
-    /// the swap is instantaneous (C-07).
+    /// See the file header box for what NOT to do (whole-pill swap / capsule wrap /
+    /// union). The `withAnimation` wrapping `isMenuPresented` is reduce-motion gated.
     @ViewBuilder
     private var pillAndBubble: some View {
-        // CANON GAP CG-1: GlassEffectContainer is the iOS 26 native grouping
-        // API — no hand-rolled blur/fill/shadow (C-03 / NFR-01/02).
-        //
-        // `spacing:` is the metaball merge threshold: the larger it is, the more
-        // the capsule and panel stay "stuck together" and the liquid stretch
-        // reads during the capsule↔panel morph. Without it (default) the shapes
-        // hand off too far apart and the morph degrades to a plain swap — the
-        // "menu pops under the pill" symptom. 30–45 matches the Apple Notes feel.
-        GlassEffectContainer(spacing: 35) {
-            if isMenuPresented {
-                // Menu open — panel is the sole bearer of chromeGlassID.
-                // No explicit .transition on the panel container: .glassEffectID
-                // owns the capsule↔panel geometry morph (C-04). Inner menu rows
-                // carry .transition(.opacity) in MenuBubble.swift (T-04).
-                MenuBubble(
-                    menuVM: menuVM,
-                    isPresented: $isMenuPresented,
-                    glassNamespace: glassNamespace,
-                    glassID: Self.chromeGlassID
-                )
-            } else {
-                // Menu closed — TopPill's overflow control is the sole bearer of
-                // chromeGlassID. withAnimation at the overflow toggle site is applied
-                // inside TopPill using the resolved menuToggleAnimation from here (C-06).
-                // The tap-catcher above uses the same spring value (C-05).
+        GlassEffectContainer(spacing: Self.glassSpacing) {
+            VStack(alignment: .trailing, spacing: Self.toolbarToPanelGap) {
+                // Persistent toolbar row. Share is always here; the overflow is
+                // shown only while closed (it morphs into the panel below).
                 TopPill(
                     text: text,
                     isMenuPresented: $isMenuPresented,
@@ -244,6 +202,19 @@ struct ChromeOverlay: View {
                     glassID: Self.chromeGlassID,
                     menuToggleAnimation: menuToggleAnimation
                 )
+
+                // Menu panel — only while open. Same id as the overflow ⇒ the glass
+                // system morphs the overflow capsule into this panel (C-04). Inner
+                // rows carry .transition(.opacity) in MenuBubble.swift (T-04). No
+                // explicit transition on the panel container — glassEffectID owns geometry.
+                if isMenuPresented {
+                    MenuBubble(
+                        menuVM: menuVM,
+                        isPresented: $isMenuPresented,
+                        glassNamespace: glassNamespace,
+                        glassID: Self.chromeGlassID
+                    )
+                }
             }
         }
     }
