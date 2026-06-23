@@ -179,7 +179,7 @@ struct ChromeOverlay: View {
         /// menu, the glass pill is stealing the tap from its inner `.plain` buttons
         /// (the structural hit-testing problem) — fix is to make the glass a
         /// background sibling, not the ancestor of the buttons.
-        static let useBareToggleButton = false
+        static let useBareToggleButton = true
     }
 
     /// Gated logger — the print is compiled out of release builds entirely.
