@@ -63,8 +63,9 @@ import SwiftUI
 /// the §5.1.e Coordinator contract exactly.
 ///
 /// **Native glass:**
-/// The button row uses `.buttonStyle(.glass)` (iOS 26 native glass button style)
-/// on each button and `.glassEffect(in: .capsule)` on the container `HStack`.
+/// The container `HStack` carries the single `.glassEffect(in: .capsule)` (one
+/// Liquid Glass pill, Apple-Notes style). Each button uses `.buttonStyle(.plain)`
+/// so the icons sit directly on the pill with NO per-icon gray glass background.
 /// Unconditional — min deployment target iOS 26.0, no availability guard needed (NFR-02).
 ///
 /// **Accessibility (NFR-04, FR-23):**
@@ -129,14 +130,14 @@ struct BottomToolbar: View {
     private var copyButton: some View {
         Button(action: onCopy) {
             Image(systemName: "doc.on.doc")
-                .imageScale(.medium)
+                .imageScale(.large)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
         }
         // ≥ 44×44 pt touch target (NFR-04/HIG).
         .frame(minWidth: 44, minHeight: 44)
         // Always enabled (FR-15 — all five buttons are always-enabled).
-        // Native glass button style (iOS 26).
-        .buttonStyle(.glass)
+        // Plain style: the single glass pill is the container capsule (no per-icon glass).
+        .buttonStyle(.plain)
         // Accessibility (NFR-04, FR-23).
         .accessibilityLabel(
             String(localized: "Copy", comment: "Copy button accessibility label in the bottom toolbar")
@@ -159,13 +160,13 @@ struct BottomToolbar: View {
     private var pasteButton: some View {
         Button(action: onPaste) {
             Image(systemName: "doc.on.clipboard")
-                .imageScale(.medium)
+                .imageScale(.large)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
         }
         // ≥ 44×44 pt touch target (NFR-04/HIG).
         .frame(minWidth: 44, minHeight: 44)
         // Always enabled (FR-15); guard on empty clipboard is in Coordinator (EC-03).
-        .buttonStyle(.glass)
+        .buttonStyle(.plain)
         // Accessibility (NFR-04, FR-23).
         .accessibilityLabel(
             String(localized: "Paste", comment: "Paste button accessibility label in the bottom toolbar")
@@ -187,12 +188,12 @@ struct BottomToolbar: View {
     private var closeKeyboardButton: some View {
         Button(action: onCloseKeyboard) {
             Image(systemName: "keyboard.chevron.compact.down")
-                .imageScale(.medium)
+                .imageScale(.large)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
         }
         // ≥ 44×44 pt touch target (NFR-04/HIG).
         .frame(minWidth: 44, minHeight: 44)
-        .buttonStyle(.glass)
+        .buttonStyle(.plain)
         // Accessibility label — FR-23 introduces "Hide keyboard" as a new EN literal.
         .accessibilityLabel(
             String(localized: "Hide keyboard", comment: "Close-keyboard button accessibility label in the bottom toolbar (FR-23 new string)")
@@ -219,12 +220,12 @@ struct BottomToolbar: View {
     private var indentButton: some View {
         Button(action: onIndent) {
             Image(systemName: "increase.indent")
-                .imageScale(.medium)
+                .imageScale(.large)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
         }
         // ≥ 44×44 pt touch target (NFR-04/HIG).
         .frame(minWidth: 44, minHeight: 44)
-        .buttonStyle(.glass)
+        .buttonStyle(.plain)
         // Accessibility label — FR-23 introduces "Indent" as a new EN literal.
         .accessibilityLabel(
             String(localized: "Indent", comment: "Indent button accessibility label in the bottom toolbar (FR-23 new string)")
@@ -248,12 +249,12 @@ struct BottomToolbar: View {
     private var deIndentButton: some View {
         Button(action: onOutdent) {
             Image(systemName: "decrease.indent")
-                .imageScale(.medium)
+                .imageScale(.large)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
         }
         // ≥ 44×44 pt touch target (NFR-04/HIG).
         .frame(minWidth: 44, minHeight: 44)
-        .buttonStyle(.glass)
+        .buttonStyle(.plain)
         // Accessibility label — FR-23 introduces "Outdent" / "De-indent" as a new EN literal.
         // The spec names both "Outdent" and "De-indent"; "Outdent" is the standard iOS term.
         .accessibilityLabel(

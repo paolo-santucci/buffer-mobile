@@ -133,10 +133,14 @@ struct ChromeOverlay: View {
     /// (C-05) use an identical spring, and `TopPill` receives the same value without
     /// needing its own `@Environment(\.accessibilityReduceMotion)` reader (C-06).
     ///
-    /// `nil` when Reduce Motion is enabled (instantaneous toggle); under-damped spring
+    /// `nil` when Reduce Motion is enabled (instantaneous toggle); a bouncy spring
     /// otherwise to drive the glass capsule↔panel morph.
+    ///
+    /// The `.bouncy` curve is the elastic settle that sells the liquid-glass
+    /// "drop" feel (per the Liquid Glass morph reference); a linear/critically-
+    /// damped curve kills the metaball stretch.
     private var menuToggleAnimation: Animation? {
-        reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.6)
+        reduceMotion ? nil : .bouncy(duration: 0.45, extraBounce: 0.15)
     }
 
     // MARK: - Body
@@ -152,8 +156,8 @@ struct ChromeOverlay: View {
                     .contentShape(Rectangle())
                     .onTapGesture {
                         // EC-14 writer #2: the tap-catcher closes the menu.
-                        // Same spring constant as the TopPill overflow toggle (C-05).
-                        withAnimation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.6)) {
+                        // Identical bouncy curve to the TopPill overflow toggle (C-05).
+                        withAnimation(menuToggleAnimation) {
                             isMenuPresented = false
                         }
                     }
@@ -203,7 +207,13 @@ struct ChromeOverlay: View {
     private var pillAndBubble: some View {
         // CANON GAP CG-1: GlassEffectContainer is the iOS 26 native grouping
         // API — no hand-rolled blur/fill/shadow (C-03 / NFR-01/02).
-        GlassEffectContainer {
+        //
+        // `spacing:` is the metaball merge threshold: the larger it is, the more
+        // the capsule and panel stay "stuck together" and the liquid stretch
+        // reads during the capsule↔panel morph. Without it (default) the shapes
+        // hand off too far apart and the morph degrades to a plain swap — the
+        // "menu pops under the pill" symptom. 30–45 matches the Apple Notes feel.
+        GlassEffectContainer(spacing: 35) {
             if isMenuPresented {
                 // Menu open — panel is the sole bearer of chromeGlassID.
                 // No explicit .transition on the panel container: .glassEffectID

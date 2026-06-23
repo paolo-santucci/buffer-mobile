@@ -58,9 +58,11 @@ import SwiftUI
 /// not a try/catch, not a runtime guard on the `ShareLink` action.
 ///
 /// **Native glass:**
-/// `.glassEffect(in: .capsule)` is applied to the pill container; the morph ID
-/// is overlaid via `.glassEffectID(glassID, in: glassNamespace)`.
-/// Both buttons use `.buttonStyle(.glass)` (iOS 26 native glass button style).
+/// `.glassEffect(.regular.interactive(), in: .capsule)` is applied to the pill
+/// container (the SINGLE glass shape); the morph ID is overlaid via
+/// `.glassEffectID(glassID, in: glassNamespace)`. Both inner buttons use
+/// `.buttonStyle(.plain)` so they do NOT add nested glass (no per-icon gray
+/// background, Apple-Notes style, and a clean capsule↔panel morph).
 /// Unconditional — min deployment target iOS 26.0, no availability guard needed (NFR-02).
 ///
 /// **Apple-Notes-26 restyle (CANON GAP CG-1):**
@@ -117,7 +119,13 @@ struct TopPill: View {
             overflowButton
         }
         // Native iOS 26 Liquid Glass capsule — no hand-rolled blur/fill/shadow (NFR-01/02).
-        .glassEffect(in: .capsule)
+        // `.interactive()` adds the reactive squish on touch (Liquid Glass morph ref).
+        // The pill is a SINGLE glass shape: the inner Share/overflow controls use
+        // `.buttonStyle(.plain)` (NOT `.glass`) so they do NOT create their own nested
+        // glass surfaces. Nested glass inside the morphing shape makes iOS skip the
+        // capsule↔panel geometry handoff (the rc7 "no morph" suspect). One bearer of
+        // the glass shape ⇒ one clean morph into the MenuBubble panel.
+        .glassEffect(.regular.interactive(), in: .capsule)
         // Morph identity: shared with MenuBubble inside ChromeOverlay's GlassEffectContainer
         // so the glass system morphs this capsule into the menu panel and back (§3.1).
         .glassEffectID(glassID, in: glassNamespace)
@@ -134,14 +142,16 @@ struct TopPill: View {
             // Apple-Notes-26: icon weight via ChromeMetrics token (non-gated, C-02).
             Image(systemName: "square.and.arrow.up")
                 .fontWeight(ChromeMetrics.iconScaleWeight)
-                .imageScale(.medium)
+                .imageScale(.large)
         }
         // ≥ 44×44 pt touch target (NFR-04/HIG). Literal kept inline — m6_gate check 11 (C-02).
         .frame(minWidth: 44, minHeight: 44)
         // Gated disable — NOT try/catch (EC-01/FR-08).
         .disabled(isShareDisabled)
-        // Native glass button style (iOS 26).
-        .buttonStyle(.glass)
+        // Plain style: the pill capsule (above) is the single glass surface. A
+        // nested `.buttonStyle(.glass)` here would add a second glass shape inside
+        // the morphing capsule and break the capsule↔panel morph.
+        .buttonStyle(.plain)
         // Accessibility (NFR-04).
         .accessibilityLabel(
             String(localized: "Share", comment: "Share button accessibility label in the top pill")
@@ -172,13 +182,14 @@ struct TopPill: View {
             // Apple-Notes-26: icon weight via ChromeMetrics token (non-gated, C-02).
             Image(systemName: "ellipsis")
                 .fontWeight(ChromeMetrics.iconScaleWeight)
-                .imageScale(.medium)
+                .imageScale(.large)
         }
         // ≥ 44×44 pt touch target (NFR-04/HIG). Literal kept inline — m6_gate check 11 (C-02).
         .frame(minWidth: 44, minHeight: 44)
         // Always enabled (FR-08 — overflow is never gated).
-        // Native glass button style (iOS 26).
-        .buttonStyle(.glass)
+        // Plain style: see shareButton — the pill capsule is the single glass
+        // surface, so the inner controls must NOT add their own nested glass.
+        .buttonStyle(.plain)
         // Accessibility (NFR-04).
         .accessibilityLabel(
             String(localized: "Menu", comment: "Overflow menu button accessibility label in the top pill")

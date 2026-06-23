@@ -296,10 +296,11 @@ struct MenuBubble: View {
             .frame(minWidth: 44, minHeight: 44)
             // EC-07: disabled at index 0.
             .disabled(menuVM.fontSizeIndex <= 0)
-            .buttonStyle(.glass)
-            .accessibilityLabel(
-                String(localized: "Decrease font size", comment: "Font size decrease button accessibility label (FR-23)")
-            )
+            // Plain: the panel (.glassEffect on the ScrollView) is the single glass
+            // surface bearing the morph ID. Nested `.glass` button shapes inside the
+            // same GlassEffectContainer would metaball-merge with the panel and
+            // corrupt the capsule↔panel morph.
+            .buttonStyle(.plain)
             .accessibilityAddTraits(.isButton)
             .help(String(localized: "Decrease font size", comment: "Font size decrease button tooltip (FR-23)"))
 
@@ -335,10 +336,9 @@ struct MenuBubble: View {
             .frame(minWidth: 44, minHeight: 44)
             // EC-07: disabled at index 20.
             .disabled(menuVM.fontSizeIndex >= 20)
-            .buttonStyle(.glass)
-            .accessibilityLabel(
-                String(localized: "Increase font size", comment: "Font size increase button accessibility label (FR-23)")
-            )
+            // Plain: see the decrease button — keep the panel a single glass shape
+            // so the morph isn't corrupted by nested glass inside the container.
+            .buttonStyle(.plain)
             .accessibilityAddTraits(.isButton)
             .help(String(localized: "Increase font size", comment: "Font size increase button tooltip (FR-23)"))
         }

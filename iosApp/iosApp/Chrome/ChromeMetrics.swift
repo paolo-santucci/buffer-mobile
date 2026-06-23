@@ -24,7 +24,7 @@ enum ChromeMetrics {
 
     // Pill + toolbar glass capsules (visual only — NOT the 44pt tap target)
     static let capsuleControlSpacing: CGFloat = 2      // inter-icon spacing inside a capsule
-    static let iconScaleWeight: Font.Weight = .medium  // SF Symbol weight (Apple-Notes look)
+    static let iconScaleWeight: Font.Weight = .regular  // SF Symbol weight (Apple-Notes look — regular, not bold)
 
     // Bottom toolbar
     static let toolbarItemSpacing: CGFloat = 4

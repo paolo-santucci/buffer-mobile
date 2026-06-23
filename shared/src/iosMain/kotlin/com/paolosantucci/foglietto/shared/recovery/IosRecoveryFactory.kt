@@ -62,6 +62,16 @@ fun createIosRecoveryRepository(): RecoveryRepository =
                 NSCalendarUnitSecond or
                 NSCalendarUnitNanosecond
             val c = calendar.components(units, fromDate = NSDate())
+            // NSCalendarUnitNanosecond is unreliable on real iOS devices: when the
+            // platform cannot populate the field it returns NSDateComponentUndefined
+            // (NSIntegerMax ≈ 9.2e18 on 64-bit). Dividing that by 1_000_000 yields
+            // ~9.2e12, which pad(millis, 3) serialises to a 13-digit string; the
+            // filename stem then fails RecoveryFilename.parse's `(\d{3})Z` anchor and
+            // list() silently skips every file — producing an always-empty Recent Notes
+            // menu even though files exist on disk. Clamping to 0..999 ensures a
+            // valid 3-digit millis component in all cases while remaining pure
+            // NSCalendar-field arithmetic (NFR-06: no epoch math, no kotlinx-datetime).
+            val rawMillis = (c.nanosecond / 1_000_000L).toInt()
             RecoveryInstant(
                 year = c.year.toInt(),
                 month = c.month.toInt(),
@@ -69,7 +79,7 @@ fun createIosRecoveryRepository(): RecoveryRepository =
                 hour = c.hour.toInt(),
                 minute = c.minute.toInt(),
                 second = c.second.toInt(),
-                millis = (c.nanosecond / 1_000_000L).toInt(),
+                millis = rawMillis.coerceIn(0, 999),
             )
         },
     )
