@@ -250,22 +250,22 @@ fi
 #   a) Zero "localized in M6" marker comments remain in iosApp/iosApp/ —
 #      all tooltip and label strings that were tagged for future localization
 #      must now use String(localized:, comment:).
-#   b) TopPill.swift AND BottomToolbar.swift both contain String(localized:
+#   b) ChromeOverlay.swift AND BottomToolbar.swift both contain String(localized:
 #      confirming that tooltip localization was applied (not just the markers
 #      stripped without replacement).
 # ---------------------------------------------------------------------------
-echo "[9] tooltips-localized: zero 'localized in M6' markers + String(localized: present in TopPill + BottomToolbar ..."
+echo "[9] tooltips-localized: zero 'localized in M6' markers + String(localized: present in ChromeOverlay + BottomToolbar ..."
 
 iosapp_dir="iosApp/iosApp"
 m6_marker_hits=$(grep -RIn "localized in M6" "$iosapp_dir/" 2>/dev/null || true)
 
-toppill_file="iosApp/iosApp/Chrome/TopPill.swift"
+chrome_overlay_file="iosApp/iosApp/Chrome/ChromeOverlay.swift"
 bottomtoolbar_file="iosApp/iosApp/Chrome/BottomToolbar.swift"
 
-toppill_localized=""
+chrome_overlay_localized=""
 bottomtoolbar_localized=""
-if [[ -f "$toppill_file" ]]; then
-    toppill_localized=$(grep -In "String(localized:" "$toppill_file" 2>/dev/null || true)
+if [[ -f "$chrome_overlay_file" ]]; then
+    chrome_overlay_localized=$(grep -In "String(localized:" "$chrome_overlay_file" 2>/dev/null || true)
 fi
 if [[ -f "$bottomtoolbar_file" ]]; then
     bottomtoolbar_localized=$(grep -In "String(localized:" "$bottomtoolbar_file" 2>/dev/null || true)
@@ -274,8 +274,8 @@ fi
 if [[ -n "$m6_marker_hits" ]]; then
     result "tooltips-localized" fail "'localized in M6' marker(s) still present — tooltip localization incomplete (FR-24):
 $m6_marker_hits"
-elif [[ -z "$toppill_localized" ]]; then
-    result "tooltips-localized" fail "String(localized: not found in $toppill_file (FR-24 — tooltip localization missing)"
+elif [[ -z "$chrome_overlay_localized" ]]; then
+    result "tooltips-localized" fail "String(localized: not found in $chrome_overlay_file (FR-24 — tooltip localization missing)"
 elif [[ -z "$bottomtoolbar_localized" ]]; then
     result "tooltips-localized" fail "String(localized: not found in $bottomtoolbar_file (FR-24 — tooltip localization missing)"
 else
