@@ -167,7 +167,7 @@ struct BufferEditor: UIViewRepresentable {
             uiView.text = viewModel.text
         }
 
-        reconcileInset(of: uiView)
+        BufferEditor.reconcileInset(of: uiView)
 
         if let cv = chromeVisibility {
             context.coordinator.onTyping = { [weak cv] in cv?.injectTyping() }
