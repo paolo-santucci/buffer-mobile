@@ -398,7 +398,13 @@ jobs:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
         run: |
+          # --use-old-altool works around the Xcode 26.2+ altool regression in the
+          # provider/app lookup ("Cannot determine the Apple ID from Bundle ID and
+          # platform IOS", error 19): the legacy lookup implementation resolves the
+          # app correctly under the same API-key auth. Confirmed upstream by
+          # fastlane/fastlane#30114. Drop once Apple fixes the regression.
           xcrun altool \
+            --use-old-altool \
             --upload-app \
             --type ios \
             --file "$RUNNER_TEMP/ipa"/*.ipa \
