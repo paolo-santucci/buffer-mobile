@@ -1,99 +1,99 @@
 // Chrome/ChromeOverlay.swift
-// Foglietto — KMP Milestone 4: Liquid Glass Chrome (T-01 morph + top-pad)
+// Foglietto — Apple-Notes (iOS 26) Chrome Restyle
 //
-// Container view composing the top toolbar (Share + overflow `…`) + the morphing
-// menu panel (MenuBubble) over the editor. Reads ChromeVisibility.isVisible and
-// crossfades the chrome layer. Owns the single GlassEffectContainer + morph namespace.
+// Container view composing the top-right chrome as ONE fused glass capsule
+// (Share + overflow `…`) that deforms as a single liquid unit into the menu panel
+// (MenuBubble) and back, over the editor. Reads ChromeVisibility.isVisible and
+// crossfades the chrome layer. Owns the ONE shared morph container, the morph
+// namespace, and the private `isMenuPresented` state.
 //
-// ┌─ MORPH LAYOUT rc18-r2 (read before changing) ──────────────────────────────┐
-// │ STRUCTURE: Share OUTSIDE the container; container holds ONLY the morph pair. │
+// ┌─ MORPH TOPOLOGY (read before changing) ────────────────────────────────────┐
+// │ ONE positioned top-trailing container holding EXACTLY ONE child per state:  │
 // │                                                                            │
-// │   HStack(spacing: capsuleControlSpacing) {                                  │
-// │       shareButton             // .buttonStyle(.glass), OUTSIDE container    │
-// │       Color.clear.frame(44,44)// layout spacer — keeps HStack width fixed   │
-// │           .overlay(.topTrailing) {                                          │
-// │               GlassEffectContainer(spacing: 35) {   // only the morph XOR  │
-// │                   if open { MenuBubble  }  .glassEffectID + .transition(.identity) │
-// │                   else    { overflowButton }  .glassEffect(.interactive)    │
-// │                                                + .glassEffectID             │
-// │                                                + .transition(.identity)     │
-// │               }                                                             │
-// │           }                                                                 │
-// │   }                                                                         │
+// │   ZStack(alignment: .topTrailing) {                                         │
+// │       if open { tapCatcher }          // sibling, NOT in the morph container│
+// │       morphContainer(spacing: 35) {                                         │
+// │           if open { MenuBubble } else { fusedPill }   // XOR — never both   │
+// │               .transition(.identity) + .glassEffectID(chromeGlassID)         │
+// │       }                                                                     │
+// │   }.padding(.top, 16).padding(.horizontal, 16)                              │
 // │                                                                            │
-// │ WHY Share is outside the GlassEffectContainer:                              │
-// │  • GlassEffectContainer(spacing:35) metaball-fuses glass elements inside   │
-// │    it. If Share is inside the container and 0pt from the panel (VStack      │
-// │    spacing:0), Share's glass shape coalesces into the panel's corner —      │
-// │    the "Share glues to panel" artifact (confirmed rc18-initial / rc15).     │
-// │  • Moving Share OUTSIDE the container eliminates coalescence entirely:       │
-// │    metaball merge is scoped per-container; Share has its own independent    │
-// │    .buttonStyle(.glass) and never participates in the morph.                │
-// │                                                                            │
-// │ WHY Share's frame is invariant (never moves when panel opens):              │
-// │  • The HStack's second child is ALWAYS Color.clear.frame(44,44) — a fixed  │
-// │    44×44 layout spacer. Its size never changes regardless of whether the    │
-// │    GlassEffectContainer (in the overlay) is showing a 44pt capsule or a    │
-// │    280pt panel. The overlay does not participate in HStack layout.          │
-// │  • Share's trailing edge = HStack.trailing - 44 - capsuleControlSpacing.   │
-// │    This is a constant — Share never shifts left or right.                  │
-// │                                                                            │
-// │ WHY the GlassEffectContainer is in .overlay(alignment: .topTrailing):      │
-// │  • The container grows from 44pt (capsule) to 280pt wide + ~400pt tall     │
-// │    (panel). If it were a direct HStack child, that growth would push Share  │
-// │    left by ~236pt. The overlay layer is outside HStack layout flow: the     │
-// │    container can be any size without reflowing the HStack.                  │
-// │  • .topTrailing alignment anchors the panel's top-right corner at the       │
-// │    spacer's top-right corner — exactly where the overflow button lives.     │
-// │    The panel grows LEFT (to 280pt) and DOWN, not right or up.              │
-// │                                                                            │
-// │ WHY identical topology to LiquidMenuDemo.swift:                             │
-// │  • The container holds EXACTLY ONE child at a time: overflowButton OR      │
-// │    MenuBubble. This is the proven demo topology. No frame-race is possible  │
-// │    because the freshly-inserted view is the container's ONLY child —        │
-// │    its layout frame resolves without competing siblings.                    │
-// │                                                                            │
-// │ .glassEffect(.regular.interactive(), in: .capsule) on the overflow button: │
-// │  • .interactive() gives the "squish/deform" on tap — the refractive drop   │
-// │    effect. Safe on a SINGLE button (rc8 tap-swallow was .interactive() on   │
-// │    a multi-button CONTAINER).                                               │
-// │                                                                            │
-// │ HISTORY — do NOT reintroduce:                                               │
-// │  • Share INSIDE GlassEffectContainer (rc18-initial) — metaball coalescence  │
-// │    with panel. Share's glass merges into the panel's corner.                │
-// │  • VStack(spacing:0) with Share + panel both inside the container (rc18) — │
-// │    same coalescence; also the panel-in-VStack-row caused frame-race risk.  │
-// │  • Whole-view swap TopPill↔MenuBubble (rc16/rc17) — unmounts Share.        │
-// │  • Persistent-toolbar + panel appended (eeeb7a0) — HStack reflow + frame   │
-// │    race (panel mid-screen snap).                                            │
-// │  • .glassEffect(.capsule) on toolbar HStack — swallows overflow tap.       │
-// │  • .interactive() on container-level glass — swallows overflow tap.        │
-// │  • glassEffectID on the whole HStack (rc17) — whole-capsule morph;         │
-// │    Share vanished instead of persisting.                                   │
-// └──────────────────────────────────────────────────────────────────────────┘
+// │ WHY one child per state: the glass system fuses glass shapes inside one     │
+// │  container. Two live children would metaball-merge into one blob ("Share    │
+// │  glues to the panel", rc15/rc18-initial). One child = one glass shape, so    │
+// │  the merge is never observable and the whole-pill→panel deformation reads    │
+// │  as a single liquid unit (FR-01…FR-03).                                     │
+// │ WHY .transition(.identity) on BOTH children: suppresses SwiftUI's default    │
+// │  opacity crossfade so the glass morph is the only animation on insertion.    │
+// │ WHY the closed capsule is ONE glass shape over PLAIN buttons: same proven    │
+// │  anatomy as BottomToolbar — one capsule over an HStack of plain buttons.     │
+// │  It avoids the rc8 tap-swallow class (`.interactive()` on multi-button       │
+// │  glass) and rc18's per-button glass.                                         │
+// │ WHY Share lives inside the closed capsule but is a PLAIN row when open:      │
+// │  the closed state fuses Share + `…` into the single capsule the user sees;   │
+// │  the open state consumes Share into the panel, where rows are plain so no    │
+// │  nested glass can corrupt the morph (FR-04/FR-05).                           │
+// └────────────────────────────────────────────────────────────────────────────┘
 //
-// EC-14: isMenuPresented is written by EXACTLY two sources —
-//   (1) the overflow toggle (write-source #1 — in overflowButton below)
-//   (2) the full-screen transparent tap-catcher rendered when the menu is open
-// SM events (injectTyping/injectScroll/injectKeyboardDismiss) and MenuViewModel
-// NEVER reference or mutate isMenuPresented. The tap-catcher (not a .popover)
-// is the outside-tap dismiss mechanism.
+// ┌─ PROHIBITED TOPOLOGIES (device-confirmed; do NOT reintroduce) ─────────────┐
+// │ • A second live glass element beside the capsule/panel — coalescence.  rc15 │
+// │   Prevented structurally: exactly one container child per state.            │
+// │ • Persistent toolbar row + appended panel — frame race, mid-screen.  eeeb7a0│
+// │   Prevented by the XOR sole-child container.                               │
+// │ • Whole-view swap that unmounts a live control — Share vanished. rc16/rc17 │
+// │   Both states carry their own Share surface: pill button XOR panel row.     │
+// │ • `.interactive()` on multi-button glass — swallows the tap.            rc8 │
+// │   The capsule is PINNED `.regular`; every button inside it is `.plain`.     │
+// │ • `.glassEffectID` on a persistent multi-element HStack.               rc17 │
+// │   The ID rides only the two transient XOR children.                        │
+// │ • Nested glass inside panel rows.                                 rc18-cut1 │
+// │   Every panel row is `.plain`; MenuBubble owns the panel's single glass.    │
+// │ • `.popover(` as the dismiss mechanism, an availability-guarded fallback     │
+// │   branch under Chrome/, a find affordance, a separate keyboard accessory    │
+// │   bar — all gate-checked (sp_chrome_morph c1, m4-3/7/8).                    │
+// └────────────────────────────────────────────────────────────────────────────┘
 //
-// EC-16: the tap-catcher sits INSIDE the chromeVisibility.isVisible crossfaded
-// layer, so the menu is dismissed together with the chrome when chrome hides.
+// SUPERSESSION of the rc18-r2 header contract ("Share OUTSIDE the container — do NOT
+// reintroduce"). That guard protected against Share fusing with the OPEN panel while
+// coexisting as a SECOND live glass element. This design has no such counterpart:
+// exactly one glass element exists per state — the closed fused capsule XOR the open
+// panel — so two glass shapes never coexist, and while the panel is open Share is a
+// plain row inside it. Every other entry of that history box is retained above.
 //
-// ChromeOverlay also owns the CoordinatorBox — a lightweight reference-type
-// bridge that lets ContentView publish the live BufferEditor.Coordinator to
-// the BottomToolbar closure wiring. BufferEditor sets coordinatorBox.coordinator
-// in makeUIView (once, at creation time). ChromeOverlay's closures then capture
-// [weak coordinatorBox] to read the coordinator safely at toolbar-tap time.
+// EC-14 / §5.3 — the `isMenuPresented` writer set is EXHAUSTIVE (five sources):
+//   (1) overflow toggle       — fusedPill's `…` button — withAnimation(menuOpenAnimation)
+//   (2) tap-catcher           — the full-screen catcher below — withAnimation(menuCloseAnimation)
+//   (3) recovery-row dismiss  — MenuBubble's RecoverySection, through the `isPresented` binding
+//   (4) Share-row dismiss     — MenuBubble's Share row, through the `isPresented` binding
+//   (5) chrome-hide dismissal — the crossfade wrapper's `.onChange` below, guarded by
+//                               shouldDismissMenuOnVisibilityChange(visible:menuPresented:)
+// Every close write uses menuCloseAnimation; the open write uses menuOpenAnimation. Both
+// resolve to nil under Reduce Motion (FR-21). No other writer exists: the state is the
+// PRIVATE @State declared here, MenuBubble's only reach is the `isPresented` binding
+// (sources 3–4), and ChromeVisibility's SM events, MenuViewModel, RecoveryListViewModel,
+// BufferViewModel and shared/ never touch it (FR-08/FR-08n).
+//
+// EC-16: the tap-catcher and the container sit INSIDE the crossfaded layer, so a
+// chrome hide dismisses the open panel together with the chrome layer.
+//
+// EC-22/FR-06 (C-1): the crossfade wrapper also applies
+// `.allowsHitTesting(chromeVisibility.isVisible)`, so chrome hidden at opacity 0
+// consumes zero touches — the tap falls through to the editor.
+//
+// ChromeOverlay also owns the CoordinatorBox — a lightweight reference-type bridge that
+// lets ContentView publish the live BufferEditor.Coordinator to the BottomToolbar closure
+// wiring. BufferEditor sets coordinatorBox.coordinator in makeUIView (once, at creation
+// time); ContentView's toolbar closures capture [weak coordinatorBox] and read the
+// coordinator safely at tap time (EC-13). The box is NOT an input of this view.
 //
 // CANON GAP CG-1: native Liquid Glass material on the chrome layer supersedes
 // ui-design-bible §"Auto-hiding overlay chrome" --view-bg-color@90% fill (OQ-01).
 //
-// Spec refs: FR-02, FR-18, FR-19, FR-20, NFR-01, NFR-07;
-//            EC-13, EC-14, EC-16, EC-17; CG-1.
-// Contract: §3.1 (morph identity seam), §4.1, §4.3.
+// Spec refs: FR-01, FR-02, FR-03, FR-06, FR-07, FR-08, FR-19, FR-20, FR-21, FR-24, FR-25;
+//            NFR-01, NFR-02, NFR-04, NFR-06, NFR-08; EC-01, EC-13, EC-14, EC-16, EC-22, EC-23;
+//            CG-1.
+// Contract: §4.2 (topology diagrams), §4.4 (supersession + prohibited set), §5.1.a,
+//           §5.1.c, §5.1.f, §5.3 (five-writer table).
 
 import SwiftUI
 import shared
@@ -117,255 +117,219 @@ final class CoordinatorBox {
 /// Non-visual composition container for the Liquid Glass chrome controls.
 ///
 /// Layout (top-trailing, within safe area):
-///   - `shareButton` — outside the `GlassEffectContainer`, its own `.buttonStyle(.glass)`.
-///   - A `Color.clear` 44×44 layout spacer that holds the HStack width invariant.
-///   - `GlassEffectContainer` in an `.overlay(.topTrailing)` on the spacer — holds ONLY
-///     the `overflowButton`↔`MenuBubble` XOR pair (LiquidMenuDemo topology).
-///   - Transparent full-screen tap-catcher — outside-tap dismiss (EC-14).
+///   - The shared morph container — the positioned top-trailing child, holding EXACTLY one
+///     child per state: `fusedPill` (closed) XOR `MenuBubble` (open), sharing the morph ID.
+///   - Transparent full-screen tap-catcher (only while open) — outside-tap dismiss (EC-14).
 ///
-/// **Glass morph (rc18-r2 — §3.1):** see the header box. Share is outside the container
-/// so it cannot metaball-coalesce with the panel. The container holds exactly one child
-/// at a time: `overflowButton` (closed) or `MenuBubble` (open). Share's layout frame is
-/// invariant because the HStack's second child is always the fixed 44×44 spacer.
+/// **Glass morph (FR-02/FR-03):** see the header topology diagram. The fused closed
+/// capsule carries the same glass identity as the panel, so the iOS 26 glass system
+/// deforms the whole capsule into the panel and back as one unit — no stranded Share,
+/// no notch.
 ///
-/// **Reduce Motion (C-07):** when `accessibilityReduceMotion` is true the toggle
-/// animation is `nil` (instantaneous) instead of the spring morph.
+/// **Hit-testing (C-1/FR-06):** chrome hidden by `ChromeVisibility` takes zero touches.
 ///
-/// **Bubble dismiss contract (EC-14):** `isMenuPresented` is written by EXACTLY two
-/// sources — the overflow toggle (write-source #1) and the tap-catcher below.
+/// **Reduce Motion (FR-21):** both animation seams resolve to `nil`, so every state
+/// change applies instantaneously instead of springing.
+///
+/// **Bubble dismiss contract (EC-14):** write-sources 1, 2 and 5 are declared here;
+/// sources 3 and 4 live in `MenuBubble` behind the `isPresented` binding. The full
+/// five-writer set is enumerated in the file header.
 struct ChromeOverlay: View {
 
     // MARK: - Inputs (from ContentView / composition root)
 
-    /// Current buffer text — forwarded to the share button for the disabled gate (EC-01/FR-08).
+    /// Current buffer text — forwarded to BOTH Share surfaces (the closed pill's link and
+    /// the panel's Share row) and to the single empty-buffer gate (EC-01/FR-04).
     let text: String
 
     /// The menu view model — forwarded to `MenuBubble` (ctor-injected DIP).
     let menuVM: MenuViewModel
 
-    /// Chrome auto-hide/reveal state machine — drives the crossfade (FR-19/FR-20).
+    /// Chrome auto-hide/reveal state machine — drives the crossfade, the hit-testing
+    /// gate (C-1) and the chrome-hide dismissal (write-source 5).
     let chromeVisibility: ChromeVisibility
-
-    /// Coordinator box — read by toolbar closures to dispatch actions (EC-13).
-    let coordinatorBox: CoordinatorBox
-
-    /// The `BufferViewModel` — passed through for indent/outdent closures (FR-17).
-    let viewModel: BufferViewModel
 
     // MARK: - Local state
 
     /// Controls the `MenuBubble` presented state.
-    /// EC-14: written by EXACTLY two sources — the overflow toggle (#1)
-    /// and the tap-catcher (#2). SM events and `MenuViewModel` NEVER mutate this.
+    /// EC-14: written by EXACTLY five enumerated sources — the fused pill's `…` toggle
+    /// (#1), the tap-catcher (#2), and, through `MenuBubble`'s binding, the recovery-row
+    /// (#3) and Share-row (#4) dismissals, plus the chrome-hide dismissal (#5) below.
+    /// Private by design: nothing outside this view can reach it directly.
     @State private var isMenuPresented: Bool = false
 
-    // MARK: - Morph identity (§3.1 morph identity seam)
+    // MARK: - Morph identity (§5.1.a morph identity seam)
 
-    /// Namespace binding the overflow capsule and the menu panel into one shared
-    /// glass identity for the `…`↔panel morph inside `GlassEffectContainer` (C-03).
+    /// Namespace binding the closed capsule and the menu panel into one shared glass
+    /// identity for the capsule↔panel morph inside the shared morph container (C-03).
     @Namespace private var glassNamespace
 
-    /// Shared glass effect ID — on the overflow button (closed) and on MenuBubble (open).
-    /// Share has NO ID — it does not participate in the morph.
+    /// Shared glass effect ID — carried by BOTH XOR children (the closed fused capsule and
+    /// the open panel), which is what makes the whole-capsule deformation possible.
     private static let chromeGlassID = "chrome.morph"
-
-    /// Metaball merge threshold for the `GlassEffectContainer`.
-    /// Drives the liquid teardrop stretch during the `…`↔panel morph.
-    /// 30–45 matches Apple Notes feel. The container holds only the morph pair, so
-    /// this value no longer affects Share (Share is outside the container).
-    private static let glassSpacing: CGFloat = 35
-
-    /// Side length of the layout spacer that anchors the `GlassEffectContainer` overlay.
-    /// Must match the overflow button's rendered width/height so Share's screen position
-    /// is identical whether the overflow button or the panel is showing in the overlay.
-    private static let morphAnchorSize: CGFloat = 44
 
     // MARK: - Accessibility
 
-    /// When `true`, the morph animation is replaced by an instantaneous transition (C-07).
+    /// When `true`, every morph/collapse animation resolves to `nil` (FR-21).
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    // MARK: - Animation seam (§3.1 / C-05 / C-06)
+    // MARK: - Animation seam (§5.1.a / §4.2 — directional, RM-gated)
 
-    /// Resolved morph animation — computed once so ALL three `isMenuPresented` write-sites
-    /// (overflow toggle, tap-catcher, recovery-row dismiss) use an identical spring (C-05/C-06).
-    /// `nil` under Reduce Motion; a bouncy spring otherwise.
-    private var menuToggleAnimation: Animation? {
-        reduceMotion ? nil : .bouncy(duration: 0.45, extraBounce: 0.15)
+    /// Opening spring — used by write-source 1 (and resolved to `nil` under Reduce Motion).
+    private var menuOpenAnimation: Animation? {
+        reduceMotion ? nil : ChromeMetrics.menuOpenSpring
+    }
+
+    /// Closing spring — used by write-sources 2, 3, 4 and 5; also forwarded to `MenuBubble`
+    /// as `dismissAnimation`, so every close path shares one curve.
+    private var menuCloseAnimation: Animation? {
+        reduceMotion ? nil : ChromeMetrics.menuCloseSpring
     }
 
     // MARK: - Derived state
 
-    /// `true` when the Share control must be disabled (EC-01/FR-08).
+    /// `true` when the Share control must be disabled (EC-01/FR-04).
+    /// The SINGLE empty-buffer predicate: it gates the closed pill's link and the panel's
+    /// row, so the two Share surfaces can never diverge.
     private var isShareDisabled: Bool {
         text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    // MARK: - Dismissal seam (pure; §5.1.f)
+
+    /// Whether a chrome visibility change must dismiss the open menu panel.
+    ///
+    /// Pure and total. A hide over an open panel is the one combination that dismisses
+    /// (write-source 5); a reveal never dismisses, and a hide over a closed panel is a
+    /// no-op (FR-07/FR-07n, EC-16).
+    static func shouldDismissMenuOnVisibilityChange(visible: Bool, menuPresented: Bool) -> Bool {
+        !visible && menuPresented
     }
 
     // MARK: - Body
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            // Full-screen tap-catcher: only when the menu is open, behind the bubble
-            // (EC-14 outside-tap dismiss). Inside the crossfaded layer so EC-16 holds.
             if isMenuPresented {
-                Color.clear
-                    .contentShape(Rectangle())
+                // Demo-fidelity tap-catcher: outside-tap dismiss (EC-14 write-source 2).
+                // A near-invisible fill (not `.clear`) so the whole screen is hit-testable.
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
                     .onTapGesture {
-                        // EC-14 writer #2 — same bouncy curve as the overflow toggle (C-05).
-                        withAnimation(menuToggleAnimation) {
+                        withAnimation(menuCloseAnimation) {
                             isMenuPresented = false
                         }
                     }
+                    .transition(.opacity)
             }
 
-            // Chrome controls: Share + overlay-anchored morph pair, top-trailing.
-            VStack {
-                HStack {
-                    Spacer()
-                    pillAndPanel
+            // The chrome layer's ONLY glass element — the closed fused capsule XOR the
+            // open panel, never both (one glass shape per state — §4 core invariant).
+            GlassEffectContainer(spacing: ChromeMetrics.metaballSpacing) {
+                if isMenuPresented {
+                    MenuBubble(
+                        menuVM: menuVM,
+                        isPresented: $isMenuPresented,
+                        glassNamespace: glassNamespace,
+                        glassID: Self.chromeGlassID,
+                        dismissAnimation: menuCloseAnimation,
+                        text: text,
+                        isShareDisabled: isShareDisabled
+                    )
+                    // .transition(.identity): the glass morph is the only animation on
+                    // insertion/removal — no default opacity crossfade.
+                    .transition(.identity)
+                } else {
+                    fusedPill
+                        .transition(.identity)
                 }
-                Spacer()
             }
-            .padding(.top, 6)
-            .padding(.horizontal, 16)
+            .padding(.top, ChromeMetrics.pillTopGap)
+            .padding(.horizontal, ChromeMetrics.chromeHorizontalInset)
         }
-        // Crossfade the chrome layer (incl. tap-catcher) with ChromeVisibility (FR-20 / EC-16).
+        // Crossfade the chrome layer (incl. the tap-catcher) with ChromeVisibility
+        // (FR-20/EC-16). Modifier order is pinned by §4.2: the two frozen modifiers
+        // first, then the hit-testing gate and the dismissal observation.
         .opacity(chromeVisibility.isVisible ? 1 : 0)
         .animation(.easeInOut(duration: 0.25), value: chromeVisibility.isVisible)
-    }
-
-    // MARK: - Pill + panel (§3.1 morph identity seam)
-
-    /// The toolbar row holding Share and the GlassEffectContainer morph pair.
-    ///
-    /// **Layout:**
-    /// ```
-    /// HStack {
-    ///     shareButton                        // .buttonStyle(.glass), outside container
-    ///     Color.clear.frame(44,44)           // invariant layout spacer
-    ///         .overlay(.topTrailing) {
-    ///             GlassEffectContainer(35) { // ONLY one child at a time
-    ///                 if open { MenuBubble } else { overflowButton }
-    ///             }
-    ///         }
-    /// }
-    /// ```
-    ///
-    /// **Share invariance:** HStack's second child is always 44×44. The overlay's
-    /// size changes (44pt→280pt wide) do not participate in HStack layout → Share
-    /// stays at its initial position regardless of whether the panel is open.
-    ///
-    /// **No coalescence:** Share is outside the `GlassEffectContainer`. Metaball
-    /// merge is per-container; Share cannot fuse with the panel. At rest, Share and
-    /// the overflow button read as a two-capsule segmented pill (consistent with
-    /// Notes/Calendar/Drafts). When open, Share is a standalone glass capsule.
-    ///
-    /// **Frame resolution:** the container holds exactly ONE child (overflow XOR panel).
-    /// This is the LiquidMenuDemo topology — no frame-race, no competing siblings.
-    @ViewBuilder
-    private var pillAndPanel: some View {
-        HStack(spacing: ChromeMetrics.capsuleControlSpacing) {
-            // Share: plain glass button OUTSIDE the morph container.
-            // Cannot coalesce with the panel; tap routing independent of the morph.
-            shareButton
-
-            // Fixed 44×44 spacer — anchors the container overlay without reflowing Share.
-            // The overlay renders outside HStack layout so Share's frame is invariant.
-            Color.clear
-                .frame(width: Self.morphAnchorSize, height: Self.morphAnchorSize)
-                .overlay(alignment: .topTrailing) {
-                    // GlassEffectContainer: XOR pair — identical to LiquidMenuDemo topology.
-                    // Holds EXACTLY one child; the container's top-trailing corner aligns
-                    // with the spacer's top-trailing corner (same as the overflow button's position).
-                    // Panel grows LEFT (to 280pt) and DOWN without touching Share's layout slot.
-                    GlassEffectContainer(spacing: Self.glassSpacing) {
-                        if isMenuPresented {
-                            MenuBubble(
-                                menuVM: menuVM,
-                                isPresented: $isMenuPresented,
-                                glassNamespace: glassNamespace,
-                                glassID: Self.chromeGlassID,
-                                dismissAnimation: menuToggleAnimation
-                            )
-                            // .transition(.identity): suppress SwiftUI's default fade so
-                            // the glass morph is the only animation on insertion/removal.
-                            .transition(.identity)
-                        } else {
-                            overflowButton
-                        }
-                    }
-                }
-        }
-    }
-
-    // MARK: - Share control (FR-08, EC-01)
-
-    /// `ShareLink` exporting the current buffer text.
-    ///
-    /// Always mounted; always OUTSIDE `GlassEffectContainer` — cannot coalesce with the panel.
-    /// No `glassEffectID` — Share does NOT morph.
-    /// Disabled when `text.trimmed.isEmpty` (EC-01/FR-08 — declarative gate, not try/catch).
-    private var shareButton: some View {
-        ShareLink(item: text) {
-            Label(
-                String(localized: "Share", comment: "Share button label in the top pill"),
-                systemImage: "square.and.arrow.up"
-            )
-            .labelStyle(.iconOnly)
-            .fontWeight(ChromeMetrics.iconScaleWeight)
-            .imageScale(.large)
-        }
-        .frame(minWidth: 44, minHeight: 44)
-        .disabled(isShareDisabled)
-        .buttonStyle(.glass)
-        .accessibilityLabel(
-            String(localized: "Share", comment: "Share button accessibility label in the top pill")
-        )
-        .accessibilityAddTraits(.isButton)
-        .help(
-            String(localized: "Share text", comment: "Share button tooltip in the top pill (FR-23)")
-        )
-    }
-
-    // MARK: - Overflow button (EC-14 write-source #1)
-
-    /// The `…` overflow button — the sole element that morphs into `MenuBubble`.
-    ///
-    /// - `.glassEffect(.regular.interactive(), in: .capsule)`: single-button glass capsule
-    ///   with `.interactive()` squish/deformation on tap. The interactive glass provides the
-    ///   "irregular drop + refraction" deformation the user wants. Safe here — this is a
-    ///   single-button shape (rc8 tap-swallow was `.interactive()` on a multi-button container).
-    /// - `.glassEffectID(chromeGlassID, in: glassNamespace)`: morph identity. The glass system
-    ///   morphs FROM this button's layout frame TOWARD `MenuBubble`'s layout frame.
-    /// - `.transition(.identity)`: suppresses SwiftUI's default opacity crossfade on removal
-    ///   so the glass morph is the only animation.
-    ///
-    /// EC-14 write-source #1: sets `isMenuPresented = true`. Write-source #2 is the
-    /// tap-catcher; write-source #3 (close-only) is `MenuBubble.dismissAnimation`.
-    private var overflowButton: some View {
-        Button {
-            withAnimation(menuToggleAnimation) {
-                isMenuPresented = true
+        // C-1/FR-06: hidden chrome consumes no touches. Not animatable, so it flips with
+        // the state change — instantly on hide, marginally ahead of full opacity on reveal.
+        .allowsHitTesting(chromeVisibility.isVisible)
+        // EC-14 write-source 5: a chrome hide dismisses the open panel through the pure
+        // seam, so chrome-hidden + panel-open is unreachable by construction (FR-07/EC-16).
+        .onChange(of: chromeVisibility.isVisible) { _, isVisible in
+            guard Self.shouldDismissMenuOnVisibilityChange(
+                visible: isVisible,
+                menuPresented: isMenuPresented
+            ) else { return }
+            withAnimation(menuCloseAnimation) {
+                isMenuPresented = false
             }
-        } label: {
-            Label(
-                String(localized: "Menu", comment: "Overflow menu button label in the top pill"),
-                systemImage: "ellipsis"
-            )
-            .labelStyle(.iconOnly)
-            .fontWeight(ChromeMetrics.iconScaleWeight)
-            .imageScale(.large)
         }
-        .frame(minWidth: 44, minHeight: 44)
-        .glassEffect(.regular.interactive(), in: .capsule)
+    }
+
+    // MARK: - Fused closed-state capsule (§5.1.c)
+
+    /// The closed state's ONLY glass shape: one capsule over two plain buttons
+    /// (Share + `…`) — the `BottomToolbar` anatomy, proven in-repo.
+    ///
+    /// - The buttons are `.plain`: the capsule is the glass shape, so no per-button glass
+    ///   is nested inside the shared container (rc18 regression class).
+    /// - `.glassEffect(.regular, in: .capsule)` is PINNED `.regular` — the interactive
+    ///   variant is prohibited on multi-button glass (rc8 tap-swallow, §4.4).
+    /// - `.glassEffectID(chromeGlassID, in: glassNamespace)`: morph identity. The glass
+    ///   system deforms this capsule's geometry toward `MenuBubble`'s on the open write.
+    /// - Both buttons keep the inline 44pt tap targets (NFR-04); the rendered capsule
+    ///   height must equal `ChromeMetrics.pillHeight` (the editor-inset lockstep token).
+    private var fusedPill: some View {
+        HStack(spacing: ChromeMetrics.capsuleControlSpacing) {
+            ShareLink(item: text) {
+                Label(
+                    String(localized: "Share", comment: "Share button label in the top pill"),
+                    systemImage: "square.and.arrow.up"
+                )
+                .labelStyle(.iconOnly)
+                .fontWeight(ChromeMetrics.iconScaleWeight)
+                .imageScale(.large)
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            // EC-01: empty buffer → no share sheet; the panel's Share row uses the same gate.
+            .disabled(isShareDisabled)
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                String(localized: "Share", comment: "Share button accessibility label in the top pill")
+            )
+            .accessibilityAddTraits(.isButton)
+            .help(
+                String(localized: "Share text", comment: "Share button tooltip in the top pill (FR-23)")
+            )
+
+            Button {
+                // EC-14 write-source 1 — the pill is mounted only while closed.
+                withAnimation(menuOpenAnimation) {
+                    isMenuPresented = true
+                }
+            } label: {
+                Label(
+                    String(localized: "Menu", comment: "Overflow menu button label in the top pill"),
+                    systemImage: "ellipsis"
+                )
+                .labelStyle(.iconOnly)
+                .fontWeight(ChromeMetrics.iconScaleWeight)
+                .imageScale(.large)
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                String(localized: "Menu", comment: "Overflow menu button accessibility label in the top pill")
+            )
+            .accessibilityAddTraits(.isButton)
+            .help(
+                String(localized: "Open menu", comment: "Overflow menu button tooltip in the top pill (FR-23)")
+            )
+        }
+        .padding(.horizontal, ChromeMetrics.capsuleHorizontalPadding)
+        .glassEffect(.regular, in: .capsule)
         .glassEffectID(Self.chromeGlassID, in: glassNamespace)
-        .transition(.identity)
-        .accessibilityLabel(
-            String(localized: "Menu", comment: "Overflow menu button accessibility label in the top pill")
-        )
-        .accessibilityAddTraits(.isButton)
-        .help(
-            String(localized: "Open menu", comment: "Overflow menu button tooltip in the top pill (FR-23)")
-        )
     }
 }

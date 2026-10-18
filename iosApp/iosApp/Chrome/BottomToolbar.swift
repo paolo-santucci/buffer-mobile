@@ -115,7 +115,7 @@ struct BottomToolbar: View {
             indentButton
         }
         // Horizontal inset keeps icons off the capsule edges (Apple-Notes look).
-        .padding(.horizontal, ChromeMetrics.toolbarHorizontalPadding)
+        .padding(.horizontal, ChromeMetrics.capsuleHorizontalPadding)
         // Native iOS 26 Liquid Glass — no hand-rolled blur/fill/shadow (NFR-01/02).
         .glassEffect(in: .capsule)
     }

@@ -45,6 +45,15 @@ import shared
 /// **Fresh RecoveryListViewModel (FR-12):**
 /// `makeRecoveryListViewModel()` returns a NEW `RecoveryListViewModel` on every call,
 /// so each submenu expand re-fetches `recovery.list()` fresh (never launch-cached).
+///
+/// **Mirror contract (I-4 / OQ-07):**
+/// `colorScheme` and `fontSizeIndex` are write-through mirrors of the settings store —
+/// snapshots updated *only* by `selectTheme(_:)` and `stepFontSize(by:)` — while
+/// `fontSizePt` live-reads `settings.load()` on every access. A mirror can go stale only
+/// if the store is written from outside this view model; the panel's outside-tap catcher
+/// blocks the only such path (pinch-zoom) while the panel is open, and the functional
+/// freeze forbids a timing change, so the mirrors intentionally stay snapshots — no
+/// live-read conversion.
 @Observable
 final class MenuViewModel {
 

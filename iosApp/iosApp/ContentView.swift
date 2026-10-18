@@ -10,8 +10,8 @@
 // Coordinator-access seam (§4.3 / FR-19 seam decision):
 //   ContentView owns a CoordinatorBox (@State private var coordinatorBox).
 //   BufferEditor writes its Coordinator to coordinatorBox.coordinator in makeUIView.
-//   ChromeOverlay and the toolbar closures read coordinatorBox.coordinator at
-//   call-time (weak ref, nil-safe per EC-13). SM callbacks are wired by passing
+//   The toolbar closures read coordinatorBox.coordinator at call-time (weak
+//   ref, nil-safe per EC-13). SM callbacks are wired by passing
 //   chromeVisibility into BufferEditor, which sets them in updateUIView.
 //   This keeps ContentView free of UIKit imports and avoids two-phase binding.
 //
@@ -34,7 +34,7 @@ import shared
 ///
 /// Composes a `ZStack` with:
 ///   1. `BufferEditor` — full-bleed, `.ignoresSafeArea()`, content layer (no glass).
-///   2. `ChromeOverlay` — safe-area-respecting sibling; hosts `TopPill` + `MenuBubble`.
+///   2. `ChromeOverlay` — safe-area-respecting sibling; hosts the fused chrome capsule + `MenuBubble`.
 ///   `.safeAreaInset(edge: .bottom)` — `BottomToolbar` hosted as a bottom inset so
 ///   SwiftUI anti-additively computes `max(keyboardHeight, bottomSafeAreaInset)`.
 ///
@@ -142,16 +142,10 @@ struct ContentView: View {
             .modifier(EditorPinchModifier(viewModel: viewModel, settings: settings))
 
             // ── Layer 2: ChromeOverlay (control/navigation, respects safe area) ─
-            // TopPill (top-trailing) morphs into MenuBubble via a single
-            // liquid-glass container (iOS 26). No glass here —
-            // glass lives inside TopPill/MenuBubble (NFR-01/02; gate checks 1+2).
-            // EC-14: SM events never close the bubble — only the tap-catcher does.
             ChromeOverlay(
                 text: viewModel.text,
                 menuVM: menuVM,
-                chromeVisibility: chromeVisibility,
-                coordinatorBox: coordinatorBox,
-                viewModel: viewModel
+                chromeVisibility: chromeVisibility
             )
         }
         // ── Theme application (FR-23 / M6) ──────────────────────────────────
@@ -159,8 +153,7 @@ struct ContentView: View {
         // `selectTheme(_:)` — establishing a SwiftUI observation dependency so
         // the entire view hierarchy re-renders whenever the user changes the theme.
         // `swiftUIColorScheme` maps .follow→nil (inherit device), .light→.light,
-        // .dark→.dark (QP §3.1; `@unknown default` in the extension handles future
-        // non-frozen KMP enum cases with nil/System fallback — C-04/C-05).
+        // .dark→.dark (QP §3.1).
         .preferredColorScheme(menuVM.colorScheme.swiftUIColorScheme)
         // ── .safeAreaInset: BottomToolbar (anti-additive keyboard avoidance) ──
         // SwiftUI's .safeAreaInset provides max(keyboardHeight, bottomSafeAreaInset)
@@ -204,8 +197,8 @@ struct ContentView: View {
                 )
                 Spacer()
             }
-            .padding(.leading, 12)
-            .padding(.bottom, 12)
+            .padding(.leading, ChromeMetrics.toolbarFloatingPadding)
+            .padding(.bottom, ChromeMetrics.toolbarFloatingPadding)
         }
         // ── ScenePhase lifecycle wiring (FR-14 / M5) ─────────────────────────
         // SwiftUI delivers scene-phase changes on the main actor; dispatch to the
