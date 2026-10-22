@@ -339,8 +339,12 @@ struct ChromeOverlay: View {
                 .labelStyle(.iconOnly)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
                 .imageScale(.large)
+                // The frame + contentShape live INSIDE the label: with .plain the hit
+                // shape is the label's content shape — outside frames are layout only,
+                // which collapsed the touch target to the symbol ink box (DD-2).
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
             }
-            .frame(minWidth: 44, minHeight: 44)
             // EC-01: empty buffer → no share sheet; the panel's Share row uses the same gate.
             .disabled(isShareDisabled)
             .buttonStyle(.plain)
@@ -365,8 +369,9 @@ struct ChromeOverlay: View {
                 .labelStyle(.iconOnly)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
                 .imageScale(.large)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
             }
-            .frame(minWidth: 44, minHeight: 44)
             .buttonStyle(.plain)
             .accessibilityLabel(
                 String(localized: "Menu", comment: "Overflow menu button accessibility label in the top pill")
