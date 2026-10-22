@@ -150,44 +150,46 @@ struct MenuBubble: View {
     // MARK: - Body
 
     var body: some View {
-        ScrollView {
+        // Content-hugging panel: the glass shape follows the rows it hosts, so
+        // the morph target is the menu itself — never a screen-height surface
+        // over a blank editor (where glass is white-on-white invisible). The
+        // recovery row list below stays bounded by ViewThatFits + a scroll cap.
+        VStack(alignment: .leading, spacing: ChromeMetrics.menuRowSpacing) {
             // Inner rows carry .transition(.opacity) so they fade in mid-stretch
             // during the capsule→panel morph. The panel container itself does NOT
-            // carry a transition — geometry is owned by .glassEffectID (C-04).
-            VStack(alignment: .leading, spacing: ChromeMetrics.menuRowSpacing) {
-                // 1. Share row (FR-04) — first row, followed by a divider.
-                shareRow
+            // carry an explicit transition — geometry is owned by .glassEffectID (C-04).
+            // 1. Share row (FR-04) — first row, followed by a divider.
+            shareRow
 
-                menuDivider
+            menuDivider
 
-                // 2. Theme picker
-                themePicker
-                    .transition(.opacity)
-
-                menuDivider
-
-                // 3. Font-size control
-                fontSizeControl
-                    .transition(.opacity)
-
-                menuDivider
-
-                // 4. About
-                AboutSection()
-                    .transition(.opacity)
-
-                menuDivider
-
-                // 5. Recovery submenu (inline expandable — FR-18)
-                RecoverySection(
-                    menuVM: menuVM,
-                    isPresented: $isPresented,
-                    dismissAnimation: dismissAnimation
-                )
+            // 2. Theme picker
+            themePicker
                 .transition(.opacity)
-            }
-            .padding(.vertical, ChromeMetrics.menuRowVerticalPadding)
+
+            menuDivider
+
+            // 3. Font-size control
+            fontSizeControl
+                .transition(.opacity)
+
+            menuDivider
+
+            // 4. About
+            AboutSection()
+                .transition(.opacity)
+
+            menuDivider
+
+            // 5. Recovery submenu (inline expandable — FR-18)
+            RecoverySection(
+                menuVM: menuVM,
+                isPresented: $isPresented,
+                dismissAnimation: dismissAnimation
+            )
+            .transition(.opacity)
         }
+        .padding(.vertical, ChromeMetrics.menuRowVerticalPadding)
         .frame(width: ChromeMetrics.menuPanelWidth)
         // Native iOS 26 Liquid Glass panel — no hand-rolled blur/fill/shadow (NFR-01/02).
         // Corner radius from ChromeMetrics.menuPanelCornerRadius (Apple-Notes look).
@@ -653,10 +655,24 @@ fileprivate struct RecoverySection: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
             // Recovery note rows — list + restore-on-tap only (no delete).
-            VStack(alignment: .leading, spacing: ChromeMetrics.menuRowSpacing) {
-                ForEach(rvm.rows) { row in
-                    recoveryRow(row: row, rvm: rvm)
+            // A 10-note list can outgrow the screen, so the row stack is
+            // offered unscrolled first and falls back to a capped scroll view
+            // when it does not fit; the panel around it keeps hugging content.
+            ViewThatFits(in: .vertical) {
+                recoveryRows(rvm: rvm)
+                ScrollView {
+                    recoveryRows(rvm: rvm)
                 }
+                .frame(height: ChromeMetrics.recoveryScrollHeight)
+            }
+        }
+    }
+
+    /// The recovery row stack itself — plain rows, newest first (FR-18).
+    private func recoveryRows(rvm: RecoveryListViewModel) -> some View {
+        VStack(alignment: .leading, spacing: ChromeMetrics.menuRowSpacing) {
+            ForEach(rvm.rows) { row in
+                recoveryRow(row: row, rvm: rvm)
             }
         }
     }

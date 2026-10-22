@@ -31,6 +31,7 @@ enum ChromeMetrics {
 
     // Overflow menu panel (MenuBubble)
     static let menuPanelWidth: CGFloat = 280          // existing ~280pt, now named
+    static let recoveryScrollHeight: CGFloat = 320
     static let menuRowVerticalPadding: CGFloat = 11
     static let menuRowHorizontalPadding: CGFloat = 16
     static let menuRowSpacing: CGFloat = 2
