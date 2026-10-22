@@ -247,6 +247,7 @@ struct ChromeOverlay: View {
             .padding(.top, ChromeMetrics.pillTopGap)
             .padding(.horizontal, ChromeMetrics.chromeHorizontalInset)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         // Crossfade the chrome layer (incl. the tap-catcher) with ChromeVisibility
         // (FR-20/EC-16). Modifier order is pinned by §4.2: the two frozen modifiers
         // first, then the hit-testing gate and the dismissal observation.
