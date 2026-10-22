@@ -1,8 +1,9 @@
 // Chrome/ChromeOverlay.swift
 // Foglietto — Apple-Notes (iOS 26) Chrome Restyle
 //
-// Container view composing the top-right chrome: a standalone Undo glass
-// circle beside ONE fused glass capsule (Share + overflow `…`) that deforms as a single liquid unit into the menu panel
+// Container view composing the top-right chrome: standalone Undo + Share glass
+// circles beside ONE small overflow (`…`) glass capsule that deforms as a liquid
+// drop into the menu panel
 // (MenuBubble) and back, over the editor. Reads ChromeVisibility.isVisible and
 // crossfades the chrome layer. Owns the ONE shared morph container, the morph
 // namespace, and the private `isMenuPresented` state.
@@ -13,7 +14,7 @@
 // │   ZStack(alignment: .topTrailing) {                                         │
 // │       if open { tapCatcher }          // sibling, NOT in the morph container│
 // │       morphContainer(spacing: 35) {                                         │
-// │           if open { MenuBubble } else { fusedPill }   // XOR — never both   │
+// │           if open { MenuBubble } else { ellipsisControl }  // XOR — never both  │
 // │               .glassEffectID(chromeGlassID)  — NO .transition on children   │
 // │       }                                                                     │
 // │   }.padding(.top, 16).padding(.horizontal, 16)                              │
@@ -27,14 +28,16 @@
 // │  `.identity` removes the animated insertion/removal window the glass        │
 // │  container needs to interpolate — it KILLS the morph (rc21). The default    │
 // │  branch crossfade is demo parity; INNER row fades compound (rc22 D1)        │
-// │ WHY the closed capsule is ONE glass shape over PLAIN buttons: same proven    │
-// │  anatomy as BottomToolbar — one capsule over an HStack of plain buttons.     │
-// │  It avoids the rc8 tap-swallow class (`.interactive()` on multi-button       │
-// │  glass) and rc18's per-button glass.                                         │
-// │ WHY Share lives inside the closed capsule but is a PLAIN row when open:      │
-// │  the closed state fuses Share + `…` into the single capsule the user sees;   │
-// │  the open state consumes Share into the panel, where rows are plain so no    │
-// │  nested glass can corrupt the morph (FR-04/FR-05).                           │
+// │ WHY the closed state is a SMALL 44×44 capsule over ONE plain button (DD-6):   │
+// │  the drop reads only from a roughly-square glass source stretching into the  │
+// │  280pt panel (LiquidMenuDemo / rc18 anatomy); a wide two-button capsule can  │
+// │  only read as "expanding". Undo + Share are standalone glass OUTSIDE the      │
+// │  container — their own interactive single-control surfaces, no metaball glue │
+// │  into the morph (rc18-cut1).                                                    │
+// │ WHY Share is a standalone circle at all times AND a plain row in the open    │
+// │  panel: the morph source stays small (drop fidelity, DD-6) while the open    │
+// │  panel still exposes Share as its first row (FR-04/FR-05 — no nested glass   │
+// │  inside the panel).                                                          │
 // └────────────────────────────────────────────────────────────────────────────┘
 //
 // ┌─ PROHIBITED TOPOLOGIES (device-confirmed; do NOT reintroduce) ─────────────┐
@@ -66,7 +69,7 @@
 // box is retained above.
 //
 // EC-14 / §5.3 — the `isMenuPresented` writer set is EXHAUSTIVE (five sources):
-//   (1) overflow toggle       — fusedPill's `…` button — withAnimation(menuOpenAnimation)
+//   (1) overflow toggle       — the `…` capsule's button — withAnimation(menuOpenAnimation)
 //   (2) tap-catcher           — the full-screen catcher below — withAnimation(menuCloseAnimation)
 //   (3) recovery-row dismiss  — MenuBubble's RecoverySection, through the `isPresented` binding
 //   (4) Share-row dismiss     — MenuBubble's Share row, through the `isPresented` binding
@@ -123,7 +126,7 @@ final class CoordinatorBox {
 ///
 /// Layout (top-trailing, within safe area):
 ///   - The shared morph container — the positioned top-trailing child, holding EXACTLY one
-///     child per state: `fusedPill` (closed) XOR `MenuBubble` (open), sharing the morph ID.
+///     child per state: `ellipsisControl` (closed) XOR `MenuBubble` (open), sharing the morph ID.
 ///   - Transparent full-screen tap-catcher (only while open) — outside-tap dismiss (EC-14).
 ///
 /// **Glass morph (FR-02/FR-03):** see the header topology diagram. The fused closed
@@ -232,11 +235,12 @@ struct ChromeOverlay: View {
                     .transition(.opacity)
             }
 
-            // The top chrome's glass group: the Undo circle is its own glass artifact
-            // beside (never inside) the morph container, so the capsule↔panel merge
-            // domain stays exactly one glass shape per state.
+            // The top chrome's glass group: Undo + Share are standalone glass
+            // artifacts beside (never inside) the morph container; the container
+            // holds the small … capsule XOR the panel — the drop-morph source.
             HStack(alignment: .top, spacing: ChromeMetrics.chromeControlGap) {
                 undoButton
+                shareControl
 
                 GlassEffectContainer(spacing: ChromeMetrics.metaballSpacing) {
                     if isMenuPresented {
@@ -249,13 +253,11 @@ struct ChromeOverlay: View {
                             text: text,
                             isShareDisabled: isShareDisabled
                         )
-                        // No transition modifier on either XOR child — device-verified
-                        // LiquidMenuDemo parity: .identity skips the animated
-                        // insertion/removal the glass container needs to interpolate,
-                        // which kills the morph (rc21). The branch crossfade stays (demo
-                        // parity); rows inside the panel add none (rc22 D1).
+                        // No transition modifier on either XOR child — .identity kills
+                        // the morph (rc21). The branch crossfade stays (demo parity);
+                        // rows inside the panel add none (rc22 D1).
                     } else {
-                        fusedPill
+                        ellipsisControl
                     }
                 }
             }
@@ -324,74 +326,72 @@ struct ChromeOverlay: View {
         )
     }
 
-    // MARK: - Fused closed-state capsule (§5.1.c)
+    // MARK: - Standalone Share control (DD-6)
 
-    /// The closed state's ONLY glass shape: one capsule over two plain buttons
-    /// (Share + `…`) — the `BottomToolbar` anatomy, proven in-repo.
+    /// Share as its own 44pt glass circle OUTSIDE the morph container — the
+    /// rc18 anatomy: the drop-morph source must be a small roughly-square glass
+    /// shape, so Share cannot live inside the morphing capsule (DD-6 user
+    /// direction: pill first deforms into an irregular water-drop, then the
+    /// panel; a wide two-button capsule can only read as "expanding").
     ///
-    /// - The buttons are `.plain`: the capsule is the glass shape, so no per-button glass
-    ///   is nested inside the shared container (rc18 regression class).
-    /// - `.glassEffect(.regular, in: .capsule)` is PINNED `.regular` — the interactive
-    ///   variant is prohibited on multi-button glass (rc8 tap-swallow, §4.4).
-    /// - `.glassEffectID(chromeGlassID, in: glassNamespace)`: morph identity. The glass
-    ///   system deforms this capsule's geometry toward `MenuBubble`'s on the open write.
-    /// - Both buttons keep the inline 44pt tap targets (NFR-04); the rendered capsule
-    ///   height must equal `ChromeMetrics.pillHeight` (the editor-inset lockstep token).
-    private var fusedPill: some View {
-        HStack(spacing: ChromeMetrics.capsuleControlSpacing) {
-            ShareLink(item: text) {
-                Label(
-                    String(localized: "Share", comment: "Share button label in the top pill"),
-                    systemImage: "square.and.arrow.up"
-                )
-                .labelStyle(.iconOnly)
-                .fontWeight(ChromeMetrics.iconScaleWeight)
-                .imageScale(.large)
-                // The frame + contentShape live INSIDE the label: with .plain the hit
-                // shape is the label's content shape — outside frames are layout only,
-                // which collapsed the touch target to the symbol ink box (DD-2).
-                .frame(minWidth: 44, minHeight: 44)
-                .contentShape(.rect)
-            }
-            // EC-01: empty buffer → no share sheet; the panel's Share row uses the same gate.
-            .disabled(isShareDisabled)
-            .buttonStyle(.plain)
-            .accessibilityLabel(
-                String(localized: "Share", comment: "Share button accessibility label in the top pill")
-            )
-            .accessibilityAddTraits(.isButton)
-            .help(
-                String(localized: "Share text", comment: "Share button tooltip in the top pill (FR-23)")
-            )
-
-            Button {
-                // EC-14 write-source 1 — the pill is mounted only while closed.
-                withAnimation(menuOpenAnimation) {
-                    isMenuPresented = true
-                }
-            } label: {
-                Label(
-                    String(localized: "Menu", comment: "Overflow menu button label in the top pill"),
-                    systemImage: "ellipsis"
-                )
-                .labelStyle(.iconOnly)
+    /// Single-control interactive glass (rc8 prohibition targets multi-button
+    /// glass only); the frame + contentShape arm the full 44pt cell (DD-2).
+    private var shareControl: some View {
+        ShareLink(item: text) {
+            Image(systemName: "square.and.arrow.up")
                 .fontWeight(ChromeMetrics.iconScaleWeight)
                 .imageScale(.large)
                 .frame(minWidth: 44, minHeight: 44)
                 .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(
-                String(localized: "Menu", comment: "Overflow menu button accessibility label in the top pill")
-            )
-            .accessibilityAddTraits(.isButton)
-            .help(
-                String(localized: "Open menu", comment: "Overflow menu button tooltip in the top pill (FR-23)")
-            )
         }
-        .padding(.horizontal, ChromeMetrics.capsuleHorizontalPadding)
-        .glassEffect(.regular, in: .capsule)
+        // EC-01: empty buffer → no share sheet; the panel's Share row uses the same gate.
+        .disabled(isShareDisabled)
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel(
+            String(localized: "Share", comment: "Share button accessibility label in the top pill")
+        )
+        .accessibilityAddTraits(.isButton)
+        .help(
+            String(localized: "Share text", comment: "Share button tooltip in the top pill (FR-23)")
+        )
+    }
+
+    // MARK: - Drop-morph source: the small … capsule (§5.1.c, DD-6)
+
+    /// The closed state's ONLY glass shape inside the morph container: a small
+    /// 44×44 capsule over ONE plain button — the LiquidMenuDemo / rc18 anatomy.
+    /// A roughly-square source stretching into the 280pt panel is what reads as
+    /// the irregular water-drop before the regular rectangle settles (DD-6).
+    ///
+    /// - `.interactive()`: single-control variant, demo parity — the glass
+    ///   squishes under the touch as the deformation starts.
+    /// - `.glassEffectID(chromeGlassID, in: glassNamespace)`: morph identity —
+    ///   the glass system deforms THIS capsule into `MenuBubble` and back.
+    /// - The frame + contentShape arm the full 44pt tap target (DD-2).
+    private var ellipsisControl: some View {
+        Button {
+            // EC-14 write-source 1 — the control is mounted only while closed.
+            withAnimation(menuOpenAnimation) {
+                isMenuPresented = true
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .fontWeight(ChromeMetrics.iconScaleWeight)
+                .imageScale(.large)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .capsule)
         .glassEffectTransition(.matchedGeometry)
         .glassEffectID(Self.chromeGlassID, in: glassNamespace)
+        .accessibilityLabel(
+            String(localized: "Menu", comment: "Overflow menu button accessibility label in the top pill")
+        )
+        .accessibilityAddTraits(.isButton)
+        .help(
+            String(localized: "Open menu", comment: "Overflow menu button tooltip in the top pill (FR-23)")
+        )
     }
 }
