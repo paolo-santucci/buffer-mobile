@@ -189,6 +189,7 @@ struct MenuBubble: View {
         // Native iOS 26 Liquid Glass panel — no hand-rolled blur/fill/shadow (NFR-01/02).
         // Corner radius from ChromeMetrics.menuPanelCornerRadius (Apple-Notes look).
         .glassEffect(in: .rect(cornerRadius: ChromeMetrics.menuPanelCornerRadius))
+        .glassEffectTransition(.matchedGeometry)
         // Geometry morph is owned by .glassEffectID; the container's XOR children
         // carry NO .transition modifiers (an explicit .identity kills the morph —
         // rc21) and neither does any row inside this panel (rc22 D1).

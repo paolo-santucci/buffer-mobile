@@ -391,6 +391,7 @@ struct ChromeOverlay: View {
         }
         .padding(.horizontal, ChromeMetrics.capsuleHorizontalPadding)
         .glassEffect(.regular, in: .capsule)
+        .glassEffectTransition(.matchedGeometry)
         .glassEffectID(Self.chromeGlassID, in: glassNamespace)
     }
 }
