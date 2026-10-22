@@ -46,6 +46,9 @@ enum ChromeMetrics {
     static let capsuleControlSpacing: CGFloat = 2      // inter-icon spacing inside a capsule
     static let iconScaleWeight: Font.Weight = .regular  // SF Symbol weight (Apple-Notes look — regular, not bold)
 
+    // Top chrome — gap between the Undo circle and the Share/… capsule
+    static let chromeControlGap: CGFloat = 10
+
     // Bottom toolbar
     static let toolbarItemSpacing: CGFloat = 4
     static let capsuleHorizontalPadding: CGFloat = 8

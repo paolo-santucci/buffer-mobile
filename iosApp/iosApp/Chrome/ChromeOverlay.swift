@@ -1,8 +1,8 @@
 // Chrome/ChromeOverlay.swift
 // Foglietto — Apple-Notes (iOS 26) Chrome Restyle
 //
-// Container view composing the top-right chrome as ONE fused glass capsule
-// (Share + overflow `…`) that deforms as a single liquid unit into the menu panel
+// Container view composing the top-right chrome: a standalone Undo glass
+// circle beside ONE fused glass capsule (Share + overflow `…`) that deforms as a single liquid unit into the menu panel
 // (MenuBubble) and back, over the editor. Reads ChromeVisibility.isVisible and
 // crossfades the chrome layer. Owns the ONE shared morph container, the morph
 // namespace, and the private `isMenuPresented` state.
@@ -56,9 +56,12 @@
 // SUPERSESSION of the rc18-r2 header contract ("Share OUTSIDE the container — do NOT
 // reintroduce"). That guard protected against Share fusing with the OPEN panel while
 // coexisting as a SECOND live glass element. This design has no such counterpart:
-// exactly one glass element exists per state — the closed fused capsule XOR the open
-// panel — so two glass shapes never coexist, and while the panel is open Share is a
-// plain row inside it. Every other entry of that history box is retained above.
+// exactly one glass shape exists per state INSIDE the morph container — the closed
+// fused capsule XOR the open panel — so two shapes never coalesce there, and while
+// the panel is open Share is a plain row inside it. The Undo circle is a second
+// top-chrome glass artifact by design; it lives OUTSIDE the container, giving it its
+// own non-merging glass surface in both states. Every other entry of that history
+// box is retained above.
 //
 // EC-14 / §5.3 — the `isMenuPresented` writer set is EXHAUSTIVE (five sources):
 //   (1) overflow toggle       — fusedPill's `…` button — withAnimation(menuOpenAnimation)
@@ -149,6 +152,10 @@ struct ChromeOverlay: View {
     /// gate (C-1) and the chrome-hide dismissal (write-source 5).
     let chromeVisibility: ChromeVisibility
 
+    /// Chrome-dispatched undo of the last editor edit — invoked by the standalone
+    /// Undo circle and routed by the composition root to the live editor coordinator.
+    let onUndo: () -> Void
+
     // MARK: - Local state
 
     /// Controls the `MenuBubble` presented state.
@@ -223,25 +230,30 @@ struct ChromeOverlay: View {
                     .transition(.opacity)
             }
 
-            // The chrome layer's ONLY glass element — the closed fused capsule XOR the
-            // open panel, never both (one glass shape per state — §4 core invariant).
-            GlassEffectContainer(spacing: ChromeMetrics.metaballSpacing) {
-                if isMenuPresented {
-                    MenuBubble(
-                        menuVM: menuVM,
-                        isPresented: $isMenuPresented,
-                        glassNamespace: glassNamespace,
-                        glassID: Self.chromeGlassID,
-                        dismissAnimation: menuCloseAnimation,
-                        text: text,
-                        isShareDisabled: isShareDisabled
-                    )
-                    // .transition(.identity): the glass morph is the only animation on
-                    // insertion/removal — no default opacity crossfade.
-                    .transition(.identity)
-                } else {
-                    fusedPill
+            // The top chrome's glass group: the Undo circle is its own glass artifact
+            // beside (never inside) the morph container, so the capsule↔panel merge
+            // domain stays exactly one glass shape per state.
+            HStack(alignment: .top, spacing: ChromeMetrics.chromeControlGap) {
+                undoButton
+
+                GlassEffectContainer(spacing: ChromeMetrics.metaballSpacing) {
+                    if isMenuPresented {
+                        MenuBubble(
+                            menuVM: menuVM,
+                            isPresented: $isMenuPresented,
+                            glassNamespace: glassNamespace,
+                            glassID: Self.chromeGlassID,
+                            dismissAnimation: menuCloseAnimation,
+                            text: text,
+                            isShareDisabled: isShareDisabled
+                        )
+                        // .transition(.identity): the glass morph is the only animation on
+                        // insertion/removal — no default opacity crossfade.
                         .transition(.identity)
+                    } else {
+                        fusedPill
+                            .transition(.identity)
+                    }
                 }
             }
             .padding(.top, ChromeMetrics.pillTopGap)
@@ -267,6 +279,41 @@ struct ChromeOverlay: View {
                 isMenuPresented = false
             }
         }
+    }
+
+    // MARK: - Undo circle (DD-3/DD-10)
+
+    /// The top-leading control beside the Share/…morph-capsule: a standalone
+    /// glass button driven by the system glass button style — the system owns
+    /// the material, the interactive press treatment and the accessibility
+    /// fallbacks (Reduce Transparency / Increase Contrast).
+    ///
+    /// Deliberately OUTSIDE the morph container: a second live glass shape
+    /// inside `GlassEffectContainer` would coalesce with the capsule or the
+    /// open panel during the morph (§4.4 prohibited topologies). Separate
+    /// adjacency keeps the merge domain single-shape per state.
+    ///
+    /// Single-button glass — the interactive prohibition targets multi-button
+    /// glass (rc8); a system-style button carries its own single shape.
+    ///
+    /// Always enabled: undo with an empty stack is a no-op (FR-15 analog).
+    private var undoButton: some View {
+        Button {
+            onUndo()
+        } label: {
+            Image(systemName: "arrow.uturn.backward")
+                .fontWeight(ChromeMetrics.iconScaleWeight)
+                .imageScale(.large)
+                .frame(minWidth: 44, minHeight: 44)
+        }
+        .buttonStyle(.glass)
+        .accessibilityLabel(
+            String(localized: "Undo", comment: "Undo button accessibility label in the top chrome")
+        )
+        .accessibilityAddTraits(.isButton)
+        .help(
+            String(localized: "Undo", comment: "Undo button tooltip in the top chrome (FR-23)")
+        )
     }
 
     // MARK: - Fused closed-state capsule (§5.1.c)

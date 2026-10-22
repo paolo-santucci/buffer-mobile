@@ -145,7 +145,10 @@ struct ContentView: View {
             ChromeOverlay(
                 text: viewModel.text,
                 menuVM: menuVM,
-                chromeVisibility: chromeVisibility
+                chromeVisibility: chromeVisibility,
+                onUndo: { [coordinatorBox] in
+                    coordinatorBox.coordinator?.undo()
+                }
             )
         }
         // ── Theme application (FR-23 / M6) ──────────────────────────────────

@@ -313,6 +313,21 @@ struct BufferEditor: UIViewRepresentable {
             tv.selectedRange = range
         }
 
+        /// Invoke the text view's native undo manager and mirror the reverted
+        /// buffer text back into the view model (DD-10).
+        ///
+        /// Undo goes through `UITextView.undoManager` — the same mechanism the
+        /// keyboard's built-in undo uses — so reversed edits arrive as ordinary
+        /// UIKit commits (including the `textViewDidChange` mirror when the edit
+        /// registers as one). The explicit re-mirror is the safety net for
+        /// programmatic reversals that do not surface as delegate events.
+        /// No-op after teardown (EC-13).
+        func undo() {
+            guard let tv = textView else { return }
+            tv.undoManager?.undo()
+            viewModel.updateText(tv.text ?? "")
+        }
+
         // MARK: UITextViewDelegate — the single pre-edit hook (FR-02)
 
         /// The only `UITextViewDelegate` text-gating method (FR-02), implementing the

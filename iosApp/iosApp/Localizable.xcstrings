@@ -52,6 +52,23 @@
         }
       }
     },
+    "Undo" : {
+      "comment" : "Undo button label in the top chrome (DD-10)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Undo"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Annulla"
+          }
+        }
+      }
+    },
     "Always uses a dark background." : {
       "comment" : "Theme picker row description for Dark (FR-23)",
       "localizations" : {

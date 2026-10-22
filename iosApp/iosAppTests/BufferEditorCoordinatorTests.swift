@@ -485,6 +485,53 @@ final class BufferEditorCoordinatorM4Tests: XCTestCase {
         XCTAssertTrue(true, "applyIndentResult with nil textView must not crash (EC-13)")
     }
 
+    /// undo() registered against the native undo manager reverts the text and
+    /// mirrors the reverted buffer into the view model (DD-10).
+    func test_undo_registeredRevert_revertsText_andMirrorsViewModel() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+
+        let (tv, coord, _) = makeMountedCoordinator(viewModel: vm)
+        tv.text = "draft"
+
+        tv.undoManager?.registerUndo(withTarget: tv) { target in target.text = "" }
+
+        coord.undo()
+
+        XCTAssertEqual(tv.text, "",
+            "undo() must invoke the text view's native undo manager (DD-10)")
+        XCTAssertEqual(vm.text, "",
+            "undo() must mirror the reverted text back into the view model (DD-10)")
+    }
+
+    /// undo() with an empty undo stack leaves the buffer untouched (DD-10).
+    func test_undo_emptyUndoStack_noOp_noCrash() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+
+        let (tv, coord, _) = makeMountedCoordinator(viewModel: vm)
+        tv.text = "unchanged"
+
+        coord.undo()
+
+        XCTAssertEqual(tv.text, "unchanged",
+            "undo() with an empty undo stack must not modify the buffer (DD-10)")
+        XCTAssertEqual(vm.text, "unchanged",
+            "undo() with an empty undo stack must leave the view model untouched (DD-10)")
+    }
+
+    /// undo() when coordinator.textView is nil → no crash (EC-13 teardown safety).
+    func test_undo_nilTextView_noCrash() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+        let editor = BufferEditor(viewModel: vm)
+        let coord = editor.makeCoordinator()
+
+        coord.undo()
+
+        XCTAssertTrue(true, "undo() with nil textView must not crash (EC-13)")
+    }
+
     // -----------------------------------------------------------------------
     // MARK: - textView weak reference nil-safety (EC-13 / FR-06)
 
