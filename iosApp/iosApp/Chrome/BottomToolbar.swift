@@ -132,9 +132,11 @@ struct BottomToolbar: View {
             Image(systemName: "doc.on.doc")
                 .imageScale(.large)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
+                // The frame + contentShape live inside the label: with .plain the hit
+                // shape is the label's content shape (outside frames are layout only).
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
         }
-        // ≥ 44×44 pt touch target (NFR-04/HIG).
-        .frame(minWidth: 44, minHeight: 44)
         // Always enabled (FR-15 — all five buttons are always-enabled).
         // Plain style: the single glass pill is the container capsule (no per-icon glass).
         .buttonStyle(.plain)
@@ -162,9 +164,9 @@ struct BottomToolbar: View {
             Image(systemName: "doc.on.clipboard")
                 .imageScale(.large)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
         }
-        // ≥ 44×44 pt touch target (NFR-04/HIG).
-        .frame(minWidth: 44, minHeight: 44)
         // Always enabled (FR-15); guard on empty clipboard is in Coordinator (EC-03).
         .buttonStyle(.plain)
         // Accessibility (NFR-04, FR-23).
@@ -190,9 +192,9 @@ struct BottomToolbar: View {
             Image(systemName: "keyboard.chevron.compact.down")
                 .imageScale(.large)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
         }
-        // ≥ 44×44 pt touch target (NFR-04/HIG).
-        .frame(minWidth: 44, minHeight: 44)
         .buttonStyle(.plain)
         // Accessibility label — FR-23 introduces "Hide keyboard" as a new EN literal.
         .accessibilityLabel(
@@ -222,9 +224,9 @@ struct BottomToolbar: View {
             Image(systemName: "increase.indent")
                 .imageScale(.large)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
         }
-        // ≥ 44×44 pt touch target (NFR-04/HIG).
-        .frame(minWidth: 44, minHeight: 44)
         .buttonStyle(.plain)
         // Accessibility label — FR-23 introduces "Indent" as a new EN literal.
         .accessibilityLabel(
@@ -251,9 +253,9 @@ struct BottomToolbar: View {
             Image(systemName: "decrease.indent")
                 .imageScale(.large)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
         }
-        // ≥ 44×44 pt touch target (NFR-04/HIG).
-        .frame(minWidth: 44, minHeight: 44)
         .buttonStyle(.plain)
         // Accessibility label — FR-23 introduces "Outdent" / "De-indent" as a new EN literal.
         // The spec names both "Outdent" and "De-indent"; "Outdent" is the standard iOS term.
