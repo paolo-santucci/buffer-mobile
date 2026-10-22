@@ -284,17 +284,16 @@ struct ChromeOverlay: View {
     // MARK: - Undo circle (DD-3/DD-10)
 
     /// The top-leading control beside the Share/…morph-capsule: a standalone
-    /// glass button driven by the system glass button style — the system owns
-    /// the material, the interactive press treatment and the accessibility
-    /// fallbacks (Reduce Transparency / Increase Contrast).
+    /// glass circle in the same manual-glass anatomy as the capsule, sized to
+    /// equal its height (44pt circle vs 44pt capsule — user-approved DD-3a).
     ///
     /// Deliberately OUTSIDE the morph container: a second live glass shape
     /// inside `GlassEffectContainer` would coalesce with the capsule or the
     /// open panel during the morph (§4.4 prohibited topologies). Separate
     /// adjacency keeps the merge domain single-shape per state.
     ///
-    /// Single-button glass — the interactive prohibition targets multi-button
-    /// glass (rc8); a system-style button carries its own single shape.
+    /// Single-button glass — `.interactive()` here is the one-control variant
+    /// the rc8 prohibition does not cover (multi-button glass).
     ///
     /// Always enabled: undo with an empty stack is a no-op (FR-15 analog).
     private var undoButton: some View {
@@ -305,8 +304,14 @@ struct ChromeOverlay: View {
                 .fontWeight(ChromeMetrics.iconScaleWeight)
                 .imageScale(.large)
                 .frame(minWidth: 44, minHeight: 44)
+                .contentShape(.rect)
         }
-        .buttonStyle(.glass)
+        .buttonStyle(.plain)
+        // Same manual-glass anatomy as the capsule — `.circle` with no added
+        // system padding, so the circle's diameter equals the capsule's height
+        // (both 44pt, ChromeMetrics.pillHeight). `.interactive()` is the single-
+        // control variant (the rc8 prohibition targets multi-button glass).
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityLabel(
             String(localized: "Undo", comment: "Undo button accessibility label in the top chrome")
         )
