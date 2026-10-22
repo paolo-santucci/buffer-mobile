@@ -14,7 +14,7 @@
 // │       if open { tapCatcher }          // sibling, NOT in the morph container│
 // │       morphContainer(spacing: 35) {                                         │
 // │           if open { MenuBubble } else { fusedPill }   // XOR — never both   │
-// │               .transition(.identity) + .glassEffectID(chromeGlassID)         │
+// │               .glassEffectID(chromeGlassID)  — NO .transition on children   │
 // │       }                                                                     │
 // │   }.padding(.top, 16).padding(.horizontal, 16)                              │
 // │                                                                            │
@@ -23,8 +23,10 @@
 // │  glues to the panel", rc15/rc18-initial). One child = one glass shape, so    │
 // │  the merge is never observable and the whole-pill→panel deformation reads    │
 // │  as a single liquid unit (FR-01…FR-03).                                     │
-// │ WHY .transition(.identity) on BOTH children: suppresses SwiftUI's default    │
-// │  opacity crossfade so the glass morph is the only animation on insertion.    │
+// │ WHY NO .transition on the XOR children (device-verified, LiquidMenuDemo):   │
+// │  `.identity` removes the animated insertion/removal window the glass        │
+// │  container needs to interpolate — it KILLS the morph (rc21). The default    │
+// │  opacity crossfade is invisible under the same-material deformation.       │
 // │ WHY the closed capsule is ONE glass shape over PLAIN buttons: same proven    │
 // │  anatomy as BottomToolbar — one capsule over an HStack of plain buttons.     │
 // │  It avoids the rc8 tap-swallow class (`.interactive()` on multi-button       │
@@ -247,12 +249,13 @@ struct ChromeOverlay: View {
                             text: text,
                             isShareDisabled: isShareDisabled
                         )
-                        // .transition(.identity): the glass morph is the only animation on
-                        // insertion/removal — no default opacity crossfade.
-                        .transition(.identity)
+                        // No transition modifier on either XOR child — device-verified
+                        // LiquidMenuDemo parity: .identity skips the animated
+                        // insertion/removal the glass container needs to interpolate,
+                        // which kills the morph (rc21); the default opacity crossfade
+                        // is invisible under the same-material deformation.
                     } else {
                         fusedPill
-                            .transition(.identity)
                     }
                 }
             }

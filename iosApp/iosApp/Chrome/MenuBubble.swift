@@ -194,10 +194,9 @@ struct MenuBubble: View {
         // Native iOS 26 Liquid Glass panel — no hand-rolled blur/fill/shadow (NFR-01/02).
         // Corner radius from ChromeMetrics.menuPanelCornerRadius (Apple-Notes look).
         .glassEffect(in: .rect(cornerRadius: ChromeMetrics.menuPanelCornerRadius))
-        // Morph identity: shared with the closed-state pill in ChromeOverlay inside its
-        // GlassEffectContainer. The glass system morphs that capsule into this panel and
-        // back. ChromeOverlay adds .transition(.identity) on the insertion — geometry morph
-        // is driven by glassEffectID (C-04).
+        // Geometry morph is owned by .glassEffectID; the container's XOR children
+        // carry NO .transition modifiers (device-verified demo parity — an explicit
+        // .identity kills the morph; default crossfade is fine).
         .glassEffectID(glassID, in: glassNamespace)
     }
 
