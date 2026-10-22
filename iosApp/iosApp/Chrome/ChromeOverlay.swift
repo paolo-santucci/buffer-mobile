@@ -26,7 +26,7 @@
 // │ WHY NO .transition on the XOR children (device-verified, LiquidMenuDemo):   │
 // │  `.identity` removes the animated insertion/removal window the glass        │
 // │  container needs to interpolate — it KILLS the morph (rc21). The default    │
-// │  opacity crossfade is invisible under the same-material deformation.       │
+// │  branch crossfade is demo parity; INNER row fades compound (rc22 D1)        │
 // │ WHY the closed capsule is ONE glass shape over PLAIN buttons: same proven    │
 // │  anatomy as BottomToolbar — one capsule over an HStack of plain buttons.     │
 // │  It avoids the rc8 tap-swallow class (`.interactive()` on multi-button       │
@@ -252,8 +252,8 @@ struct ChromeOverlay: View {
                         // No transition modifier on either XOR child — device-verified
                         // LiquidMenuDemo parity: .identity skips the animated
                         // insertion/removal the glass container needs to interpolate,
-                        // which kills the morph (rc21); the default opacity crossfade
-                        // is invisible under the same-material deformation.
+                        // which kills the morph (rc21). The branch crossfade stays (demo
+                        // parity); rows inside the panel add none (rc22 D1).
                     } else {
                         fusedPill
                     }

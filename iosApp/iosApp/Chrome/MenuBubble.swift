@@ -18,9 +18,9 @@
 // a nested glass shape inside the same GlassEffectContainer metaball-merges with the
 // panel and corrupts the pill↔panel morph (§4.4 prohibited topologies).
 //
-// Row crossfade: inner menu rows carry `.transition(.opacity)` so they fade in mid-stretch
-// during the morph. The PANEL CONTAINER does NOT carry an explicit transition — geometry
-// is owned by `.glassEffectID` (C-04).
+// No transitions inside the panel: the container child's own insertion crossfade already
+// fades the whole panel in mid-stretch, and per-row fades compound with it into a second,
+// competing appear/disappear over the morph (rc22 D1). Geometry is owned by `.glassEffectID`.
 //
 // Layout top→bottom:
 //   1. Share row — plain ShareLink over the live buffer text (FR-04)
@@ -155,9 +155,8 @@ struct MenuBubble: View {
         // over a blank editor (where glass is white-on-white invisible). The
         // recovery row list below stays bounded by ViewThatFits + a scroll cap.
         VStack(alignment: .leading, spacing: ChromeMetrics.menuRowSpacing) {
-            // Inner rows carry .transition(.opacity) so they fade in mid-stretch
-            // during the capsule→panel morph. The panel container itself does NOT
-            // carry an explicit transition — geometry is owned by .glassEffectID (C-04).
+            // Rows carry no transitions of their own — the panel is one glass entity whose
+            // insertion crossfade fades its whole content in (demo parity; rc22 D1).
             // 1. Share row (FR-04) — first row, followed by a divider.
             shareRow
 
@@ -165,19 +164,16 @@ struct MenuBubble: View {
 
             // 2. Theme picker
             themePicker
-                .transition(.opacity)
 
             menuDivider
 
             // 3. Font-size control
             fontSizeControl
-                .transition(.opacity)
 
             menuDivider
 
             // 4. About
             AboutSection()
-                .transition(.opacity)
 
             menuDivider
 
@@ -187,7 +183,6 @@ struct MenuBubble: View {
                 isPresented: $isPresented,
                 dismissAnimation: dismissAnimation
             )
-            .transition(.opacity)
         }
         .padding(.vertical, ChromeMetrics.menuRowVerticalPadding)
         .frame(width: ChromeMetrics.menuPanelWidth)
@@ -195,8 +190,8 @@ struct MenuBubble: View {
         // Corner radius from ChromeMetrics.menuPanelCornerRadius (Apple-Notes look).
         .glassEffect(in: .rect(cornerRadius: ChromeMetrics.menuPanelCornerRadius))
         // Geometry morph is owned by .glassEffectID; the container's XOR children
-        // carry NO .transition modifiers (device-verified demo parity — an explicit
-        // .identity kills the morph; default crossfade is fine).
+        // carry NO .transition modifiers (an explicit .identity kills the morph —
+        // rc21) and neither does any row inside this panel (rc22 D1).
         .glassEffectID(glassID, in: glassNamespace)
     }
 
@@ -204,7 +199,6 @@ struct MenuBubble: View {
     private var menuDivider: some View {
         Divider()
             .padding(.horizontal, ChromeMetrics.menuRowHorizontalPadding)
-            .transition(.opacity)
     }
 
     // MARK: - Share row (FR-04 / FR-05 / EC-01 / EC-21)
@@ -244,7 +238,6 @@ struct MenuBubble: View {
         .help(
             String(localized: "Share text", comment: "Share button tooltip in the top pill (FR-23)")
         )
-        .transition(.opacity)
     }
 
     // MARK: - Theme picker (FR-15 / FR-16 / EC-08 / CG-2)
