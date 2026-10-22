@@ -28,16 +28,13 @@
 // │  `.identity` removes the animated insertion/removal window the glass        │
 // │  container needs to interpolate — it KILLS the morph (rc21). The default    │
 // │  branch crossfade is demo parity; INNER row fades compound (rc22 D1)        │
-// │ WHY the closed state is a SMALL 44×44 capsule over ONE plain button (DD-6):   │
-// │  the drop reads only from a roughly-square glass source stretching into the  │
-// │  280pt panel (LiquidMenuDemo / rc18 anatomy); a wide two-button capsule can  │
-// │  only read as "expanding". Undo + Share are standalone glass OUTSIDE the      │
-// │  container — their own interactive single-control surfaces, no metaball glue │
-// │  into the morph (rc18-cut1).                                                    │
-// │ WHY Share is a standalone circle at all times AND a plain row in the open    │
-// │  panel: the morph source stays small (drop fidelity, DD-6) while the open    │
-// │  panel still exposes Share as its first row (FR-04/FR-05 — no nested glass   │
-// │  inside the panel).                                                          │
+// │ WHY the closed pill FUSES Share + `…` but only the `…` carries the morph   │
+// │  ID (DD-7 over DD-6): at 2pt adjacency the container's metaball field      │
+// │  renders the two glasses as ONE continuous capsule (single-pill look); the │
+// │  drop survives because the morph source stays the small `…` shape alone —   │
+// │  Share unmounts on open (consumed into the panel's first row, Apple-Notes  │
+// │  pattern, FR-04), so nothing live can glue to the flying drop (rc18-cut1). │
+// │  Undo is the one chrome artifact OUTSIDE the container (its own glass).     │
 // └────────────────────────────────────────────────────────────────────────────┘
 //
 // ┌─ PROHIBITED TOPOLOGIES (device-confirmed; do NOT reintroduce) ─────────────┐
@@ -235,12 +232,13 @@ struct ChromeOverlay: View {
                     .transition(.opacity)
             }
 
-            // The top chrome's glass group: Undo + Share are standalone glass
-            // artifacts beside (never inside) the morph container; the container
-            // holds the small … capsule XOR the panel — the drop-morph source.
+            // The top chrome: the Undo circle is its own glass artifact outside the
+            // container. Inside it, the CLOSED state fuses Share + `…` into one
+            // continuous pill (container metaball blending at 2pt adjacency); the
+            // OPEN state consumes Share into the panel's first row, leaving the
+            // small `…` capsule alone as the drop-morph source — no Share-glue.
             HStack(alignment: .top, spacing: ChromeMetrics.chromeControlGap) {
                 undoButton
-                shareControl
 
                 GlassEffectContainer(spacing: ChromeMetrics.metaballSpacing) {
                     if isMenuPresented {
@@ -257,7 +255,7 @@ struct ChromeOverlay: View {
                         // the morph (rc21). The branch crossfade stays (demo parity);
                         // rows inside the panel add none (rc22 D1).
                     } else {
-                        ellipsisControl
+                        closedPill
                     }
                 }
             }
@@ -326,13 +324,30 @@ struct ChromeOverlay: View {
         )
     }
 
-    // MARK: - Standalone Share control (DD-6)
+    // MARK: - Closed pill: Share + `…` fused (DD-7)
 
-    /// Share as its own 44pt glass circle OUTSIDE the morph container — the
-    /// rc18 anatomy: the drop-morph source must be a small roughly-square glass
-    /// shape, so Share cannot live inside the morphing capsule (DD-6 user
-    /// direction: pill first deforms into an irregular water-drop, then the
-    /// panel; a wide two-button capsule can only read as "expanding").
+    /// The closed state inside the morph container: Share's glass and the `…`
+    /// glass sit 2pt apart, so the container's metaball field renders them as
+    /// ONE continuous capsule — the single-pill look the user requires — while
+    /// each control keeps its own single-button interactive glass (hit shapes
+    /// intact per DD-2). The `…` alone carries the morph identity: on open,
+    /// Share unmounts (consumed into the panel's first row, Apple-Notes
+    /// pattern) and the small capsule deforms into the drop, then the panel.
+    private var closedPill: some View {
+        HStack(spacing: ChromeMetrics.capsuleControlSpacing) {
+            shareControl
+            ellipsisControl
+        }
+    }
+
+    // MARK: - Share control, one half of the fused closed pill (DD-7)
+
+    /// Share as its own 44pt interactive glass capsule — mounted ONLY in the
+    /// closed pill, where the container's metaball field fuses it with the
+    /// `…` capsule into one continuous glass body. While open, Share is
+    /// consumed into the panel's first row (Apple-Notes pattern; FR-04), so it
+    /// is never live in the container beside the morphing drop (the rc18-cut1
+    /// Share-glues-to-panel artifact is unreachable by construction).
     ///
     /// Single-control interactive glass (rc8 prohibition targets multi-button
     /// glass only); the frame + contentShape arm the full 44pt cell (DD-2).
@@ -347,7 +362,7 @@ struct ChromeOverlay: View {
         // EC-01: empty buffer → no share sheet; the panel's Share row uses the same gate.
         .disabled(isShareDisabled)
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
+        .glassEffect(.regular.interactive(), in: .capsule)
         .accessibilityLabel(
             String(localized: "Share", comment: "Share button accessibility label in the top pill")
         )
@@ -357,12 +372,15 @@ struct ChromeOverlay: View {
         )
     }
 
-    // MARK: - Drop-morph source: the small … capsule (§5.1.c, DD-6)
+    // MARK: - Drop-morph source: the small … capsule (§5.1.c, DD-6/DD-7)
 
-    /// The closed state's ONLY glass shape inside the morph container: a small
-    /// 44×44 capsule over ONE plain button — the LiquidMenuDemo / rc18 anatomy.
-    /// A roughly-square source stretching into the 280pt panel is what reads as
-    /// the irregular water-drop before the regular rectangle settles (DD-6).
+    /// The drop-morph source: a small 44×44 interactive glass capsule over ONE
+    /// plain button — the LiquidMenuDemo / rc18 anatomy. A roughly-square source
+    /// stretching into the 280pt panel is what reads as the irregular water-drop
+    /// before the regular rectangle settles (DD-6). In the closed pill it fuses
+    /// with Share's glass via the container field into one continuous capsule
+    /// (DD-7); while open it is the container's sole glass shape (DD-2 targets,
+    /// DD-4/5 transitions, matchedGeometry material all retained).
     ///
     /// - `.interactive()`: single-control variant, demo parity — the glass
     ///   squishes under the touch as the deformation starts.
