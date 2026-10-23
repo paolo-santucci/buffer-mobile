@@ -14,8 +14,10 @@
 // │   ZStack(alignment: .topTrailing) {                                         │
 // │       if open { tapCatcher }          // sibling, NOT in the morph container│
 // │       undoButton                     // PINNED trailing inset — never moved │
+// │       shareAnchor                    // invisible zoom source, every state  │
 // │       morphContainer(spacing: 35) {  // LAST z-child — expands OVER Undo     │
-// │           if open { MenuBubble } else { closedPill }  // XOR — never both   │
+// │           if sharing { melt }         // pill glass shrinks to nothing      │
+// │           else if open { MenuBubble } else { closedPill }  // XOR          │
 // │               .glassEffectID(chromeGlassID)  — NO .transition on children   │
 // │       }                                                                     │
 // │   }                                                                         │
@@ -57,7 +59,24 @@
 // │ • `.popover(` as the dismiss mechanism, an availability-guarded fallback     │
 // │   branch under Chrome/, a find affordance, a separate keyboard accessory    │
 // │   bar — all gate-checked (sp_chrome_morph c1, m4-3/7/8).                    │
+// │ • `if #available` fallbacks, and share presentation without a zoom source  │
+// │   (`SystemSharePresenter.present` without `from:`) — the whole-pill melt    │
+// │   and the zoom anchor are one seam, on every share path.                    │
 // └────────────────────────────────────────────────────────────────────────────┘
+//
+// WHOLE-PILL SHARE MORPH (user directive, "Apple Notes the pill morphs into the
+// system share sheet"): the Share half of the closed pill is a plain Button, not
+// a ShareLink — ShareLink exposes no hook into the system share presentation, so
+// no transition source can ride it. On tap: (1) the morph container flips to its
+// MELT state — an empty zero-size glass child carrying the same morph identity,
+// so the capsule's glass shrinks to nothing while (2) SystemSharePresenter
+// presents the system activity sheet with `preferredTransition = .zoom` sourced
+// at `ShareSourceAnchor` — an inert UIView mirroring the pill's exact slot,
+// mounted in every state (the melt unmounts the pill, never the anchor). On
+// completion/dismissal the zoom closes the sheet back into the pill's frame and
+// the melt reverses — the pill glass grows back. The still-open MenuBubble is
+// NOT reachable during a share (the Share control is only mounted while closed),
+// so share and menu morphs can never overlap.
 //
 // SUPERSESSION of the rc18-r2 header contract ("Share OUTSIDE the container — do NOT
 // reintroduce"). That guard protected against Share fusing with the OPEN panel while
@@ -174,6 +193,18 @@ struct ChromeOverlay: View {
     /// Private by design: nothing outside this view can reach it directly.
     @State private var isMenuPresented: Bool = false
 
+    /// `true` while the system share sheet is presented by the pill's Share tap.
+    /// Written by exactly two sources: `presentShareSheet()` (open, with the
+    /// melt) and the `SystemSharePresenter` completion (close, when the zoomed
+    /// sheet completes/dismisses — the pill glass grows back from the same
+    /// frame). The container hosts an empty zero-size glass child in this
+    /// state so the pill's morph identity shrinks to nothing as the zoom starts.
+    @State private var isShareSurfacePresented: Bool = false
+
+    /// Reference box receiving the inert share-source anchor UIView (the zoom
+    /// transition's geometric source — the closed pill's exact slot).
+    @State private var shareAnchorBox = ShareAnchorBox()
+
     // MARK: - Morph identity (§5.1.a morph identity seam)
 
     /// Namespace binding the closed capsule and the menu panel into one shared glass
@@ -253,8 +284,29 @@ struct ChromeOverlay: View {
                 // render glass OVER it).
                 .allowsHitTesting(!isMenuPresented)
 
+            // Inert coordinate anchor mirroring the closed pill's exact slot — the
+            // zoom transition's geometric source for the system share sheet.
+            // Invisible, never interactive, and mounted in EVERY state so its
+            // window frame is always resolvable (the share melt unmounts the
+            // pill, never this anchor).
+            ShareSourceAnchor(box: shareAnchorBox)
+                .frame(width: ChromeMetrics.closedPillWidth, height: ChromeMetrics.pillHeight)
+                .padding(.top, ChromeMetrics.pillTopGap)
+                .padding(.trailing, ChromeMetrics.chromeHorizontalInset)
+
             GlassEffectContainer(spacing: ChromeMetrics.metaballSpacing) {
-                if isMenuPresented {
+                if isShareSurfacePresented {
+                    // The share melt: the pill's morph identity shrinks to a
+                    // zero-size glass shape while the system share sheet zooms
+                    // out of the anchor's frame (the pill "melts into" the
+                    // sheet). The identity continuity lets the glass system
+                    // deform the capsule down instead of hard-swapping it.
+                    Color.clear
+                        .frame(width: 0, height: 0)
+                        .glassEffect(.regular, in: .capsule)
+                        .glassEffectTransition(.matchedGeometry)
+                        .glassEffectID(Self.chromeGlassID, in: glassNamespace)
+                } else if isMenuPresented {
                     MenuBubble(
                         menuVM: menuVM,
                         isPresented: $isMenuPresented,
@@ -359,14 +411,19 @@ struct ChromeOverlay: View {
 
     // MARK: - Share control, one half of the fused closed pill (rc24)
 
-    /// Share as ONE HALF of the rc24 fused capsule: a plain `ShareLink` whose
-    /// glass is the pill capsule itself (rc24 restoration). The tap target is
-    /// armed by the inline 44pt frame + contentShape (DD-2).
+    /// Share as ONE HALF of the rc24 fused capsule: a plain Button whose glass
+    /// is the pill capsule itself. Tapping it deforms the WHOLE pill (its morph
+    /// identity melts to a zero-size glass shape, presentShareSheet below)
+    /// while the system share sheet zooms out of the pill's exact frame — the
+    /// same button→overlay morph Apple Notes performs of its share panel.
+    /// (`ShareLink` had to go: it exposes no hook into the system share
+    /// presentation, so the zoom source cannot be attached to it.)
     ///
-    /// (The whole-pill share morph lands in a follow-up commit; until then the
-    /// ShareLink keeps presenting the sheet directly.)
+    /// The tap target is armed by the inline 44pt frame + contentShape (DD-2).
     private var shareControl: some View {
-        ShareLink(item: text) {
+        Button {
+            presentShareSheet()
+        } label: {
             Image(systemName: "square.and.arrow.up")
                 .fontWeight(ChromeMetrics.iconScaleWeight)
                 .imageScale(.large)
@@ -383,6 +440,30 @@ struct ChromeOverlay: View {
         .help(
             String(localized: "Share text", comment: "Share button tooltip in the top pill (FR-23)")
         )
+    }
+
+    // MARK: - Share presentation seam (whole-pill melt + system zoom morph)
+
+    /// Opens the system share sheet as a zoom-morph out of the pill.
+    ///
+    /// Two concurrent halves of one animation:
+    ///   1. The SwiftUI half — `isShareSurfacePresented` flips the morph
+    ///      container to its empty glass child, so the capsule's glass identity
+    ///      shrinks to nothing (the melt) under the open spring.
+    ///   2. The system half — `SystemSharePresenter` presents the share sheet
+    ///      zooming out of the anchor that mirrors the pill's exact frame.
+    /// The presenter owns the close seam: its `onFinish` (sheet completed or
+    /// dismissed — or presentation failed outright) melts the pill back under
+    /// the close spring, from the same frame the sheet zoomed into.
+    private func presentShareSheet() {
+        withAnimation(menuOpenAnimation) {
+            isShareSurfacePresented = true
+        }
+        SystemSharePresenter.present(text: text, from: shareAnchorBox) {
+            withAnimation(menuCloseAnimation) {
+                isShareSurfacePresented = false
+            }
+        }
     }
 
     // MARK: - `…` control, one half of the fused closed pill (rc24)

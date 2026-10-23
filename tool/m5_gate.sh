@@ -201,13 +201,16 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 7. sharelink-empty-gate
+# 7. share-empty-gate
 #
-# FR-20: the two live Share surfaces — ChromeOverlay.swift (closed pill) and
-# MenuBubble.swift (open panel row) — must each contain both 'ShareLink' AND a
-# '.disabled(' gate to confirm the outbound share is locked on empty buffer.
+# FR-20: the two live Share surfaces — ChromeOverlay.swift (closed pill, now a
+# whole-pill melt Button routed through SystemSharePresenter's zoom-morph
+# presentation) and MenuBubble.swift (open panel row, ShareLink) — must keep
+# an empty-buffer gate ('.disabled(') on both, and the pill must route through
+# the system share presenter so the pill→sheet zoom morph exists on every
+# share path.
 # ---------------------------------------------------------------------------
-echo "[7] sharelink-empty-gate: 'ShareLink' + '.disabled(' both present in ChromeOverlay.swift AND MenuBubble.swift ..."
+echo "[7] share-empty-gate: '.disabled(' in both surfaces; SystemSharePresenter in ChromeOverlay.swift ..."
 
 chrome_overlay_file="iosApp/iosApp/Chrome/ChromeOverlay.swift"
 menu_bubble_file="iosApp/iosApp/Chrome/MenuBubble.swift"
@@ -216,16 +219,16 @@ if [[ ! -f "$chrome_overlay_file" ]]; then
     result "sharelink-empty-gate" fail "$chrome_overlay_file not found on disk (FR-20)"
 elif [[ ! -f "$menu_bubble_file" ]]; then
     result "sharelink-empty-gate" fail "$menu_bubble_file not found on disk (FR-20)"
-elif ! grep -q "ShareLink" "$chrome_overlay_file" 2>/dev/null; then
-    result "sharelink-empty-gate" fail "'ShareLink' not found in $chrome_overlay_file (FR-20 — share control missing)"
+elif ! grep -q "SystemSharePresenter.present(" "$chrome_overlay_file" 2>/dev/null; then
+    result "share-empty-gate" fail "'SystemSharePresenter.present(' not found in $chrome_overlay_file (FR-20 — pill zoom-morph share missing)"
 elif ! grep -q "\.disabled(" "$chrome_overlay_file" 2>/dev/null; then
-    result "sharelink-empty-gate" fail "'.disabled(' not found in $chrome_overlay_file (FR-20 — empty-buffer gate missing)"
+    result "share-empty-gate" fail "'.disabled(' not found in $chrome_overlay_file (FR-20 — empty-buffer gate missing)"
 elif ! grep -q "ShareLink" "$menu_bubble_file" 2>/dev/null; then
-    result "sharelink-empty-gate" fail "'ShareLink' not found in $menu_bubble_file (FR-20 — share control missing)"
+    result "share-empty-gate" fail "'ShareLink' not found in $menu_bubble_file (FR-20 — share control missing)"
 elif ! grep -q "\.disabled(" "$menu_bubble_file" 2>/dev/null; then
-    result "sharelink-empty-gate" fail "'.disabled(' not found in $menu_bubble_file (FR-20 — empty-buffer gate missing)"
+    result "share-empty-gate" fail "'.disabled(' not found in $menu_bubble_file (FR-20 — empty-buffer gate missing)"
 else
-    result "sharelink-empty-gate" ok
+    result "share-empty-gate" ok
 fi
 
 # ---------------------------------------------------------------------------
