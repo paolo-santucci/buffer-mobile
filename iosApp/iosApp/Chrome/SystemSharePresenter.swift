@@ -10,16 +10,16 @@
 // ShareLink cannot host this: it exposes no hook into the system share
 // presentation, so the pill's Share tap routes through this presenter instead.
 // The pill's own glass is deformed by ChromeOverlay (its morph identity
-// shrinks to nothing) while the system presents the anchored panel — the
-// closed loop the user requires:
-//   open:  pill melts ⇢ anchored panel hangs from the pill's top edge
-//   close: panel dismisses ⇢ pill glass grows back from the same frame
+// stretches into the panel-sized blob) while the system presents the anchored
+// panel over it — the closed loop the user requires:
+//   open:  pill stretches into the blob ⇢ anchored panel hangs from the pill's top edge
+//   close: panel dismisses ⇢ blob morphs back into the pill
 //
 // ShareAnchorBox / ShareSourceAnchor: a reference box bridging a
 // UIViewRepresentable's UIView to the presenter. The anchor mirrors the
 // closed pill's slot geometry (ChromeMetrics.closedPillWidth × pillHeight at
 // the pill's top/trailing paddings) and is mounted in EVERY chrome state so
-// its window frame is always resolvable — the melt unmounts the pill, never
+// its window frame is always resolvable — the blob unmounts the pill, never
 // the anchor.
 //
 // No glass symbols here: the presenter is presentation plumbing, not chrome
@@ -89,7 +89,7 @@ private final class SharePopoverAdaptivity: NSObject, UIPopoverPresentationContr
 ///   - anchor: The `ShareAnchorBox` whose view carries the pill's frame.
 ///   - onFinish: Fired exactly once — immediately when presentation cannot
 ///     start (detached anchor/no presenting controller), otherwise when the
-///     activity sheet completes or is dismissed. Closing the melt state must
+///     activity sheet completes or is dismissed. Closing the blob state must
 ///     ride this so the pill glass grows back from the zoomed-out frame.
 @MainActor
 enum SystemSharePresenter {
@@ -110,7 +110,7 @@ enum SystemSharePresenter {
               let presenting = topPresentingController(for: source),
               // Fast-fail while a presentation is already in progress on that
               // chain (UIKit would silently skip the second present() and the
-              // melt would never learn the sheet failed to appear).
+              // blob would never learn the panel failed to appear).
               presenting.presentedViewController == nil else {
             onFinish()
             return
@@ -149,7 +149,7 @@ enum SystemSharePresenter {
 
     /// The view controller to present from: the key window scene's root,
     /// climbed to the topmost presented child (nil-tolerant — no scene/no
-    /// window/no root reports failure and `present` closes the melt state).
+    /// window/no root reports failure and `present` closes the blob state).
     private static func topPresentingController(for view: UIView) -> UIViewController? {
         guard let scene = view.window?.windowScene else { return nil }
         let keyRoot = scene.windows.first { $0.isKeyWindow }?.rootViewController

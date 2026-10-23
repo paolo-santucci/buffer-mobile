@@ -37,8 +37,13 @@ enum ChromeMetrics {
     static let menuRowSpacing: CGFloat = 2
     static let menuPanelCornerRadius: CGFloat = 30
 
+    // Share blob (the pill morphs INTO this glass surface while the system
+    // share popover presents over it — the pill "becomes" the share panel)
+    static let sharePanelBlobWidth: CGFloat = 320
+    static let sharePanelBlobHeight: CGFloat = 480
+
     // Chrome motion (gated to nil at the consuming seam under Reduce Motion)
-    static let menuOpenSpring: Animation = .bouncy(duration: 0.45, extraBounce: 0.15)
+    static let menuOpenSpring: Animation = .bouncy(duration: 0.55, extraBounce: 0.10)
     static let menuCloseSpring: Animation = .bouncy(duration: 0.40, extraBounce: 0.10)
     static let submenuExpandAnimation: Animation = .bouncy(duration: 0.35, extraBounce: 0.10)
 
