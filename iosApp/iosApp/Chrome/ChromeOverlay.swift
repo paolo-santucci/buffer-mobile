@@ -13,11 +13,12 @@
 // │                                                                            │
 // │   ZStack(alignment: .topTrailing) {                                         │
 // │       if open { tapCatcher }          // sibling, NOT in the morph container│
-// │       morphContainer(spacing: 35) {                                         │
+// │       undoButton                     // PINNED trailing inset — never moved │
+// │       morphContainer(spacing: 35) {  // LAST z-child — expands OVER Undo     │
 // │           if open { MenuBubble } else { closedPill }  // XOR — never both   │
 // │               .glassEffectID(chromeGlassID)  — NO .transition on children   │
 // │       }                                                                     │
-// │   }.padding(.top, 16).padding(.horizontal, 16)                              │
+// │   }                                                                         │
 // │                                                                            │
 // │ WHY one child per state: the glass system fuses glass shapes inside one     │
 // │  container. Two live children would metaball-merge into one blob ("Share    │
@@ -125,8 +126,11 @@ final class CoordinatorBox {
 /// Non-visual composition container for the Liquid Glass chrome controls.
 ///
 /// Layout (top-trailing, within safe area):
+///   - A pinned standalone Undo glass circle (own trailing inset — never moves;
+///     hit-testing off while glass renders over it).
 ///   - The shared morph container — the positioned top-trailing child, holding EXACTLY one
-///     child per state: `ellipsisControl` (closed) XOR `MenuBubble` (open), sharing the morph ID.
+///     child per state: `closedPill` (closed) XOR `MenuBubble` (open), sharing the morph ID.
+///     As the LAST z-child it expands OVER the Undo circle instead of pushing it.
 ///   - Transparent full-screen tap-catcher (only while open) — outside-tap dismiss (EC-14).
 ///
 /// **Glass morph (FR-02/FR-03):** see the header topology diagram. The fused closed
@@ -235,35 +239,40 @@ struct ChromeOverlay: View {
                     .transition(.opacity)
             }
 
-            // The top chrome: the Undo circle is its own glass artifact outside the
-            // container. Inside it, the CLOSED state fuses Share + `…` into one
-            // continuous pill (container metaball blending at 2pt adjacency); the
-            // OPEN state consumes Share into the panel's first row, leaving the
-            // small `…` capsule alone as the drop-morph source — no Share-glue.
-            HStack(alignment: .top, spacing: ChromeMetrics.chromeControlGap) {
-                undoButton
+            // The top chrome: the Undo circle is its own glass artifact OUTSIDE the
+            // morph container, PINNED at its own trailing inset so its position is
+            // independent of what the morph container hosts. The morph container is
+            // the LAST z-child, so whatever it expands into (the panel now, the
+            // share sheet later) grows OVER the Undo circle instead of pushing it
+            // — the Apple-Notes layering the user requires.
+            undoButton
+                .padding(.top, ChromeMetrics.pillTopGap)
+                .padding(.trailing, ChromeMetrics.undoCircleTrailingInset)
+                // The pinned Undo circle must not intercept taps that belong to
+                // the open panel or the outside-tap dismiss (both state that
+                // render glass OVER it).
+                .allowsHitTesting(!isMenuPresented)
 
-                GlassEffectContainer(spacing: ChromeMetrics.metaballSpacing) {
-                    if isMenuPresented {
-                        MenuBubble(
-                            menuVM: menuVM,
-                            isPresented: $isMenuPresented,
-                            glassNamespace: glassNamespace,
-                            glassID: Self.chromeGlassID,
-                            dismissAnimation: menuCloseAnimation,
-                            text: text,
-                            isShareDisabled: isShareDisabled
-                        )
-                        // No transition modifier on either XOR child — .identity kills
-                        // the morph (rc21). The branch crossfade stays (demo parity);
-                        // rows inside the panel add none (rc22 D1).
-                    } else {
-                        closedPill
-                    }
+            GlassEffectContainer(spacing: ChromeMetrics.metaballSpacing) {
+                if isMenuPresented {
+                    MenuBubble(
+                        menuVM: menuVM,
+                        isPresented: $isMenuPresented,
+                        glassNamespace: glassNamespace,
+                        glassID: Self.chromeGlassID,
+                        dismissAnimation: menuCloseAnimation,
+                        text: text,
+                        isShareDisabled: isShareDisabled
+                    )
+                    // No transition modifier on either XOR child — .identity kills
+                    // the morph (rc21). The branch crossfade stays (demo parity);
+                    // rows inside the panel add none (rc22 D1).
+                } else {
+                    closedPill
                 }
             }
             .padding(.top, ChromeMetrics.pillTopGap)
-            .padding(.horizontal, ChromeMetrics.chromeHorizontalInset)
+            .padding(.trailing, ChromeMetrics.chromeHorizontalInset)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         // Crossfade the chrome layer (incl. the tap-catcher) with ChromeVisibility
@@ -289,14 +298,16 @@ struct ChromeOverlay: View {
 
     // MARK: - Undo circle (DD-3/DD-10)
 
-    /// The top-leading control beside the Share/…morph-capsule: a standalone
-    /// glass circle in the same manual-glass anatomy as the capsule, sized to
-    /// equal its height (44pt circle vs 44pt capsule — user-approved DD-3a).
+    /// The top-leading control: a standalone glass circle in the same
+    /// manual-glass anatomy as the pill capsule, sized to equal its height
+    /// (44pt circle vs 44pt capsule — user-approved DD-3a).
     ///
-    /// Deliberately OUTSIDE the morph container: a second live glass shape
-    /// inside `GlassEffectContainer` would coalesce with the capsule or the
-    /// open panel during the morph (§4.4 prohibited topologies). Separate
-    /// adjacency keeps the merge domain single-shape per state.
+    /// Deliberately OUTSIDE the morph container and PINNED at
+    /// `ChromeMetrics.undoCircleTrailingInset`, so its position is independent
+    /// of the morph container's content: when the panel (or later the share
+    /// sheet) expands, it grows OVER this circle instead of pushing it aside.
+    /// While the panel is open the circle stops hit-testing so taps fall
+    /// through to the outside-tap dismiss (see the body allowsHitTesting gate).
     ///
     /// Single-button glass — `.interactive()` here is the one-control variant
     /// the rc8 prohibition does not cover (multi-button glass).

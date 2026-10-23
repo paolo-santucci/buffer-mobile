@@ -49,6 +49,17 @@ enum ChromeMetrics {
     // Top chrome — gap between the Undo circle and the Share/… capsule
     static let chromeControlGap: CGFloat = 10
 
+    // rc24 fused-pill geometry (derived; the 44pt tap targets stay inline at
+    // their call sites — only the arithmetic lives here)
+    static let closedPillWidth: CGFloat = ChromeMetrics.capsuleHorizontalPadding
+        + ChromeMetrics.pillHeight
+        + ChromeMetrics.capsuleControlSpacing
+        + ChromeMetrics.pillHeight
+        + ChromeMetrics.capsuleHorizontalPadding
+    static let undoCircleTrailingInset: CGFloat = ChromeMetrics.chromeHorizontalInset
+        + ChromeMetrics.closedPillWidth
+        + ChromeMetrics.chromeControlGap
+
     // Bottom toolbar
     static let toolbarItemSpacing: CGFloat = 4
     static let capsuleHorizontalPadding: CGFloat = 8
