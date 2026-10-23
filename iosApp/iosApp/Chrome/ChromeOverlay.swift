@@ -1,9 +1,9 @@
 // Chrome/ChromeOverlay.swift
 // Foglietto — Apple-Notes (iOS 26) Chrome Restyle
 //
-// Container view composing the top-right chrome: standalone Undo + Share glass
-// circles beside ONE small overflow (`…`) glass capsule that deforms as a liquid
-// drop into the menu panel
+// Container view composing the top-right chrome: a standalone Undo glass circle
+// beside ONE glass capsule (rc24 anatomy: Share + `…` behind a single pinned
+// `.regular` capsule) that deforms as a liquid unit into the menu panel
 // (MenuBubble) and back, over the editor. Reads ChromeVisibility.isVisible and
 // crossfades the chrome layer. Owns the ONE shared morph container, the morph
 // namespace, and the private `isMenuPresented` state.
@@ -14,7 +14,7 @@
 // │   ZStack(alignment: .topTrailing) {                                         │
 // │       if open { tapCatcher }          // sibling, NOT in the morph container│
 // │       morphContainer(spacing: 35) {                                         │
-// │           if open { MenuBubble } else { ellipsisControl }  // XOR — never both  │
+// │           if open { MenuBubble } else { closedPill }  // XOR — never both   │
 // │               .glassEffectID(chromeGlassID)  — NO .transition on children   │
 // │       }                                                                     │
 // │   }.padding(.top, 16).padding(.horizontal, 16)                              │
@@ -22,18 +22,21 @@
 // │ WHY one child per state: the glass system fuses glass shapes inside one     │
 // │  container. Two live children would metaball-merge into one blob ("Share    │
 // │  glues to the panel", rc15/rc18-initial). One child = one glass shape, so    │
-// │  the merge is never observable and the whole-pill→panel deformation reads    │
+// │  the merge is never observable and the whole-pill→panel deformation reads   │
 // │  as a single liquid unit (FR-01…FR-03).                                     │
 // │ WHY NO .transition on the XOR children (device-verified, LiquidMenuDemo):   │
 // │  `.identity` removes the animated insertion/removal window the glass        │
 // │  container needs to interpolate — it KILLS the morph (rc21). The default    │
 // │  branch crossfade is demo parity; INNER row fades compound (rc22 D1)        │
-// │ WHY the closed pill FUSES Share + `…` but only the `…` carries the morph   │
-// │  ID (DD-7 over DD-6): at 2pt adjacency the container's metaball field      │
-// │  renders the two glasses as ONE continuous capsule (single-pill look); the │
-// │  drop survives because the morph source stays the small `…` shape alone —   │
+// │ WHY the capsule carries the morph ID as a WHOLE (rc24 restoration, DD-6     │
+// │  direction superseded): rc25's split topology (small `…` capsule as the     │
+// │  source, Share a standalone circle) made the at-rest pill read as two       │
+// │  lenses and the open animation "just expands". The pill is back to the     │
+// │  rc24 anatomy — ONE capsule over two plain Share + `…` buttons, pinned      │
+// │  `.regular` — and the WHOLE capsule carries `glassEffectID`, so the `…`    │
+// │  tap deforms the entire pill (droplet down, then settle into the panel).   │
 // │  Share unmounts on open (consumed into the panel's first row, Apple-Notes  │
-// │  pattern, FR-04), so nothing live can glue to the flying drop (rc18-cut1). │
+// │  pattern, FR-04), so nothing live can glue to the flying glass (rc18-cut1).│
 // │  Undo is the one chrome artifact OUTSIDE the container (its own glass).     │
 // └────────────────────────────────────────────────────────────────────────────┘
 //
@@ -324,33 +327,33 @@ struct ChromeOverlay: View {
         )
     }
 
-    // MARK: - Closed pill: Share + `…` fused (DD-7)
+    // MARK: - Closed pill: Share + `…` fused (rc24 restoration)
 
-    /// The closed state inside the morph container: Share's glass and the `…`
-    /// glass sit 2pt apart, so the container's metaball field renders them as
-    /// ONE continuous capsule — the single-pill look the user requires — while
-    /// each control keeps its own single-button interactive glass (hit shapes
-    /// intact per DD-2). The `…` alone carries the morph identity: on open,
-    /// Share unmounts (consumed into the panel's first row, Apple-Notes
-    /// pattern) and the small capsule deforms into the drop, then the panel.
+    /// The closed state's ONLY glass shape, restored from rc24: ONE capsule over
+    /// two plain buttons (Share + `…`) — the `BottomToolbar` anatomy. The capsule
+    /// glass is PINNED `.regular` (the interactive variant is prohibited on
+    /// multi-button glass — rc8 tap-swallow) and the WHOLE capsule carries the
+    /// morph identity, so both the `…` tap and (later) the Share tap deform the
+    /// entire pill as a single liquid unit.
     private var closedPill: some View {
         HStack(spacing: ChromeMetrics.capsuleControlSpacing) {
             shareControl
             ellipsisControl
         }
+        .padding(.horizontal, ChromeMetrics.capsuleHorizontalPadding)
+        .glassEffect(.regular, in: .capsule)
+        .glassEffectTransition(.matchedGeometry)
+        .glassEffectID(Self.chromeGlassID, in: glassNamespace)
     }
 
-    // MARK: - Share control, one half of the fused closed pill (DD-7)
+    // MARK: - Share control, one half of the fused closed pill (rc24)
 
-    /// Share as its own 44pt interactive glass capsule — mounted ONLY in the
-    /// closed pill, where the container's metaball field fuses it with the
-    /// `…` capsule into one continuous glass body. While open, Share is
-    /// consumed into the panel's first row (Apple-Notes pattern; FR-04), so it
-    /// is never live in the container beside the morphing drop (the rc18-cut1
-    /// Share-glues-to-panel artifact is unreachable by construction).
+    /// Share as ONE HALF of the rc24 fused capsule: a plain `ShareLink` whose
+    /// glass is the pill capsule itself (rc24 restoration). The tap target is
+    /// armed by the inline 44pt frame + contentShape (DD-2).
     ///
-    /// Single-control interactive glass (rc8 prohibition targets multi-button
-    /// glass only); the frame + contentShape arm the full 44pt cell (DD-2).
+    /// (The whole-pill share morph lands in a follow-up commit; until then the
+    /// ShareLink keeps presenting the sheet directly.)
     private var shareControl: some View {
         ShareLink(item: text) {
             Image(systemName: "square.and.arrow.up")
@@ -362,7 +365,6 @@ struct ChromeOverlay: View {
         // EC-01: empty buffer → no share sheet; the panel's Share row uses the same gate.
         .disabled(isShareDisabled)
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .capsule)
         .accessibilityLabel(
             String(localized: "Share", comment: "Share button accessibility label in the top pill")
         )
@@ -372,21 +374,13 @@ struct ChromeOverlay: View {
         )
     }
 
-    // MARK: - Drop-morph source: the small … capsule (§5.1.c, DD-6/DD-7)
+    // MARK: - `…` control, one half of the fused closed pill (rc24)
 
-    /// The drop-morph source: a small 44×44 interactive glass capsule over ONE
-    /// plain button — the LiquidMenuDemo / rc18 anatomy. A roughly-square source
-    /// stretching into the 280pt panel is what reads as the irregular water-drop
-    /// before the regular rectangle settles (DD-6). In the closed pill it fuses
-    /// with Share's glass via the container field into one continuous capsule
-    /// (DD-7); while open it is the container's sole glass shape (DD-2 targets,
-    /// DD-4/5 transitions, matchedGeometry material all retained).
-    ///
-    /// - `.interactive()`: single-control variant, demo parity — the glass
-    ///   squishes under the touch as the deformation starts.
-    /// - `.glassEffectID(chromeGlassID, in: glassNamespace)`: morph identity —
-    ///   the glass system deforms THIS capsule into `MenuBubble` and back.
-    /// - The frame + contentShape arm the full 44pt tap target (DD-2).
+    /// The `…` as ONE HALF of the rc24 fused capsule: a plain button whose glass
+    /// is the pill capsule itself (rc24 restoration) — the rc8 tap-swallow
+    /// prohibition (`.interactive()` on multi-button glass) cannot trigger
+    /// because the capsule is pinned `.regular` and every button inside it is
+    /// `.plain`. The frame + contentShape arm the full 44pt tap target (DD-2).
     private var ellipsisControl: some View {
         Button {
             // EC-14 write-source 1 — the control is mounted only while closed.
@@ -401,9 +395,6 @@ struct ChromeOverlay: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .capsule)
-        .glassEffectTransition(.matchedGeometry)
-        .glassEffectID(Self.chromeGlassID, in: glassNamespace)
         .accessibilityLabel(
             String(localized: "Menu", comment: "Overflow menu button accessibility label in the top pill")
         )
