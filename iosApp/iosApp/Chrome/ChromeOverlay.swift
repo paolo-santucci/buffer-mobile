@@ -122,6 +122,7 @@
 
 import SwiftUI
 import shared
+import Observation
 
 // MARK: - CoordinatorBox
 
@@ -187,15 +188,15 @@ struct ChromeOverlay: View {
     /// The menu view model — forwarded to `MenuBubble` (ctor-injected DIP).
     let menuVM: MenuViewModel
 
-    /// Chrome-dispatched undo of the last editor edit — invoked by the standalone
-    /// Undo circle and routed by the composition root to the live editor coordinator.
-    let onUndo: () -> Void
-
     /// `true` while the live editor's undo manager has something to undo
     /// (mirrored by `BufferEditor.Coordinator` into `CoordinatorBox.canUndo`).
     /// `false` → the Undo circle is not rendered: the control is visible only
     /// when there is something to undo.
     let canUndo: Bool
+
+    /// Chrome-dispatched undo of the last editor edit — invoked by the standalone
+    /// Undo circle and routed by the composition root to the live editor coordinator.
+    let onUndo: () -> Void
 
     // MARK: - Local state
 

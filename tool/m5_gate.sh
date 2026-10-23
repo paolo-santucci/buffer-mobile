@@ -216,9 +216,9 @@ chrome_overlay_file="iosApp/iosApp/Chrome/ChromeOverlay.swift"
 menu_bubble_file="iosApp/iosApp/Chrome/MenuBubble.swift"
 
 if [[ ! -f "$chrome_overlay_file" ]]; then
-    result "sharelink-empty-gate" fail "$chrome_overlay_file not found on disk (FR-20)"
+    result "share-empty-gate" fail "$chrome_overlay_file not found on disk (FR-20)"
 elif [[ ! -f "$menu_bubble_file" ]]; then
-    result "sharelink-empty-gate" fail "$menu_bubble_file not found on disk (FR-20)"
+    result "share-empty-gate" fail "$menu_bubble_file not found on disk (FR-20)"
 elif ! grep -q "SystemSharePresenter.present(" "$chrome_overlay_file" 2>/dev/null; then
     result "share-empty-gate" fail "'SystemSharePresenter.present(' not found in $chrome_overlay_file (FR-20 — pill zoom-morph share missing)"
 elif ! grep -q "\.disabled(" "$chrome_overlay_file" 2>/dev/null; then

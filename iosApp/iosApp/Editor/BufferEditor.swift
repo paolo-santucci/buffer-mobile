@@ -163,6 +163,10 @@ struct BufferEditor: UIViewRepresentable {
         BufferEditor.reconcileInset(of: uiView)
 
         context.coordinator.onUndoStateChange = { [weak coordinatorBox] canUndo in
+            // Value-guarded: updateUIView runs on every editor tick, and an
+            // unconditional @Observable write during the update phase
+            // self-invalidates the reading view — a self-sustaining loop.
+            guard (coordinatorBox?.canUndo ?? false) != canUndo else { return }
             coordinatorBox?.canUndo = canUndo
         }
         context.coordinator.mirrorUndoState()

@@ -29,10 +29,12 @@
 // Spec refs (FR-20 share morph, user-directed rc26+): zoom source = pill.
 // Contract: SystemSharePresenter.present(text:from:onFinish:) is the ONLY
 // entry; onFinish fires exactly once, on presentation failure (box detached,
-// no presenting controller) or when the activity sheet completes/dismisses.
+// presenting chain busy, no presenting controller) or when the activity sheet
+// completes/dismisses.
 
 import UIKit
 import SwiftUI
+import Observation
 
 // MARK: - ShareAnchorBox
 
@@ -81,10 +83,14 @@ enum SystemSharePresenter {
     static func present(
         text: String,
         from anchor: ShareAnchorBox,
-        onFinish: @escaping () -> Void
+        onFinish: @escaping @MainActor @Sendable () -> Void
     ) {
         guard let source = anchor.view,
-              let presenting = topPresentingController(for: source) else {
+              let presenting = topPresentingController(for: source),
+              // Fast-fail while a presentation is already in progress on that
+              // chain (UIKit would silently skip the second present() and the
+              // melt would never learn the sheet failed to appear).
+              presenting.presentedViewController == nil else {
             onFinish()
             return
         }
@@ -100,7 +106,9 @@ enum SystemSharePresenter {
             source
         }
         controller.completionWithItemsHandler = { _, _, _, _ in
-            DispatchQueue.main.async {
+            // Documented main-thread completion; the Task hop keeps the
+            // MainActor call statically legal under Swift 6 concurrency rules.
+            Task { @MainActor in
                 onFinish()
             }
         }
