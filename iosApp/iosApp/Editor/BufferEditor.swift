@@ -322,8 +322,10 @@ struct BufferEditor: UIViewRepresentable {
         /// Re-derive the undoability state off the live text view and report it
         /// through `onUndoStateChange` (the Undo circle's visibility mirror).
         /// A detached view reports `false` — there is nothing to undo once the
-        /// surface is gone (EC-13).
-        private func mirrorUndoState() {
+        /// surface is gone (EC-13). Internal (not private): `updateUIView` of the
+        /// enclosing representable drives the initial sync through this method,
+        /// and nested-type privacy would make it inaccessible there.
+        func mirrorUndoState() {
             let canUndo = textView?.undoManager?.canUndo ?? false
             onUndoStateChange?(canUndo)
         }
