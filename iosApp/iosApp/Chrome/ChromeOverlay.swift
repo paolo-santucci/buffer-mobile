@@ -133,11 +133,23 @@ import shared
 ///
 /// `coordinator` is declared `weak` so the box does not extend the coordinator's
 /// lifetime beyond the UIViewRepresentable's natural teardown.
+///
+/// `@Observable`: `canUndo` is mirrored here by `BufferEditor.Coordinator`
+/// (via `onUndoStateChange`), so SwiftUI re-renders whichever view reads the
+/// box — the always-visible-only-when-undoable gating of the Undo circle.
+/// Undo with an empty stack is a no-op (FR-15 analog), so hiding the circle
+/// reflects reachability, not correctness.
+@Observable
 final class CoordinatorBox {
     /// The live `BufferEditor.Coordinator`. Set once in `BufferEditor.makeUIView`;
     /// cleared automatically when the coordinator deallocates (weak ref). All
     /// toolbar closures guard against `nil` before use (EC-13).
     weak var coordinator: BufferEditor.Coordinator?
+
+    /// `true` while the live text view's undo manager holds an undoable state
+    /// (`UITextView.undoManager.canUndo`), mirrored from the Coordinator on
+    /// every text-affecting path. `false` → the Undo circle is not rendered.
+    var canUndo: Bool = false
 }
 
 // MARK: - ChromeOverlay
@@ -183,6 +195,12 @@ struct ChromeOverlay: View {
     /// Chrome-dispatched undo of the last editor edit — invoked by the standalone
     /// Undo circle and routed by the composition root to the live editor coordinator.
     let onUndo: () -> Void
+
+    /// `true` while the live editor's undo manager has something to undo
+    /// (mirrored by `BufferEditor.Coordinator` into `CoordinatorBox.canUndo`).
+    /// `false` → the Undo circle is not rendered: the control is visible only
+    /// when there is something to undo.
+    let canUndo: Bool
 
     // MARK: - Local state
 
@@ -276,13 +294,15 @@ struct ChromeOverlay: View {
             // the LAST z-child, so whatever it expands into (the panel now, the
             // share sheet later) grows OVER the Undo circle instead of pushing it
             // — the Apple-Notes layering the user requires.
-            undoButton
-                .padding(.top, ChromeMetrics.pillTopGap)
-                .padding(.trailing, ChromeMetrics.undoCircleTrailingInset)
-                // The pinned Undo circle must not intercept taps that belong to
-                // the open panel or the outside-tap dismiss (both state that
-                // render glass OVER it).
-                .allowsHitTesting(!isMenuPresented)
+            if canUndo {
+                undoButton
+                    .padding(.top, ChromeMetrics.pillTopGap)
+                    .padding(.trailing, ChromeMetrics.undoCircleTrailingInset)
+                    // The pinned Undo circle must not intercept taps that belong to
+                    // the open panel or the outside-tap dismiss (both state that
+                    // render glass OVER it).
+                    .allowsHitTesting(!isMenuPresented)
+            }
 
             // Inert coordinate anchor mirroring the closed pill's exact slot — the
             // zoom transition's geometric source for the system share sheet.

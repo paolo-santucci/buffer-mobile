@@ -174,6 +174,10 @@ struct BufferEditor: UIViewRepresentable {
             context.coordinator.onScroll = { [weak cv] dir in cv?.injectScroll(dir) }
             context.coordinator.onKeyboardDismiss = { [weak cv] in cv?.injectKeyboardDismiss() }
         }
+        context.coordinator.onUndoStateChange = { [weak coordinatorBox] canUndo in
+            coordinatorBox?.canUndo = canUndo
+        }
+        context.coordinator.mirrorUndoState()
     }
 
     func makeCoordinator() -> Coordinator {
@@ -247,6 +251,11 @@ struct BufferEditor: UIViewRepresentable {
         /// Called on every keystroke; wired to the chrome-visibility typing seam.
         var onTyping: (() -> Void)?
 
+        /// Called whenever the mirrored undo-ability state is re-derived; wired
+        /// to `CoordinatorBox.canUndo` in `updateUIView` so the Undo circle
+        /// renders only when there is something to undo.
+        var onUndoStateChange: ((Bool) -> Void)?
+
         /// Called on every scroll tick with the derived direction; nil-safe when unset.
         var onScroll: ((ScrollDirection) -> Void)?
 
@@ -291,6 +300,7 @@ struct BufferEditor: UIViewRepresentable {
                 tv.selectedRange = NSRange(location: newLocation, length: 0)
             }
             viewModel.updateText(tv.text ?? "")
+            mirrorUndoState()
         }
 
         /// Resign first responder on the live text view, dismissing the keyboard (FR-16).
@@ -311,6 +321,7 @@ struct BufferEditor: UIViewRepresentable {
             guard let tv = textView else { return }
             tv.text = text
             tv.selectedRange = range
+            mirrorUndoState()
         }
 
         /// Invoke the text view's native undo manager and mirror the reverted
@@ -326,6 +337,16 @@ struct BufferEditor: UIViewRepresentable {
             guard let tv = textView else { return }
             tv.undoManager?.undo()
             viewModel.updateText(tv.text ?? "")
+            mirrorUndoState()
+        }
+
+        /// Re-derive the undoability state off the live text view and report it
+        /// through `onUndoStateChange` (the Undo circle's visibility mirror).
+        /// A detached view reports `false` — there is nothing to undo once the
+        /// surface is gone (EC-13).
+        private func mirrorUndoState() {
+            let canUndo = textView?.undoManager?.canUndo ?? false
+            onUndoStateChange?(canUndo)
         }
 
         // MARK: UITextViewDelegate — the single pre-edit hook (FR-02)
@@ -374,12 +395,14 @@ struct BufferEditor: UIViewRepresentable {
         // MARK: UITextViewDelegate — committed-text mirror
 
         /// Mirror committed text into the `BufferViewModel` after every UIKit-applied edit
-        /// (FR-13), and emit the typing event for the chrome auto-hide state machine (FR-19).
+        /// (FR-13), and emit the typing event for the chrome auto-hide state machine (FR-19),
+        /// plus the undo-ability mirror for the Undo circle's visibility.
         ///
         /// The continuation branch (which returns `false`) mirrors inside
         /// `shouldChangeTextIn` instead, because `textViewDidChange` never runs for it.
         func textViewDidChange(_ textView: UITextView) {
             viewModel.updateText(textView.text)
+            mirrorUndoState()
             onTyping?()
         }
 

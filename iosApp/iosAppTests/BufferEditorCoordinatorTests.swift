@@ -533,6 +533,49 @@ final class BufferEditorCoordinatorM4Tests: XCTestCase {
     }
 
     // -----------------------------------------------------------------------
+    // MARK: - Undo-ability mirror (Undo circle visible only when undoable)
+
+    /// The mirror reports `false` on an empty undo stack — the Undo circle
+    /// stays unrendered when there is nothing to undo.
+    func test_onUndoStateChange_emptyStack_reportsFalse() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+
+        let (tv, coord, _) = makeMountedCoordinator(viewModel: vm)
+
+        var reported: [Bool] = []
+        coord.onUndoStateChange = { reported.append($0) }
+
+        coord.undo()
+
+        XCTAssertEqual(reported, [false],
+            "undo() with an empty stack must report canUndo == false (Undo circle hidden)")
+        _ = tv
+    }
+
+    /// The mirror reports the registered-edit flip-flop: undoable while an undo
+    /// operation is registered, not-undoable once the stack is consumed.
+    func test_onUndoStateChange_registeredOp_reportsTrue_thenUndoReportsFalse() {
+        let stub = StubSettingsRepository()
+        let vm = BufferViewModel(settings: stub)
+
+        let (tv, coord, _) = makeMountedCoordinator(viewModel: vm)
+
+        var reported: [Bool] = []
+        coord.onUndoStateChange = { reported.append($0) }
+
+        tv.text = "draft"
+        tv.undoManager?.registerUndo(withTarget: tv) { target in target.text = "" }
+        coord.textViewDidChange(tv)
+        coord.undo()
+
+        XCTAssertEqual(reported.first, true,
+            "the registered edit must mirror canUndo == true (Undo circle visible)")
+        XCTAssertEqual(reported.last, false,
+            "consumed stack must mirror canUndo == false (Undo circle hidden)")
+    }
+
+    // -----------------------------------------------------------------------
     // MARK: - textView weak reference nil-safety (EC-13 / FR-06)
 
     /// coordinator.textView becomes nil after the UITextView deallocates (no retain cycle, EC-13).

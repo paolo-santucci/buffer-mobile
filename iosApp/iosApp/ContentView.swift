@@ -146,6 +146,7 @@ struct ContentView: View {
                 text: viewModel.text,
                 menuVM: menuVM,
                 chromeVisibility: chromeVisibility,
+                canUndo: coordinatorBox.canUndo,
                 onUndo: { [coordinatorBox] in
                     coordinatorBox.coordinator?.undo()
                 }
