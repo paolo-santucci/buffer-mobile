@@ -4,9 +4,10 @@
 // Container view composing the top-right chrome: a standalone Undo glass circle
 // beside ONE glass capsule (rc24 anatomy: Share + `…` behind a single pinned
 // `.regular` capsule) that deforms as a liquid unit into the menu panel
-// (MenuBubble) and back, over the editor. Reads ChromeVisibility.isVisible and
-// crossfades the chrome layer. Owns the ONE shared morph container, the morph
-// namespace, and the private `isMenuPresented` state.
+// (MenuBubble) and back, over the editor. The chrome is permanently visible:
+// the auto-hide state machine (ChromeVisibility) is retired — no fade while
+// writing, no scroll-direction hide. Owns the ONE shared morph container, the
+// morph namespace, and the private `isMenuPresented` state.
 //
 // ┌─ MORPH TOPOLOGY (read before changing) ────────────────────────────────────┐
 // │ ONE positioned top-trailing container holding EXACTLY ONE child per state:  │
@@ -88,25 +89,21 @@
 // own non-merging glass surface in both states. Every other entry of that history
 // box is retained above.
 //
-// EC-14 / §5.3 — the `isMenuPresented` writer set is EXHAUSTIVE (five sources):
-//   (1) overflow toggle       — the `…` capsule's button — withAnimation(menuOpenAnimation)
+// EC-14 / §5.3 — the `isMenuPresented` writer set is EXHAUSTIVE (four sources):
+//   (1) overflow toggle       — the pill's `…` button — withAnimation(menuOpenAnimation)
 //   (2) tap-catcher           — the full-screen catcher below — withAnimation(menuCloseAnimation)
 //   (3) recovery-row dismiss  — MenuBubble's RecoverySection, through the `isPresented` binding
 //   (4) Share-row dismiss     — MenuBubble's Share row, through the `isPresented` binding
-//   (5) chrome-hide dismissal — the crossfade wrapper's `.onChange` below, guarded by
-//                               shouldDismissMenuOnVisibilityChange(visible:menuPresented:)
 // Every close write uses menuCloseAnimation; the open write uses menuOpenAnimation. Both
 // resolve to nil under Reduce Motion (FR-21). No other writer exists: the state is the
 // PRIVATE @State declared here, MenuBubble's only reach is the `isPresented` binding
-// (sources 3–4), and ChromeVisibility's SM events, MenuViewModel, RecoveryListViewModel,
-// BufferViewModel and shared/ never touch it (FR-08/FR-08n).
+// (sources 3–4), and MenuViewModel, RecoveryListViewModel, BufferViewModel and shared/
+// never touch it (FR-08/FR-08n). (The former fifth writer — chrome-hide dismissal via
+// ChromeVisibility — is retired: the chrome is permanently visible now.)
 //
-// EC-16: the tap-catcher and the container sit INSIDE the crossfaded layer, so a
-// chrome hide dismisses the open panel together with the chrome layer.
-//
-// EC-22/FR-06 (C-1): the crossfade wrapper also applies
-// `.allowsHitTesting(chromeVisibility.isVisible)`, so chrome hidden at opacity 0
-// consumes zero touches — the tap falls through to the editor.
+// `isShareSurfacePresented` writer set is EXHAUSTIVE (two sources):
+//   (1) presentShareSheet()      — the pill's Share button — withAnimation(menuOpenAnimation)
+//   (2) presenter completion     — SystemSharePresenter's onFinish — withAnimation(menuCloseAnimation)
 //
 // ChromeOverlay also owns the CoordinatorBox — a lightweight reference-type bridge that
 // lets ContentView publish the live BufferEditor.Coordinator to the BottomToolbar closure
@@ -118,10 +115,10 @@
 // ui-design-bible §"Auto-hiding overlay chrome" --view-bg-color@90% fill (OQ-01).
 //
 // Spec refs: FR-01, FR-02, FR-03, FR-06, FR-07, FR-08, FR-19, FR-20, FR-21, FR-24, FR-25;
-//            NFR-01, NFR-02, NFR-04, NFR-06, NFR-08; EC-01, EC-13, EC-14, EC-16, EC-22, EC-23;
+//            NFR-01, NFR-02, NFR-04, NFR-06, NFR-08; EC-01, EC-13, EC-14, EC-16, EC-23;
 //            CG-1.
 // Contract: §4.2 (topology diagrams), §4.4 (supersession + prohibited set), §5.1.a,
-//           §5.1.c, §5.1.f, §5.3 (five-writer table).
+//           §5.1.c, §5.3 (four-writer table + two-writer share seam).
 
 import SwiftUI
 import shared
@@ -169,14 +166,16 @@ final class CoordinatorBox {
 /// deforms the whole capsule into the panel and back as one unit — no stranded Share,
 /// no notch.
 ///
-/// **Hit-testing (C-1/FR-06):** chrome hidden by `ChromeVisibility` takes zero touches.
+/// **Hit-testing:** the chrome is permanently visible (no ChromeVisibility
+/// crossfade/gate anymore). The pinned Undo circle alone is hit-gated while
+/// open glass renders over it (see the body).
 ///
 /// **Reduce Motion (FR-21):** both animation seams resolve to `nil`, so every state
 /// change applies instantaneously instead of springing.
 ///
-/// **Bubble dismiss contract (EC-14):** write-sources 1, 2 and 5 are declared here;
-/// sources 3 and 4 live in `MenuBubble` behind the `isPresented` binding. The full
-/// five-writer set is enumerated in the file header.
+/// **Bubble dismiss contract (EC-14):** write-sources 1, 2 are declared here;
+/// sources 3 and 4 live in `MenuBubble` behind the `isPresented` binding. The
+/// four-writer set is enumerated in the file header.
 struct ChromeOverlay: View {
 
     // MARK: - Inputs (from ContentView / composition root)
@@ -187,10 +186,6 @@ struct ChromeOverlay: View {
 
     /// The menu view model — forwarded to `MenuBubble` (ctor-injected DIP).
     let menuVM: MenuViewModel
-
-    /// Chrome auto-hide/reveal state machine — drives the crossfade, the hit-testing
-    /// gate (C-1) and the chrome-hide dismissal (write-source 5).
-    let chromeVisibility: ChromeVisibility
 
     /// Chrome-dispatched undo of the last editor edit — invoked by the standalone
     /// Undo circle and routed by the composition root to the live editor coordinator.
@@ -205,9 +200,9 @@ struct ChromeOverlay: View {
     // MARK: - Local state
 
     /// Controls the `MenuBubble` presented state.
-    /// EC-14: written by EXACTLY five enumerated sources — the fused pill's `…` toggle
+    /// EC-14: written by EXACTLY four enumerated sources — the fused pill's `…` toggle
     /// (#1), the tap-catcher (#2), and, through `MenuBubble`'s binding, the recovery-row
-    /// (#3) and Share-row (#4) dismissals, plus the chrome-hide dismissal (#5) below.
+    /// (#3) and Share-row (#4) dismissals.
     /// Private by design: nothing outside this view can reach it directly.
     @State private var isMenuPresented: Bool = false
 
@@ -258,17 +253,6 @@ struct ChromeOverlay: View {
     /// row, so the two Share surfaces can never diverge.
     private var isShareDisabled: Bool {
         text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    // MARK: - Dismissal seam (pure; §5.1.f)
-
-    /// Whether a chrome visibility change must dismiss the open menu panel.
-    ///
-    /// Pure and total. A hide over an open panel is the one combination that dismisses
-    /// (write-source 5); a reveal never dismisses, and a hide over a closed panel is a
-    /// no-op (FR-07/FR-07n, EC-16).
-    static func shouldDismissMenuOnVisibilityChange(visible: Bool, menuPresented: Bool) -> Bool {
-        !visible && menuPresented
     }
 
     // MARK: - Body
@@ -347,25 +331,9 @@ struct ChromeOverlay: View {
             .padding(.trailing, ChromeMetrics.chromeHorizontalInset)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-        // Crossfade the chrome layer (incl. the tap-catcher) with ChromeVisibility
-        // (FR-20/EC-16). Modifier order is pinned by §4.2: the two frozen modifiers
-        // first, then the hit-testing gate and the dismissal observation.
-        .opacity(chromeVisibility.isVisible ? 1 : 0)
-        .animation(.easeInOut(duration: 0.25), value: chromeVisibility.isVisible)
-        // C-1/FR-06: hidden chrome consumes no touches. Not animatable, so it flips with
-        // the state change — instantly on hide, marginally ahead of full opacity on reveal.
-        .allowsHitTesting(chromeVisibility.isVisible)
-        // EC-14 write-source 5: a chrome hide dismisses the open panel through the pure
-        // seam, so chrome-hidden + panel-open is unreachable by construction (FR-07/EC-16).
-        .onChange(of: chromeVisibility.isVisible) { _, isVisible in
-            guard Self.shouldDismissMenuOnVisibilityChange(
-                visible: isVisible,
-                menuPresented: isMenuPresented
-            ) else { return }
-            withAnimation(menuCloseAnimation) {
-                isMenuPresented = false
-            }
-        }
+        // The chrome is PERMANENTLY visible (user direction: the pill never fades
+        // while writing — the auto-hide state machine is retired). No crossfade,
+        // no hit-testing gate, no chrome-hide dismissal writer.
     }
 
     // MARK: - Undo circle (DD-3/DD-10)

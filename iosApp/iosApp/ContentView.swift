@@ -7,12 +7,12 @@
 // by SwiftUI's .safeAreaInset so keyboardHeight and bottomSafeAreaInset are
 // combined as max(...), not summed (FR-18/NFR-07/EC-17 — no manual arithmetic).
 //
-// Coordinator-access seam (§4.3 / FR-19 seam decision):
+// Coordinator-access seam (§4.3):
 //   ContentView owns a CoordinatorBox (@State private var coordinatorBox).
 //   BufferEditor writes its Coordinator to coordinatorBox.coordinator in makeUIView.
 //   The toolbar closures read coordinatorBox.coordinator at call-time (weak
-//   ref, nil-safe per EC-13). SM callbacks are wired by passing
-//   chromeVisibility into BufferEditor, which sets them in updateUIView.
+//   ref, nil-safe per EC-13). The undo-ability mirror is wired by passing
+//   the box into BufferEditor, which wires onUndoStateChange in updateUIView.
 //   This keeps ContentView free of UIKit imports and avoids two-phase binding.
 //
 // Scene-phase lifecycle wiring (M5, FR-14):
@@ -53,10 +53,6 @@ struct ContentView: View {
     /// The single recovery repository for the session (CM-3/FR-05).
     /// Forwarded to MenuViewModel.
     let recovery: RecoveryRepository
-
-    /// The chrome auto-hide/reveal state machine (FR-19/FR-20/FR-21).
-    /// Owned as @State in iosAppApp; passed here for ZStack wiring.
-    let chromeVisibility: ChromeVisibility
 
     /// The lifecycle save coordinator (FR-14).
     ///
@@ -106,13 +102,11 @@ struct ContentView: View {
         viewModel: BufferViewModel,
         settings: SettingsRepository,
         recovery: RecoveryRepository,
-        chromeVisibility: ChromeVisibility,
         lifecycle: LifecycleSaveCoordinator
     ) {
         self.viewModel = viewModel
         self.settings = settings
         self.recovery = recovery
-        self.chromeVisibility = chromeVisibility
         self.lifecycle = lifecycle
         // Build the menu VM from the already-constructed repositories (DIP).
         _menuVM = State(wrappedValue: MenuViewModel(
@@ -130,11 +124,10 @@ struct ContentView: View {
             // Full-bleed UITextView-backed editor. .ignoresSafeArea() lets it
             // extend under the home indicator, notch, and rounded corners
             // (content-is-everything axiom / FR-02).
-            // chromeVisibility and coordinatorBox are passed so BufferEditor can
-            // wire SM callbacks and publish its Coordinator (§4.3 seam).
+            // coordinatorBox is passed so BufferEditor can publish its
+            // Coordinator (§4.3 seam).
             BufferEditor(
                 viewModel: viewModel,
-                chromeVisibility: chromeVisibility,
                 coordinatorBox: coordinatorBox
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -145,7 +138,6 @@ struct ContentView: View {
             ChromeOverlay(
                 text: viewModel.text,
                 menuVM: menuVM,
-                chromeVisibility: chromeVisibility,
                 canUndo: coordinatorBox.canUndo,
                 onUndo: { [coordinatorBox] in
                     coordinatorBox.coordinator?.undo()

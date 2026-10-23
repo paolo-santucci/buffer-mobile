@@ -16,7 +16,6 @@
 //     - @State recovery  → chrome injection: MenuViewModel / RecoveryListViewModel
 //                          (consumed in TASK-10 / TASK-11)
 //     - @State lifecycle → LifecycleSaveCoordinator (M5 FR-14)
-//     - @State chromeVisibility → chrome state machine (consumed in TASK-11)
 //   This eliminates the CM-1 split-handle bug (two NSUserDefaults handles for
 //   settings → fontSizeIndex desync when the M4 menu writes theme/font through a
 //   different handle than the one the VM loaded from).
@@ -93,13 +92,6 @@ struct iosAppApp: App {
     /// cold start and the pinch-end save both reference the same store (FR-03 / CM-1).
     @State private var viewModel: BufferViewModel
 
-    /// The chrome auto-hide/reveal state machine (FR-19 / FR-20 / FR-21).
-    ///
-    /// Owned here at the composition root so the ZStack overlay in TASK-11 can bind to
-    /// it directly.  ChromeVisibility lands in TASK-07 (same Wave 2); this reference
-    /// is CI-authoritative and will compile on the macos-26 runner once TASK-07 lands.
-    @State private var chromeVisibility: ChromeVisibility
-
     /// The lifecycle save coordinator (FR-14 / M5).
     ///
     /// Constructed once in init() from the already-constructed `recoveryRepo` and
@@ -129,7 +121,6 @@ struct iosAppApp: App {
         _settings = State(wrappedValue: settingsRepo)
         _recovery = State(wrappedValue: recoveryRepo)
         _viewModel = State(wrappedValue: vm)
-        _chromeVisibility = State(wrappedValue: ChromeVisibility())
 
         // Build the lifecycle coordinator from the single recovery handle and the
         // already-constructed vm reference.  The coordinator pulls text via the
@@ -150,8 +141,6 @@ struct iosAppApp: App {
             //
             // viewModel + settings: as in M3; EditorPinchModifier reads settings.
             // recovery: forwarded to ContentView → MenuViewModel → RecoveryListViewModel.
-            // chromeVisibility: the SM owned here, forwarded for ZStack overlay wiring
-            //   and Coordinator callback injection (FR-19).
             // lifecycle: the FR-14 coordinator; ContentView drives it via scenePhase.
             //
             // ContentView builds MenuViewModel from these injected instances (DIP).
@@ -161,7 +150,6 @@ struct iosAppApp: App {
                 viewModel: viewModel,
                 settings: settings,
                 recovery: recovery,
-                chromeVisibility: chromeVisibility,
                 lifecycle: lifecycle
             )
             // Wire appDelegate.onTerminate exactly once (guard == nil).

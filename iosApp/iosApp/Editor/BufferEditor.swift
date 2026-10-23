@@ -9,7 +9,7 @@
 // the shared chrome-pill geometry tokens. Text handling, delegate behaviour, and the
 // shared font-size table are frozen.
 //
-// Spec refs: FR-01, FR-09, FR-10, FR-12, FR-13, FR-15, FR-20, FR-21; §5.1.d, §5.2;
+// Spec refs: FR-01, FR-09, FR-10, FR-12, FR-13, FR-15; §5.1.d, §5.2;
 //            §6.1 EC-03, EC-12, EC-13, EC-24, EC-25; NFR-03, NFR-06.
 // CI-verified on macos-26 iOS Simulator — not locally compilable (no macOS host).
 
@@ -23,8 +23,8 @@ import shared
 ///
 /// Derived by compile-time reference from the shared chrome geometry tokens, so the pill's
 /// rendered height and the editor's first-line placement cannot drift apart (FR-10 lockstep).
-/// Pure and total over `safeAreaTop`. The chrome auto-hide state is never consulted, so text
-/// does not move when chrome hides or reveals (C-06).
+/// Pure and total over `safeAreaTop`. Independent of chrome state, so text never
+/// moves under chrome changes (C-06).
 ///
 /// - Parameter safeAreaTop: The device safe-area top inset in points.
 /// - Returns: The total inset to apply to `textContainerInset.top` (NFR-03).
@@ -56,7 +56,7 @@ private func fontPt(for index: Int) -> CGFloat {
 ///
 /// `makeUIView` publishes the coordinator into `coordinatorBox.coordinator` (weak) so the
 /// toolbar closures can dispatch actions to it without UIKit coupling. `updateUIView` wires
-/// the chrome-visibility callbacks onto the coordinator (FR-19). Both are additive and
+/// the undo-ability mirror onto `CoordinatorBox.canUndo`. Both are additive and
 /// idempotent; font and text are reconciled on divergence only, so an update tick never
 /// clobbers in-session content when only `fontSizeIndex` changes (EC-12).
 ///
@@ -69,11 +69,6 @@ struct BufferEditor: UIViewRepresentable {
     /// The presentation-state model, bound at the call site by the composition root.
     let viewModel: BufferViewModel
 
-    /// The chrome auto-hide/reveal state machine. `updateUIView` wires its inject* methods
-    /// onto the coordinator's optional callbacks. Optional so the editor can be built
-    /// without a live state machine.
-    let chromeVisibility: ChromeVisibility?
-
     /// Reference-type bridge that receives the live coordinator once it is created, so the
     /// toolbar closures can reach it without UIKit coupling.
     let coordinatorBox: CoordinatorBox?
@@ -82,11 +77,9 @@ struct BufferEditor: UIViewRepresentable {
 
     init(
         viewModel: BufferViewModel,
-        chromeVisibility: ChromeVisibility? = nil,
         coordinatorBox: CoordinatorBox? = nil
     ) {
         self.viewModel = viewModel
-        self.chromeVisibility = chromeVisibility
         self.coordinatorBox = coordinatorBox
     }
 
@@ -169,11 +162,6 @@ struct BufferEditor: UIViewRepresentable {
 
         BufferEditor.reconcileInset(of: uiView)
 
-        if let cv = chromeVisibility {
-            context.coordinator.onTyping = { [weak cv] in cv?.injectTyping() }
-            context.coordinator.onScroll = { [weak cv] dir in cv?.injectScroll(dir) }
-            context.coordinator.onKeyboardDismiss = { [weak cv] in cv?.injectKeyboardDismiss() }
-        }
         context.coordinator.onUndoStateChange = { [weak coordinatorBox] canUndo in
             coordinatorBox?.canUndo = canUndo
         }
@@ -221,7 +209,7 @@ struct BufferEditor: UIViewRepresentable {
     // MARK: - Coordinator
 
     /// `UITextViewDelegate` implementing the single pre-edit hook and the toolbar action
-    /// hooks, plus the callbacks that feed the chrome auto-hide state machine.
+    /// hooks, plus the undo-ability mirror that drives the Undo circle's visibility.
     ///
     /// Decision table (top-down; first matching row wins):
     ///
@@ -236,8 +224,8 @@ struct BufferEditor: UIViewRepresentable {
     /// `shouldChangeTextIn`. `process` is computed from the pre-edit text and `range.location`.
     ///
     /// Action hooks dispatched by the bottom toolbar: `copyToPasteboard()`, `pasteAtCaret()`,
-    /// `closeKeyboard()`, `applyIndentResult(text:range:)`. Optional callbacks:
-    /// `onTyping`, `onScroll(_:)`, `onKeyboardDismiss`. All are nil-safe when `textView` is nil.
+    /// `closeKeyboard()`, `applyIndentResult(text:range:)`, `undo()`. The optional
+    /// `onUndoStateChange` callback is nil-safe when `textView` is nil.
     final class Coordinator: NSObject, UITextViewDelegate {
 
         // MARK: Properties
@@ -248,23 +236,10 @@ struct BufferEditor: UIViewRepresentable {
         /// `nil`-safe after the view deallocates — no retain cycle (EC-13).
         weak var textView: UITextView?
 
-        /// Called on every keystroke; wired to the chrome-visibility typing seam.
-        var onTyping: (() -> Void)?
-
         /// Called whenever the mirrored undo-ability state is re-derived; wired
         /// to `CoordinatorBox.canUndo` in `updateUIView` so the Undo circle
         /// renders only when there is something to undo.
         var onUndoStateChange: ((Bool) -> Void)?
-
-        /// Called on every scroll tick with the derived direction; nil-safe when unset.
-        var onScroll: ((ScrollDirection) -> Void)?
-
-        /// Called when the text view ends editing; nil-safe when unset.
-        var onKeyboardDismiss: (() -> Void)?
-
-        /// Content-offset Y recorded at the end of the previous `scrollViewDidScroll` tick,
-        /// used to derive the scroll direction (FR-19).
-        private var lastContentOffsetY: CGFloat = 0
 
         // MARK: Init
 
@@ -353,9 +328,6 @@ struct BufferEditor: UIViewRepresentable {
 
         /// The only `UITextViewDelegate` text-gating method (FR-02), implementing the
         /// decision table above.
-        ///
-        /// `onTyping` is emitted on the continuation branch, because the suppressing return
-        /// value means `textViewDidChange` will not run for that edit (FR-19).
         func textView(
             _ textView: UITextView,
             shouldChangeTextIn range: NSRange,
@@ -381,8 +353,6 @@ struct BufferEditor: UIViewRepresentable {
 
                     viewModel.updateText(result.text)
 
-                    onTyping?()
-
                     return false
                 }
 
@@ -395,40 +365,13 @@ struct BufferEditor: UIViewRepresentable {
         // MARK: UITextViewDelegate — committed-text mirror
 
         /// Mirror committed text into the `BufferViewModel` after every UIKit-applied edit
-        /// (FR-13), and emit the typing event for the chrome auto-hide state machine (FR-19),
-        /// plus the undo-ability mirror for the Undo circle's visibility.
+        /// (FR-13), and re-mirror the undo-ability state for the Undo circle's visibility.
         ///
         /// The continuation branch (which returns `false`) mirrors inside
         /// `shouldChangeTextIn` instead, because `textViewDidChange` never runs for it.
         func textViewDidChange(_ textView: UITextView) {
             viewModel.updateText(textView.text)
             mirrorUndoState()
-            onTyping?()
-        }
-
-        // MARK: UIScrollViewDelegate — scroll-direction tracking (FR-19)
-
-        /// Derive the scroll direction against the last recorded content offset and emit
-        /// `onScroll(_:)`.
-        ///
-        /// `UITextViewDelegate` inherits from `UIScrollViewDelegate`, so this runs whenever
-        /// the text view's embedded scroll view moves. A decreased content-offset Y is a
-        /// forward scroll (chrome reveals); an increased one is reverse (chrome hides).
-        func scrollViewDidScroll(_ scrollView: UIScrollView) {
-            let currentY = scrollView.contentOffset.y
-            let direction: ScrollDirection = currentY < lastContentOffsetY ? .forward : .reverse
-            lastContentOffsetY = currentY
-            onScroll?(direction)
-        }
-
-        // MARK: UITextViewDelegate — keyboard-dismiss event (FR-19)
-
-        /// Emit `onKeyboardDismiss` when the text view loses first-responder status.
-        ///
-        /// Nil-safe: `onKeyboardDismiss` is optional, so calling it through `?.()` is a no-op
-        /// when unset.
-        func textViewDidEndEditing(_ textView: UITextView) {
-            onKeyboardDismiss?()
         }
     }
 }

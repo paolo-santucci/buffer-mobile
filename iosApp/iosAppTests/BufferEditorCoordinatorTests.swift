@@ -5,7 +5,7 @@
 // the textViewDidChange mirror, the updateUIView reconciliation contract,
 // AND the M4 Coordinator extension cases (CM-6 / §5.1.e):
 //   copyToPasteboard, pasteAtCaret, closeKeyboard, applyIndentResult,
-//   weak-textView nil-safety (EC-13), onTyping → ChromeVisibility wiring.
+//   weak-textView nil-safety (EC-13), undo-ability mirror (onUndoStateChange).
 //
 // NOTE: This file is authored on disk by TASK-05.
 // Target membership (iosAppTests) and pbxproj registration are owned by TASK-08.
@@ -331,7 +331,7 @@ final class BufferEditorCoordinatorTests: XCTestCase {
 
 /// Tests for the M4 BufferEditor.Coordinator extension (CM-6 / §5.1.e):
 /// copyToPasteboard, pasteAtCaret, closeKeyboard, applyIndentResult, nil-safety,
-/// and onTyping → ChromeVisibility wiring.
+/// and the undo-ability mirror (onUndoStateChange → Undo circle visibility).
 ///
 /// `@MainActor`: exercises UIKit (`UITextView`, `UIPasteboard`, `UIWindow`) and
 /// the `@MainActor` UIViewRepresentable types.
@@ -613,28 +613,5 @@ final class BufferEditorCoordinatorM4Tests: XCTestCase {
         coord.applyIndentResult(text: "x", range: NSRange(location: 0, length: 0))
 
         XCTAssertTrue(true, "all action hooks must be nil-safe when textView is nil (EC-13 / FR-06)")
-    }
-
-    // -----------------------------------------------------------------------
-    // MARK: - onTyping wiring → ChromeVisibility (FR-19 / §4.3)
-
-    /// onTyping wired to cv.injectTyping() → firing it flips cv.state to .hidden (FR-19).
-    func test_onTyping_wiredToChrome_flipsToHidden() {
-        let cv = ChromeVisibility()
-        XCTAssertEqual(cv.state, .visible, "precondition: cv starts .visible")
-
-        let stub = StubSettingsRepository()
-        let vm = BufferViewModel(settings: stub)
-        let editor = BufferEditor(viewModel: vm)
-        let coord = editor.makeCoordinator()
-
-        // Wire the SM callback (mirrors ContentView / updateUIView wiring — FR-19).
-        coord.onTyping = { [weak cv] in cv?.injectTyping() }
-
-        // Fire the callback.
-        coord.onTyping?()
-
-        XCTAssertEqual(cv.state, .hidden,
-            "onTyping wired to cv.injectTyping() must flip ChromeVisibility to .hidden (FR-19 / §4.3)")
     }
 }
