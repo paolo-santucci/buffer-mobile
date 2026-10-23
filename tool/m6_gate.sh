@@ -283,23 +283,24 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 10. ThemeResolutionTests-registered
+# 10. theme-mapping-tests-retired
 #
-# FR-23: ThemeResolutionTests.swift must be registered in the test target's
-# Sources build phase in project.pbxproj.  Without registration, the false-
-# green guard on CI still passes (other tests run) but ThemeResolutionTests
-# never executes, leaving the AppColorScheme→ColorScheme? mapping untested.
+# User direction (always-system theme): the theme picker, the
+# AppColorScheme→ColorScheme? mapping (ThemeColorScheme.swift) and
+# ThemeResolutionTests.swift are REMOVED — the mapping no longer exists to
+# test. The check now guards the retirement: the test must NOT be registered
+# (a registered test referencing deleted symbols would fail the CI compile).
 # ---------------------------------------------------------------------------
-echo "[10] ThemeResolutionTests-registered: ThemeResolutionTests.swift appears in pbxproj test Sources phase ..."
+echo "[10] theme-mapping-tests-retired: ThemeResolutionTests.swift absent from pbxproj ..."
 
 if [[ -f "$pbxproj" ]]; then
     if grep -q "ThemeResolutionTests" "$pbxproj" 2>/dev/null; then
-        result "ThemeResolutionTests-registered" ok
+        result "theme-mapping-tests-retired" fail "ThemeResolutionTests.swift still registered in $pbxproj — the mapping was removed; delete the registration (always-system theme)"
     else
-        result "ThemeResolutionTests-registered" fail "ThemeResolutionTests.swift not found in $pbxproj (FR-23 — test not registered; will never run on CI)"
+        result "theme-mapping-tests-retired" ok
     fi
 else
-    result "ThemeResolutionTests-registered" fail "$pbxproj not found on disk"
+    result "theme-mapping-tests-retired" fail "$pbxproj not found on disk"
 fi
 
 # ---------------------------------------------------------------------------

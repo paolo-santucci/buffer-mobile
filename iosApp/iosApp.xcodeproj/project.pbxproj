@@ -15,7 +15,6 @@
 		A1000061 /* TextOffsetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000060 /* TextOffsetBridge.swift */; };
 		A1000063 /* BufferViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000062 /* BufferViewModel.swift */; };
 		A1000065 /* BufferEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000064 /* BufferEditor.swift */; };
-		A1000067 /* EditorPinchModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000066 /* EditorPinchModifier.swift */; };
 		A10000B1 /* BottomToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000B0 /* BottomToolbar.swift */; };
 		A10000C1 /* MenuBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000C0 /* MenuBubble.swift */; };
 		A10000C3 /* MenuViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000C2 /* MenuViewModel.swift */; };
@@ -25,7 +24,6 @@
 		A1000071 /* TextOffsetBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000070 /* TextOffsetBridgeTests.swift */; };
 		A1000073 /* BufferViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000072 /* BufferViewModelTests.swift */; };
 		A1000075 /* BufferEditorCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000074 /* BufferEditorCoordinatorTests.swift */; };
-		A1000077 /* EditorPinchModifierTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000076 /* EditorPinchModifierTests.swift */; };
 		A1000079 /* SurrogatePairOffsetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000078 /* SurrogatePairOffsetTests.swift */; };
 		A10000E3 /* MenuViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000E2 /* MenuViewModelTests.swift */; };
 		A10000E5 /* RecoveryListViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000E4 /* RecoveryListViewModelTests.swift */; };
@@ -33,9 +31,7 @@
 		A10000F1 /* LifecycleSaveCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000F0 /* LifecycleSaveCoordinator.swift */; };
 		A10000F3 /* LifecycleSaveCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000F2 /* LifecycleSaveCoordinatorTests.swift */; };
 		A10000F5 /* ContentViewLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000F4 /* ContentViewLifecycleTests.swift */; };
-		A10000F6 /* ThemeColorScheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000F7 /* ThemeColorScheme.swift */; };
 		A10000F8 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A10000F9 /* Localizable.xcstrings */; };
-		A10000FA /* ThemeResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000FB /* ThemeResolutionTests.swift */; };
 		A10000FC /* BufferEditorInsetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000FD /* BufferEditorInsetTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -59,7 +55,6 @@
 		A1000060 /* TextOffsetBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/TextOffsetBridge.swift; sourceTree = "<group>"; };
 		A1000062 /* BufferViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/BufferViewModel.swift; sourceTree = "<group>"; };
 		A1000064 /* BufferEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/BufferEditor.swift; sourceTree = "<group>"; };
-		A1000066 /* EditorPinchModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Editor/EditorPinchModifier.swift; sourceTree = "<group>"; };
 		A10000B0 /* BottomToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BottomToolbar.swift; sourceTree = "<group>"; };
 		A10000C0 /* MenuBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBubble.swift; sourceTree = "<group>"; };
 		A10000C2 /* MenuViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuViewModel.swift; sourceTree = "<group>"; };
@@ -69,7 +64,6 @@
 		A1000070 /* TextOffsetBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextOffsetBridgeTests.swift; sourceTree = "<group>"; };
 		A1000072 /* BufferViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BufferViewModelTests.swift; sourceTree = "<group>"; };
 		A1000074 /* BufferEditorCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BufferEditorCoordinatorTests.swift; sourceTree = "<group>"; };
-		A1000076 /* EditorPinchModifierTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorPinchModifierTests.swift; sourceTree = "<group>"; };
 		A1000078 /* SurrogatePairOffsetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurrogatePairOffsetTests.swift; sourceTree = "<group>"; };
 		A10000E2 /* MenuViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuViewModelTests.swift; sourceTree = "<group>"; };
 		A10000E4 /* RecoveryListViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryListViewModelTests.swift; sourceTree = "<group>"; };
@@ -77,9 +71,7 @@
 		A10000F0 /* LifecycleSaveCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifecycleSaveCoordinator.swift; sourceTree = "<group>"; };
 		A10000F2 /* LifecycleSaveCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LifecycleSaveCoordinatorTests.swift; sourceTree = "<group>"; };
 		A10000F4 /* ContentViewLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentViewLifecycleTests.swift; sourceTree = "<group>"; };
-		A10000F7 /* ThemeColorScheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeColorScheme.swift; sourceTree = "<group>"; };
 		A10000F9 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
-		A10000FB /* ThemeResolutionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeResolutionTests.swift; sourceTree = "<group>"; };
 		A10000FD /* BufferEditorInsetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BufferEditorInsetTests.swift; sourceTree = "<group>"; };
 		A1000086 /* iosAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = iosAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -118,11 +110,9 @@
 				A1000010 /* iosAppApp.swift */,
 				A1000011 /* ContentView.swift */,
 				A10000F0 /* LifecycleSaveCoordinator.swift */,
-				A10000F7 /* ThemeColorScheme.swift */,
 				A1000060 /* TextOffsetBridge.swift */,
 				A1000062 /* BufferViewModel.swift */,
 				A1000064 /* BufferEditor.swift */,
-				A1000066 /* EditorPinchModifier.swift */,
 				A1000092 /* Chrome */,
 				A1000012 /* Assets.xcassets */,
 				A10000F9 /* Localizable.xcstrings */,
@@ -160,14 +150,12 @@
 				A1000070 /* TextOffsetBridgeTests.swift */,
 				A1000072 /* BufferViewModelTests.swift */,
 				A1000074 /* BufferEditorCoordinatorTests.swift */,
-				A1000076 /* EditorPinchModifierTests.swift */,
 				A1000078 /* SurrogatePairOffsetTests.swift */,
 				A10000E2 /* MenuViewModelTests.swift */,
 				A10000E4 /* RecoveryListViewModelTests.swift */,
 				A10000E6 /* IosRecoveryFactoryTests.swift */,
 				A10000F2 /* LifecycleSaveCoordinatorTests.swift */,
 				A10000F4 /* ContentViewLifecycleTests.swift */,
-				A10000FB /* ThemeResolutionTests.swift */,
 				A10000FD /* BufferEditorInsetTests.swift */,
 			);
 			path = iosAppTests;
@@ -275,11 +263,9 @@
 				A1000001 /* iosAppApp.swift in Sources */,
 				A1000002 /* ContentView.swift in Sources */,
 				A10000F1 /* LifecycleSaveCoordinator.swift in Sources */,
-				A10000F6 /* ThemeColorScheme.swift in Sources */,
 				A1000061 /* TextOffsetBridge.swift in Sources */,
 				A1000063 /* BufferViewModel.swift in Sources */,
 				A1000065 /* BufferEditor.swift in Sources */,
-				A1000067 /* EditorPinchModifier.swift in Sources */,
 				A10000B1 /* BottomToolbar.swift in Sources */,
 				A10000C1 /* MenuBubble.swift in Sources */,
 				A10000C3 /* MenuViewModel.swift in Sources */,
@@ -297,14 +283,12 @@
 				A1000071 /* TextOffsetBridgeTests.swift in Sources */,
 				A1000073 /* BufferViewModelTests.swift in Sources */,
 				A1000075 /* BufferEditorCoordinatorTests.swift in Sources */,
-				A1000077 /* EditorPinchModifierTests.swift in Sources */,
 				A1000079 /* SurrogatePairOffsetTests.swift in Sources */,
 				A10000E3 /* MenuViewModelTests.swift in Sources */,
 				A10000E5 /* RecoveryListViewModelTests.swift in Sources */,
 				A10000E7 /* IosRecoveryFactoryTests.swift in Sources */,
 				A10000F3 /* LifecycleSaveCoordinatorTests.swift in Sources */,
 				A10000F5 /* ContentViewLifecycleTests.swift in Sources */,
-				A10000FA /* ThemeResolutionTests.swift in Sources */,
 				A10000FC /* BufferEditorInsetTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

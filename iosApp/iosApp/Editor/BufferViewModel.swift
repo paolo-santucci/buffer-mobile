@@ -17,9 +17,9 @@ import shared
 ///
 /// - `text` is the ephemeral in-session mirror of the `UITextView` content.
 ///   On a fresh launch it is `""` — the initial state IS empty; there is no explicit clear step (FR-13).
-/// - `fontSizeIndex` is a Swift `Int` (shared API uses `Int32`; conversion happens at call sites).
-///   It is initialized from `SettingsRepository.load().fontSizeIndex`, which is pre-clamped to
-///   `[0, 20]` by the shared loader and never throws (FR-16, EC-11).
+///
+/// (The former `fontSizeIndex` slot state is retired: the editor always renders
+/// the system default font family and size — user direction.)
 ///
 /// Two distinct entry points share one private `apply(text:)` body (FR-10 / §5.3 seam):
 ///   - `updateText(_:)` — keystroke origin (M3 uses this).
@@ -41,9 +41,6 @@ class BufferViewModel {
     /// The ephemeral in-session text content.  Starts `""` on every fresh launch (FR-13, EC-01).
     private(set) var text: String
 
-    /// Current font-size slot index in `[0, 20]`.  Index 8 maps to 14pt (FR-14, FR-16).
-    var fontSizeIndex: Int
-
     // MARK: - Init
 
     /// Designated initialiser — accepts a `SettingsRepository` for dependency injection.
@@ -54,14 +51,11 @@ class BufferViewModel {
     /// a stub.  No default value is provided here because the composition root (FR-03 / CM-1)
     /// is the sole construction site; a default would create a second factory call outside it.
     ///
-    /// `settings.load()` never throws and clamps `fontSizeIndex` to `[0, 20]` (EC-11 / FR-16).
-    /// A raw stored value of 30 produces `fontSizeIndex == 20` here — not a crash, not the default.
-    ///
-    /// - Parameter settings: The settings repository to read on init.
+    /// - Parameter settings: The settings repository injected by the composition root.
+    ///   (The font-size slot is retired — the repository dependency stays because the
+    ///   composition root's construction contract is unchanged.)
     init(settings: SettingsRepository) {
         self.text = ""
-        // Int32 → Int conversion at the call site (FR-09); shared loader already clamped to [0,20].
-        self.fontSizeIndex = Int(settings.load().fontSizeIndex)
     }
 
     // MARK: - Text update (FR-10)

@@ -11,14 +11,14 @@
 //   EXACTLY ONE RecoveryRepository instance is constructed here via the Kotlin
 //   top-level factory IosRecoveryFactoryKt.createIosRecoveryRepository() (TASK-02).
 //   Both handles are wired in init() so they can be shared across:
-//     - @State settings  → ContentView → EditorPinchModifier (pinch-end save)
-//     - BufferViewModel(settings:)  → fontSizeIndex cold-start read
+//     - BufferViewModel(settings:)  — the settings construction contract
+//       (the former fontSizeIndex cold-start read is retired: the editor always
+//       renders the system default font — user direction)
 //     - @State recovery  → chrome injection: MenuViewModel / RecoveryListViewModel
 //                          (consumed in TASK-10 / TASK-11)
 //     - @State lifecycle → LifecycleSaveCoordinator (M5 FR-14)
-//   This eliminates the CM-1 split-handle bug (two NSUserDefaults handles for
-//   settings → fontSizeIndex desync when the M4 menu writes theme/font through a
-//   different handle than the one the VM loaded from).
+//   (The CM-1 single-handle invariant is structural now: the settings store has
+//   exactly one consumer and one construction site — m4 gate check 4.)
 //
 // ScenePhase save wiring (M5 / FR-14):
 //   LifecycleSaveCoordinator is constructed here from the single `recoveryRepo`
@@ -70,8 +70,8 @@ struct iosAppApp: App {
     /// The single SettingsRepository for the session (FR-03 / CM-1).
     ///
     /// Constructed once in init() via the Kotlin top-level factory.  Injected into
-    /// both BufferViewModel(settings:) and ContentView(settings:) so all settings
-    /// reads and writes share the same NSUserDefaults handle.
+    /// BufferViewModel(settings:) (the editor's cold-start read path) — the chrome
+    /// no longer consumes it (theme/font pickers removed per user direction).
     @State private var settings: SettingsRepository
 
     /// The single RecoveryRepository for the session (FR-05 / CM-3).
@@ -88,8 +88,9 @@ struct iosAppApp: App {
     /// `@State` (or as `let` constants injected from outside).  Using `@State` here ensures
     /// SwiftUI owns the lifetime and the reference is stable across scene restarts.
     ///
-    /// Initialised in init() with the single `settings` instance so that fontSizeIndex on
-    /// cold start and the pinch-end save both reference the same store (FR-03 / CM-1).
+    /// Constructed in init() with the single `settings` instance (FR-03 / CM-1
+    /// construction contract; the former font-slot read is retired — the editor
+    /// always renders the system default font).
     @State private var viewModel: BufferViewModel
 
     /// The lifecycle save coordinator (FR-14 / M5).
@@ -139,7 +140,7 @@ struct iosAppApp: App {
         WindowGroup {
             // Pass all session-scoped instances into ContentView (§4.1 / §4.3 DI).
             //
-            // viewModel + settings: as in M3; EditorPinchModifier reads settings.
+            // viewModel: presentation state for the editor + chrome.
             // recovery: forwarded to ContentView → MenuViewModel → RecoveryListViewModel.
             // lifecycle: the FR-14 coordinator; ContentView drives it via scenePhase.
             //
@@ -148,7 +149,6 @@ struct iosAppApp: App {
             // factory call in iosAppApp.init() only) is preserved.
             ContentView(
                 viewModel: viewModel,
-                settings: settings,
                 recovery: recovery,
                 lifecycle: lifecycle
             )

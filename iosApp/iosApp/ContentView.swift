@@ -46,10 +46,6 @@ struct ContentView: View {
     /// The single buffer presentation-state model for the session.
     let viewModel: BufferViewModel
 
-    /// The settings repository shared with BufferViewModel (CM-1/FR-03).
-    /// Forwarded to EditorPinchModifier and MenuViewModel.
-    let settings: SettingsRepository
-
     /// The single recovery repository for the session (CM-3/FR-05).
     /// Forwarded to MenuViewModel.
     let recovery: RecoveryRepository
@@ -100,17 +96,14 @@ struct ContentView: View {
     /// gate check 4 invariant preserved).
     init(
         viewModel: BufferViewModel,
-        settings: SettingsRepository,
         recovery: RecoveryRepository,
         lifecycle: LifecycleSaveCoordinator
     ) {
         self.viewModel = viewModel
-        self.settings = settings
         self.recovery = recovery
         self.lifecycle = lifecycle
         // Build the menu VM from the already-constructed repositories (DIP).
         _menuVM = State(wrappedValue: MenuViewModel(
-            settings: settings,
             recovery: recovery,
             viewModel: viewModel
         ))
@@ -132,7 +125,6 @@ struct ContentView: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea()
-            .modifier(EditorPinchModifier(viewModel: viewModel, settings: settings))
 
             // ── Layer 2: ChromeOverlay (control/navigation, respects safe area) ─
             ChromeOverlay(
@@ -144,13 +136,12 @@ struct ContentView: View {
                 }
             )
         }
-        // ── Theme application (FR-23 / M6) ──────────────────────────────────
-        // Reads `menuVM.colorScheme` — an @Observable property updated by
-        // `selectTheme(_:)` — establishing a SwiftUI observation dependency so
-        // the entire view hierarchy re-renders whenever the user changes the theme.
-        // `swiftUIColorScheme` maps .follow→nil (inherit device), .light→.light,
-        // .dark→.dark (QP §3.1).
-        .preferredColorScheme(menuVM.colorScheme.swiftUIColorScheme)
+        // ── Theme application (user direction — ALWAYS the system theme) ────
+        // `nil` = no override: the entire hierarchy follows the device
+        // appearance. Pinned unconditionally — the theme picker is removed and
+        // nothing may override the system (m6 gate check 5 keeps asserting the
+        // modifier's presence at the composition root).
+        .preferredColorScheme(nil)
         // ── .safeAreaInset: BottomToolbar (anti-additive keyboard avoidance) ──
         // SwiftUI's .safeAreaInset provides max(keyboardHeight, bottomSafeAreaInset)
         // automatically — NO manual sum arithmetic anywhere (FR-18/NFR-07/EC-17).

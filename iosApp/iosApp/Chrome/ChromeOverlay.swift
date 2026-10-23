@@ -3,8 +3,8 @@
 //
 // Container view composing the top-right chrome: a standalone Undo glass circle
 // beside ONE glass capsule (rc24 anatomy: Share + `…` behind a single pinned
-// `.regular` capsule) that deforms as a liquid unit into the menu panel
-// (MenuBubble) and back, over the editor. The chrome is permanently visible:
+// `.regular` capsule) that deforms as a liquid unit into the menu
+// panel (MenuBubble) and back, over the editor. The chrome is permanently visible:
 // the auto-hide state machine (ChromeVisibility) is retired — no fade while
 // writing, no scroll-direction hide. Owns the ONE shared morph container, the
 // morph namespace, and the private `isMenuPresented` state.
@@ -90,17 +90,17 @@
 // own non-merging glass surface in both states. Every other entry of that history
 // box is retained above.
 //
-// EC-14 / §5.3 — the `isMenuPresented` writer set is EXHAUSTIVE (four sources):
+// EC-14 / §5.3 — the `isMenuPresented` writer set is EXHAUSTIVE (three sources):
 //   (1) overflow toggle       — the pill's `…` button — withAnimation(menuOpenAnimation)
 //   (2) tap-catcher           — the full-screen catcher below — withAnimation(menuCloseAnimation)
 //   (3) recovery-row dismiss  — MenuBubble's RecoverySection, through the `isPresented` binding
-//   (4) Share-row dismiss     — MenuBubble's Share row, through the `isPresented` binding
 // Every close write uses menuCloseAnimation; the open write uses menuOpenAnimation. Both
 // resolve to nil under Reduce Motion (FR-21). No other writer exists: the state is the
 // PRIVATE @State declared here, MenuBubble's only reach is the `isPresented` binding
-// (sources 3–4), and MenuViewModel, RecoveryListViewModel, BufferViewModel and shared/
-// never touch it (FR-08/FR-08n). (The former fifth writer — chrome-hide dismissal via
-// ChromeVisibility — is retired: the chrome is permanently visible now.)
+// (source 3), and MenuViewModel, RecoveryListViewModel, BufferViewModel and shared/
+// never touch it (FR-08/FR-08n). (The former Share-row writer is retired with the
+// panel's Share row — removed per user direction; Share lives only on the pill. The
+// former chrome-hide writer is retired with ChromeVisibility.)
 //
 // `isShareSurfacePresented` writer set is EXHAUSTIVE (two sources):
 //   (1) presentShareSheet()      — the pill's Share button — withAnimation(menuOpenAnimation)
@@ -176,8 +176,8 @@ final class CoordinatorBox {
 /// change applies instantaneously instead of springing.
 ///
 /// **Bubble dismiss contract (EC-14):** write-sources 1, 2 are declared here;
-/// sources 3 and 4 live in `MenuBubble` behind the `isPresented` binding. The
-/// four-writer set is enumerated in the file header.
+/// source 3 lives in `MenuBubble` behind the `isPresented` binding. The
+/// three-writer set is enumerated in the file header.
 struct ChromeOverlay: View {
 
     // MARK: - Inputs (from ContentView / composition root)
@@ -202,9 +202,9 @@ struct ChromeOverlay: View {
     // MARK: - Local state
 
     /// Controls the `MenuBubble` presented state.
-    /// EC-14: written by EXACTLY four enumerated sources — the fused pill's `…` toggle
+    /// EC-14: written by EXACTLY three enumerated sources — the fused pill's `…` toggle
     /// (#1), the tap-catcher (#2), and, through `MenuBubble`'s binding, the recovery-row
-    /// (#3) and Share-row (#4) dismissals.
+    /// (#3) dismissal.
     /// Private by design: nothing outside this view can reach it directly.
     @State private var isMenuPresented: Bool = false
 
@@ -319,9 +319,7 @@ struct ChromeOverlay: View {
                         isPresented: $isMenuPresented,
                         glassNamespace: glassNamespace,
                         glassID: Self.chromeGlassID,
-                        dismissAnimation: menuCloseAnimation,
-                        text: text,
-                        isShareDisabled: isShareDisabled
+                        dismissAnimation: menuCloseAnimation
                     )
                     // No transition modifier on either XOR child — .identity kills
                     // the morph (rc21). The branch crossfade stays (demo parity);
@@ -385,10 +383,8 @@ struct ChromeOverlay: View {
 
     /// The closed state's ONLY glass shape, restored from rc24: ONE capsule over
     /// two plain buttons (Share + `…`) — the `BottomToolbar` anatomy. The capsule
-    /// glass is PINNED `.regular` (the interactive variant is prohibited on
-    /// multi-button glass — rc8 tap-swallow) and the WHOLE capsule carries the
-    /// morph identity, so both the `…` tap and (later) the Share tap deform the
-    /// entire pill as a single liquid unit.
+    /// glass is PINNED `.regular` and the WHOLE capsule carries the morph
+    /// identity, so the `…` tap deforms the entire pill as a single liquid unit.
     private var closedPill: some View {
         HStack(spacing: ChromeMetrics.capsuleControlSpacing) {
             shareControl
@@ -461,10 +457,8 @@ struct ChromeOverlay: View {
     // MARK: - `…` control, one half of the fused closed pill (rc24)
 
     /// The `…` as ONE HALF of the rc24 fused capsule: a plain button whose glass
-    /// is the pill capsule itself (rc24 restoration) — the rc8 tap-swallow
-    /// prohibition (`.interactive()` on multi-button glass) cannot trigger
-    /// because the capsule is pinned `.regular` and every button inside it is
-    /// `.plain`. The frame + contentShape arm the full 44pt tap target (DD-2).
+    /// is the pill capsule itself (rc24 restoration). The frame + contentShape
+    /// arm the full 44pt tap target (DD-2).
     private var ellipsisControl: some View {
         Button {
             // EC-14 write-source 1 — the control is mounted only while closed.

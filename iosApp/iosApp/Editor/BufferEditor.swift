@@ -36,18 +36,24 @@ func kEditorTopInset(safeAreaTop: CGFloat) -> CGFloat {
     safeAreaTop + ChromeMetrics.contentTopGap
 }
 
-// MARK: - Font-size slot helper
+// MARK: - Editor font
 
-/// Resolve the point size for a given font-size slot index.
-///
-/// Reads `AppSettings(fontSizeIndex:).fontSizePt`, the shared computed accessor over the
-/// canonical 21-slot table (FR-14), avoiding the KotlinList subscript bridge. The size is
-/// absolute: no Dynamic-Type pre-multiplication (FR-15).
-///
-/// - Parameter index: Font-size slot index in `[0, 20]`; the shared constructor clamps it.
-/// - Returns: The corresponding font size in points.
-private func fontPt(for index: Int) -> CGFloat {
-    CGFloat(AppSettings(colorScheme: AppColorScheme.follow, fontSizeIndex: Int32(index)).fontSizePt)
+// The editor renders the SYSTEM DEFAULT font family and size (user direction —
+// always the system default): `UIFont.preferredFont(forTextStyle: .body)` —
+// the system family (San Francisco) at the user's Dynamic Type body size.
+// Line height 1.4 via `NSMutableParagraphStyle.lineHeightMultiple` on
+// `typingAttributes`, so newly typed characters inherit the style.
+private func applyFont(to textView: UITextView) {
+    let font = UIFont.preferredFont(forTextStyle: .body)
+
+    let style = NSMutableParagraphStyle()
+    style.lineHeightMultiple = 1.4
+
+    textView.font = font
+    textView.typingAttributes = [
+        .font: font,
+        .paragraphStyle: style
+    ]
 }
 
 // MARK: - BufferEditor
@@ -62,7 +68,7 @@ private func fontPt(for index: Int) -> CGFloat {
 /// toolbar closures can dispatch actions to it without UIKit coupling. `updateUIView` wires
 /// the undo-ability mirror onto `CoordinatorBox.canUndo`. Both are additive and
 /// idempotent; font and text are reconciled on divergence only, so an update tick never
-/// clobbers in-session content when only `fontSizeIndex` changes (EC-12).
+/// clobbers in-session content when only the safe area changes (EC-12).
 ///
 /// CANON GAP: `UIColor.systemBackground` is the iOS semantic stand-in for the
 /// `--view-bg-color` token; swap it for a named asset color once the catalog holds one.
@@ -144,7 +150,7 @@ struct BufferEditor: UIViewRepresentable {
         )
         textView.textContainer.lineFragmentPadding = 0
 
-        applyFont(to: textView, index: viewModel.fontSizeIndex)
+        applyFont(to: textView)
 
         textView.delegate = context.coordinator
         context.coordinator.textView = textView
@@ -153,11 +159,13 @@ struct BufferEditor: UIViewRepresentable {
         return textView
     }
 
-    /// Reconcile font size, text, and the inset — each on divergence only.
+    /// Reconcile the system-default font, text, and the inset — each on divergence only.
+    /// The font divergence check covers a live Dynamic Type change mid-session.
     func updateUIView(_ uiView: UITextView, context: Context) {
-        let desiredPt = fontPt(for: viewModel.fontSizeIndex)
-        if uiView.font?.pointSize != desiredPt {
-            applyFont(to: uiView, index: viewModel.fontSizeIndex)
+        let desired = UIFont.preferredFont(forTextStyle: .body)
+        if uiView.font?.pointSize != desired.pointSize
+            || uiView.font?.familyName != desired.familyName {
+            applyFont(to: uiView)
         }
 
         if uiView.text != viewModel.text {
@@ -193,26 +201,6 @@ struct BufferEditor: UIViewRepresentable {
     }
 
     // MARK: - Private helpers
-
-    /// Apply the monospaced font at the given slot index, paired with line height 1.4.
-    ///
-    /// Font: `UIFont.monospacedSystemFont(ofSize:weight:)` (FR-14). Size: the absolute point
-    /// value from the shared 21-slot table, with no Dynamic-Type scaling (FR-15). Line height:
-    /// 1.4 via `NSMutableParagraphStyle.lineHeightMultiple` on `typingAttributes`, so newly
-    /// typed characters inherit the style.
-    private func applyFont(to textView: UITextView, index: Int) {
-        let pt = fontPt(for: index)
-        let font = UIFont.monospacedSystemFont(ofSize: pt, weight: .regular)
-
-        let style = NSMutableParagraphStyle()
-        style.lineHeightMultiple = 1.4
-
-        textView.font = font
-        textView.typingAttributes = [
-            .font: font,
-            .paragraphStyle: style
-        ]
-    }
 
     // MARK: - Coordinator
 

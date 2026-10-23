@@ -40,31 +40,17 @@ private final class StubSettingsRepository: SettingsRepository {
 final class BufferViewModelTests: XCTestCase {
 
     // -------------------------------------------------------------------------
-    // FR-09 / FR-13 / FR-16 — init
+    // FR-09 / FR-13 — init
+    // (The fontSizeIndex suites retired with the font-slot state — user direction:
+    //  the editor always renders the system default font.)
     // -------------------------------------------------------------------------
 
-    /// init: stub SettingsRepository.load → fontSizeIndex 8 → vm.fontSizeIndex==8, vm.text==""
-    func testInit_fontSizeIndexFromStub_text_empty() {
+    /// init: fresh instance → vm.text==""
+    func testInit_text_empty() {
         let stub = StubSettingsRepository(fontSizeIndex: 8)
         let vm = BufferViewModel(settings: stub)
 
-        XCTAssertEqual(vm.fontSizeIndex, 8, "fontSizeIndex must match stub load().fontSizeIndex (FR-16)")
         XCTAssertEqual(vm.text, "", "text must be empty string on fresh init (FR-13 / EC-01)")
-    }
-
-    /// init: stub returns 30 (out-of-range) → vm.fontSizeIndex==20 (shared-clamped), no crash  (EC-11)
-    ///
-    /// The shared loader clamps to [0,20] before returning; VM stores the clamped value.
-    /// A raw stored index of 30 must produce fontSizeIndex==20, not a crash, not the default (8).
-    func testInit_outOfRange_clampedAt20() {
-        // The shared SettingsRepository loader clamps Int32 values > 20 to 20 before returning them.
-        // Here we simulate what the shared module would actually return after clamping —
-        // the VM does not perform additional clamping beyond storing Int(load().fontSizeIndex).
-        // If the shared module returns 20 (the clamped max), the VM stores 20.
-        let stub = StubSettingsRepository(fontSizeIndex: 20)  // post-clamp value from shared loader
-        let vm = BufferViewModel(settings: stub)
-
-        XCTAssertEqual(vm.fontSizeIndex, 20, "fontSizeIndex must be 20 when stub returns the shared-clamped max (EC-11)")
     }
 
     // -------------------------------------------------------------------------
