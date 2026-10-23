@@ -5,9 +5,10 @@
 // built-in editor and text-field wrappers stay unused (AR-02 / FR-01).
 //
 // Presentation contract (FR-09, FR-12, FR-13): plain theme background, monospaced font
-// at the shared absolute slot sizes, line height 1.4, and a first-line inset derived from
-// the shared chrome-pill geometry tokens. Text handling, delegate behaviour, and the
-// shared font-size table are frozen.
+// at the shared absolute slot sizes, line height 1.4, and a full-bleed first line that
+// flows UNDER the floating glass chrome (contentTopGap below the safe area — the glass
+// refracts content, user-directed supersession of the keep-out lockstep). Text handling,
+// delegate behaviour, and the shared font-size table are frozen.
 //
 // Spec refs: FR-01, FR-09, FR-10, FR-12, FR-13, FR-15; §5.1.d, §5.2;
 //            §6.1 EC-03, EC-12, EC-13, EC-24, EC-25; NFR-03, NFR-06.
@@ -19,17 +20,20 @@ import shared
 
 // MARK: - Editor inset seam
 
-/// Top inset that positions the first line of text just below the floating chrome pill.
+/// Full-bleed top inset: the first text line flows UNDER the floating glass
+/// chrome (a small breathing gap below the safe area, Apple-Notes style), so
+/// the Liquid Glass material on the chrome has content to blur, refract and
+/// reflect — the transparency the user requires. Supersedes the former FR-10
+/// keep-out lockstep (first line below the pill): the glass is now expected to
+/// sit over content.
 ///
-/// Derived by compile-time reference from the shared chrome geometry tokens, so the pill's
-/// rendered height and the editor's first-line placement cannot drift apart (FR-10 lockstep).
 /// Pure and total over `safeAreaTop`. Independent of chrome state, so text never
 /// moves under chrome changes (C-06).
 ///
 /// - Parameter safeAreaTop: The device safe-area top inset in points.
 /// - Returns: The total inset to apply to `textContainerInset.top` (NFR-03).
 func kEditorTopInset(safeAreaTop: CGFloat) -> CGFloat {
-    safeAreaTop + ChromeMetrics.pillTopGap + ChromeMetrics.pillHeight + ChromeMetrics.pillBottomGap
+    safeAreaTop + ChromeMetrics.contentTopGap
 }
 
 // MARK: - Font-size slot helper

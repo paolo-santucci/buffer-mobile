@@ -93,43 +93,41 @@ final class BufferEditorInsetTests: XCTestCase {
         XCTAssertEqual(ChromeMetrics.pillHeight, 44)
     }
 
-    /// §5.2 values behind the NFR-03 formula: 16 + 44 + 8 == 68.
-    func testPillGeometrySumMatchesEditorInsetFormulaBasis() {
-        XCTAssertEqual(ChromeMetrics.pillTopGap + ChromeMetrics.pillHeight + ChromeMetrics.pillBottomGap, 68)
+    /// The full-bleed formula basis: the editor's only top geometry token is the
+    /// breathing gap below the safe area (glass-over-content supersession).
+    func testContentTopGapMatchesEditorInsetFormulaBasis() {
+        XCTAssertEqual(ChromeMetrics.contentTopGap, 4)
     }
 
     // -----------------------------------------------------------------------
     // MARK: - kEditorTopInset — purity and totality (FR-09n / EC-25)
 
-    /// Pure and total: each reference safe-area input maps to safe area + the 68 pt
-    /// pill block, covering the Dynamic-Island class (59), the provisional
+    /// Pure and total: each reference safe-area input maps to safe area + the 4 pt
+    /// breathing gap, covering the Dynamic-Island class (59), the provisional
     /// pre-attachment input (0), SE-class (20), and iPad-class (24) devices.
     func test_kEditorTopInset_referencePointsAreTotal() {
-        XCTAssertEqual(kEditorTopInset(safeAreaTop: 59), 127)
-        XCTAssertEqual(kEditorTopInset(safeAreaTop: 0), 68)
-        XCTAssertEqual(kEditorTopInset(safeAreaTop: 20), 88)
-        XCTAssertEqual(kEditorTopInset(safeAreaTop: 24), 92)
+        XCTAssertEqual(kEditorTopInset(safeAreaTop: 59), 63)
+        XCTAssertEqual(kEditorTopInset(safeAreaTop: 0), 4)
+        XCTAssertEqual(kEditorTopInset(safeAreaTop: 20), 24)
+        XCTAssertEqual(kEditorTopInset(safeAreaTop: 24), 28)
     }
 
-    /// FR-10n: the seam reads the live tokens at call time, so a token value change
+    /// FR-10n: the seam reads the live token at call time, so a token value change
     /// flows into the editor inset with no edit in the editor file. Asserted at two
-    /// inputs, and coupled to the token sum the formula basis must keep.
+    /// inputs, and coupled to the token the formula basis must keep.
     func test_kEditorTopInset_derivesFromLiveChromeTokens() {
         let safeAreaTops: [CGFloat] = [59, 20]
         for safeAreaTop in safeAreaTops {
             XCTAssertEqual(
                 kEditorTopInset(safeAreaTop: safeAreaTop),
-                safeAreaTop
-                    + ChromeMetrics.pillTopGap
-                    + ChromeMetrics.pillHeight
-                    + ChromeMetrics.pillBottomGap,
+                safeAreaTop + ChromeMetrics.contentTopGap,
                 "the inset must be the live token expression, never a copied literal (FR-10n)"
             )
         }
         XCTAssertEqual(
-            ChromeMetrics.pillTopGap + ChromeMetrics.pillHeight + ChromeMetrics.pillBottomGap,
-            68,
-            "the formula basis must still be the §5.2 token sum"
+            ChromeMetrics.contentTopGap,
+            4,
+            "the formula basis must still be the breathing-gap token"
         )
     }
 
@@ -193,7 +191,7 @@ final class BufferEditorInsetTests: XCTestCase {
         )
 
         view.reconcileTopInset()
-        XCTAssertEqual(view.textContainerInset.top, 68, "pre-attachment the provisional value stands")
+        XCTAssertEqual(view.textContainerInset.top, 4, "pre-attachment the provisional value stands")
         XCTAssertNotEqual(view.textContainerInset.top, 127, "the removed fixed fallback must never ship")
 
         let window = TestSafeAreaWindow(safeAreaTop: 59)

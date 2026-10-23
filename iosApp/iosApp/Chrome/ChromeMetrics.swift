@@ -60,6 +60,11 @@ enum ChromeMetrics {
         + ChromeMetrics.closedPillWidth
         + ChromeMetrics.chromeControlGap
 
+    // Editor top breathing gap below the safe area — the first text line flows
+    // UNDER the floating glass chrome (full-bleed, Apple-Notes style) so the
+    // Liquid Glass material has content to refract and reflect.
+    static let contentTopGap: CGFloat = 4
+
     // Bottom toolbar
     static let toolbarItemSpacing: CGFloat = 4
     static let capsuleHorizontalPadding: CGFloat = 8

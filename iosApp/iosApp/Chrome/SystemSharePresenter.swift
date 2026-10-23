@@ -1,18 +1,19 @@
 // Chrome/SystemSharePresenter.swift
 // Foglietto — Apple-Notes (iOS 26) Chrome Restyle
 //
-// Presents the SYSTEM share sheet as a zoom-morph out of the chrome pill
-// (WWDC 2025 "Build a UIKit app with the new design": a sheet with the zoom
-// transition scales out of the view the source provider returns — the same
-// button→overlay morph Apple Notes performs of its share panel).
+// Presents the SYSTEM share sheet as a floating, pill-anchored Liquid Glass
+// panel: popover-style presentation pinned to the pill anchor view (adaptive
+// `.none` so it does NOT adapt into a bottom sheet on iPhone) — the panel's
+// top-right corner lands where the pill's top-right corner is, exactly like
+// the Apple Notes share panel the user requires.
 //
 // ShareLink cannot host this: it exposes no hook into the system share
 // presentation, so the pill's Share tap routes through this presenter instead.
 // The pill's own glass is deformed by ChromeOverlay (its morph identity
-// shrinks to nothing) while the UIKit zoom transition expands the share
-// sheet out of the pill's exact frame — the closed loop the user requires:
-//   open:  pill melts ⇢ sheet zooms out of `ShareAnchorBox.view`
-//   close: sheet zooms back in ⇢ pill glass grows back from the same frame
+// shrinks to nothing) while the system presents the anchored panel — the
+// closed loop the user requires:
+//   open:  pill melts ⇢ anchored panel hangs from the pill's top edge
+//   close: panel dismisses ⇢ pill glass grows back from the same frame
 //
 // ShareAnchorBox / ShareSourceAnchor: a reference box bridging a
 // UIViewRepresentable's UIView to the presenter. The anchor mirrors the
@@ -26,10 +27,10 @@
 // All UIKit work happens on the main actor (annotation below; callers are
 // SwiftUI body/MainActor code).
 //
-// Spec refs (FR-20 share morph, user-directed rc26+): zoom source = pill.
+// Spec refs (FR-20 share morph, user-directed rc28+): anchored popover panel.
 // Contract: SystemSharePresenter.present(text:from:onFinish:) is the ONLY
 // entry; onFinish fires exactly once, on presentation failure (box detached,
-// presenting chain busy, no presenting controller) or when the activity sheet
+// presenting chain busy, no presenting controller) or when the share panel
 // completes/dismisses.
 
 import UIKit
@@ -65,6 +66,21 @@ struct ShareSourceAnchor: UIViewRepresentable {
 
 // MARK: - SystemSharePresenter
 
+/// Delegate pinning the share activity view to its floating popover on iPhone
+/// (adaptive `.none`): the panel stays anchored at the pill instead of adapting
+/// into a bottom sheet. A singleton because presentation controllers retain
+/// their delegates weakly.
+private final class SharePopoverAdaptivity: NSObject, UIPopoverPresentationControllerDelegate {
+    static let shared = SharePopoverAdaptivity()
+
+    func adaptivePresentationStyle(
+        for controller: UIPresentationController,
+        traitCollection: UITraitCollection
+    ) -> UIModalPresentationStyle {
+        .none
+    }
+}
+
 /// Presents the system share sheet zoom-morphing out of the chrome pill.
 ///
 /// - Parameters:
@@ -78,8 +94,13 @@ struct ShareSourceAnchor: UIViewRepresentable {
 @MainActor
 enum SystemSharePresenter {
 
-    /// Presents the system share sheet with a zoom transition sourced at the
-    /// pill anchor view, and reports completion through `onFinish`.
+    /// Presents the system share sheet anchored AT the pill (popover style,
+    /// floating Liquid Glass panel whose top edge lands where the pill's top
+    /// edge is) and reports completion through `onFinish`.
+    ///
+    /// The adaptive `.none` override is what keeps the panel floating on
+    /// iPhone: without it the system adapts the popover into an edge sheet —
+    /// the bottom landing the user rejected.
     static func present(
         text: String,
         from anchor: ShareAnchorBox,
@@ -99,12 +120,23 @@ enum SystemSharePresenter {
             activityItems: [text],
             applicationActivities: []
         )
-        // The morph: the sheet scales out of (and back into) the pill's exact
-        // frame — the system share-sheet animation the user requires, matching
-        // Apple Notes' pill→share-panel morph.
-        controller.preferredTransition = UIViewController.Transition.zoom { _ in
-            source
+        controller.modalPresentationStyle = .popover
+        guard let popover = controller.popoverPresentationController else {
+            onFinish()
+            return
         }
+        // The arrow rides the pill anchor's TOP edge, so the panel hangs from
+        // where the pill's top was: the panel's top-right corner sits at the
+        // pill's top-right corner (user-required landing).
+        popover.sourceView = source
+        popover.sourceRect = CGRect(
+            x: source.bounds.midX,
+            y: 0,
+            width: 1,
+            height: 1
+        )
+        popover.permittedArrowDirections = .up
+        popover.delegate = SharePopoverAdaptivity.shared
         controller.completionWithItemsHandler = { _, _, _, _ in
             // Documented main-thread completion; the Task hop keeps the
             // MainActor call statically legal under Swift 6 concurrency rules.
