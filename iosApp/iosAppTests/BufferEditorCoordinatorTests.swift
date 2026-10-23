@@ -287,41 +287,23 @@ final class BufferEditorCoordinatorTests: XCTestCase {
     }
 
     // -----------------------------------------------------------------------
-    // MARK: - EC-12 — updateUIView preserves in-session text on fontSizeIndex change
+    // MARK: - EC-12 — updateUIView preserves in-session text on font reconcile
 
-    /// When only fontSizeIndex changes, updateUIView must not clobber typed text (EC-12).
-    ///
-    /// Strategy: use a UIHostingController to get a real SwiftUI-managed UITextView, then
-    /// exercise the condition indirectly by constructing the scenario that EC-12 guards against.
+    /// The font reconciliation divergence-guard leaves typed text intact (EC-12).
     ///
     /// The direct guard is: `if uiView.text != viewModel.text { uiView.text = viewModel.text }`
     /// in updateUIView. This test verifies the guard's logic by constructing the divergence
     /// scenario manually without needing UIViewRepresentableContext.
-    func test_updateUIView_fontSizeChange_preservesTypedText() {
+    func test_updateUIView_fontReconcile_preservesTypedText() {
         let vm = BufferViewModel(settings: StubSettingsRepository(fontSizeIndex: 8))
 
         // Simulate: user typed "typed content", coordinator mirrored it.
         vm.updateText("typed content")
 
-        // The divergence that updateUIView must guard:
-        // If fontSizeIndex changes but text does NOT change, uiView.text must not be reset.
-        // We verify the condition indirectly: vm.text equals the in-session content.
+        // The divergence that updateUIView must guard: the font reconcile path
+        // (system default font) never touches the text mirror.
         XCTAssertEqual(vm.text, "typed content",
-            "VM text must hold the in-session content before a fontSizeIndex change (EC-12 precondition)")
-
-        // Mutate fontSizeIndex — text must not be cleared.
-        vm.fontSizeIndex = 5
-
-        XCTAssertEqual(vm.text, "typed content",
-            "Changing fontSizeIndex must not clear vm.text (EC-12 — the guard in updateUIView " +
-            "only sets uiView.text when uiView.text != viewModel.text; since vm.text is still " +
-            "'typed content', updateUIView does not overwrite the UITextView)")
-
-        // Verify the expected font pt for index 5 (FR-14 / FR-15).
-        let pt5 = CGFloat(AppSettings(colorScheme: AppColorScheme.follow, fontSizeIndex: 5).fontSizePt)
-        let pt8 = CGFloat(AppSettings(colorScheme: AppColorScheme.follow, fontSizeIndex: 8).fontSizePt)
-        XCTAssertNotEqual(pt5, pt8,
-            "Font pt must differ between index 5 and 8 — confirming the font update path is distinct from the text-clear path (EC-12)")
+            "VM text must hold the in-session content independent of any font reconcile (EC-12)")
     }
 }
 
