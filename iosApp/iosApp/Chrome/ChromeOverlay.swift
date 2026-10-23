@@ -52,7 +52,9 @@
 // │ • Whole-view swap that unmounts a live control — Share vanished. rc16/rc17 │
 // │   Both states carry their own Share surface: pill button XOR panel row.     │
 // │ • `.interactive()` on multi-button glass — swallows the tap.            rc8 │
-// │   The capsule is PINNED `.regular`; every button inside it is `.plain`.     │
+// │   RETRIED since rc29 per user direction (the drop squish needs it on      │
+// │   iOS 26.5): the capsule is `.regular.interactive()`, buttons `.plain`.    │
+// │   REVERT the interactive variant if the inner buttons stop firing.         │
 // │ • `.glassEffectID` on a persistent multi-element HStack.               rc17 │
 // │   The ID rides only the two transient XOR children.                        │
 // │ • Nested glass inside panel rows.                                 rc18-cut1 │
@@ -383,15 +385,19 @@ struct ChromeOverlay: View {
 
     /// The closed state's ONLY glass shape, restored from rc24: ONE capsule over
     /// two plain buttons (Share + `…`) — the `BottomToolbar` anatomy. The capsule
-    /// glass is PINNED `.regular` and the WHOLE capsule carries the morph
-    /// identity, so the `…` tap deforms the entire pill as a single liquid unit.
+    /// carries the WHOLE morph identity and, since rc29, `.interactive()` — the
+    /// touch-squish the LiquidMenuDemo drop feel requires (user-directed rc29
+    /// experiment). rc8 RISK NOTE: this is the exact shape that swallowed
+    /// inner-button taps on iOS 26.0 (rc8→rc9); the user accepted re-trying it
+    /// on 26.5 — if the Share/`…` buttons stop firing, REVERT to the pinned
+    /// `.regular` variant.
     private var closedPill: some View {
         HStack(spacing: ChromeMetrics.capsuleControlSpacing) {
             shareControl
             ellipsisControl
         }
         .padding(.horizontal, ChromeMetrics.capsuleHorizontalPadding)
-        .glassEffect(.regular, in: .capsule)
+        .glassEffect(.regular.interactive(), in: .capsule)
         .glassEffectTransition(.matchedGeometry)
         .glassEffectID(Self.chromeGlassID, in: glassNamespace)
     }
