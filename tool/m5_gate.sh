@@ -203,13 +203,7 @@ fi
 # ---------------------------------------------------------------------------
 # 7. share-empty-gate
 #
-# FR-20: the ONE live Share surface — ChromeOverlay.swift (closed pill, a
-# whole-pill melt Button routed through SystemSharePresenter's pill-anchored
-# popover presentation) — must keep the empty-buffer gate ('.disabled(') and
-# the presenter routing. The panel's former Share row is REMOVED (user
-# direction); MenuBubble must NOT regain a share surface.
-# ---------------------------------------------------------------------------
-echo "[7] share-empty-gate: '.disabled(' + SystemSharePresenter in ChromeOverlay.swift; no ShareLink in MenuBubble.swift ..."
+echo "[7] share-empty-gate: native Share item disabled on empty text; system presenter; no panel Share row ..."
 
 chrome_overlay_file="iosApp/iosApp/Chrome/ChromeOverlay.swift"
 menu_bubble_file="iosApp/iosApp/Chrome/MenuBubble.swift"
@@ -218,11 +212,11 @@ if [[ ! -f "$chrome_overlay_file" ]]; then
     result "share-empty-gate" fail "$chrome_overlay_file not found on disk (FR-20)"
 elif [[ ! -f "$menu_bubble_file" ]]; then
     result "share-empty-gate" fail "$menu_bubble_file not found on disk (FR-20)"
-elif ! grep -q "SystemSharePresenter.present(" "$chrome_overlay_file" 2>/dev/null; then
+elif ! rg --no-ignore -q -F "SystemSharePresenter.present(" "$chrome_overlay_file"; then
     result "share-empty-gate" fail "'SystemSharePresenter.present(' not found in $chrome_overlay_file (FR-20 — pill anchored-popover share missing)"
-elif ! grep -q "\.disabled(" "$chrome_overlay_file" 2>/dev/null; then
-    result "share-empty-gate" fail "'.disabled(' not found in $chrome_overlay_file (FR-20 — empty-buffer gate missing)"
-elif grep -q "ShareLink" "$menu_bubble_file" 2>/dev/null; then
+elif ! rg --no-ignore -q -F 'shareItem.isEnabled = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty' "$chrome_overlay_file"; then
+    result "share-empty-gate" fail "Native Share item empty-buffer gate missing"
+elif rg --no-ignore -q "ShareLink" "$menu_bubble_file"; then
     result "share-empty-gate" fail "'ShareLink' found in $menu_bubble_file (FR-20 — the panel Share row was removed per user direction; Share lives only on the pill)"
 else
     result "share-empty-gate" ok

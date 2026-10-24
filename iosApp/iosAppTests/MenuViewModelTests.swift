@@ -21,6 +21,7 @@
 // CI-verified on macos-26 iOS Simulator — not locally compilable (no macOS host).
 
 import XCTest
+import UIKit
 import shared
 @testable import iosApp
 
@@ -92,5 +93,59 @@ final class MenuViewModelTests: XCTestCase {
 
         XCTAssertFalse(first === second,
             "makeRecoveryListViewModel() must return a DISTINCT instance on each call (FR-12 fresh-per-expand)")
+    }
+}
+
+@MainActor
+final class ChromeBarCoordinatorTests: XCTestCase {
+    private func makeMenu() -> MenuViewModel {
+        MenuViewModel(
+            recovery: StubRecoveryRepository(),
+            viewModel: BufferViewModel(settings: StubSettingsRepository())
+        )
+    }
+
+    func testShareTracksWhitespaceAndEditedBuffer() throws {
+        let root = UIViewController()
+        let navigation = UINavigationController(rootViewController: root)
+        let coordinator = ChromeBarCoordinator()
+        coordinator.attach(to: navigation)
+        let menu = makeMenu()
+        coordinator.update(text: " \n\t", menuVM: menu, canUndo: false, onUndo: {})
+        let share = try XCTUnwrap(root.navigationItem.trailingItemGroups.last?.barButtonItems.first)
+        XCTAssertFalse(share.isEnabled)
+        coordinator.update(text: "Note", menuVM: menu, canUndo: true, onUndo: {})
+        XCTAssertTrue(share.isEnabled)
+        coordinator.update(text: "", menuVM: menu, canUndo: false, onUndo: {})
+        XCTAssertFalse(share.isEnabled)
+    }
+
+    func testUndoChangesPreservePresentationSourceItems() throws {
+        let root = UIViewController()
+        let navigation = UINavigationController(rootViewController: root)
+        let coordinator = ChromeBarCoordinator()
+        coordinator.attach(to: navigation)
+        let menu = makeMenu()
+        coordinator.update(text: "Note", menuVM: menu, canUndo: false, onUndo: {})
+        let originalGroup = try XCTUnwrap(root.navigationItem.trailingItemGroups.last)
+        let originalItems = originalGroup.barButtonItems
+        XCTAssertEqual(originalItems.count, 2)
+        coordinator.update(text: "Edited", menuVM: menu, canUndo: true, onUndo: {})
+        XCTAssertEqual(root.navigationItem.trailingItemGroups.count, 2)
+        XCTAssertTrue(root.navigationItem.trailingItemGroups.last === originalGroup)
+        coordinator.update(text: "Note", menuVM: menu, canUndo: false, onUndo: {})
+        XCTAssertEqual(root.navigationItem.trailingItemGroups.count, 1)
+        XCTAssertTrue(root.navigationItem.trailingItemGroups[0].barButtonItems[0] === originalItems[0])
+        XCTAssertTrue(root.navigationItem.trailingItemGroups[0].barButtonItems[1] === originalItems[1])
+    }
+
+    func testMenuRemainsPopoverInCompactWidth() {
+        let coordinator = ChromeBarCoordinator()
+        let presentation = UIPresentationController(
+            presentedViewController: UIViewController(), presenting: UIViewController()
+        )
+        XCTAssertEqual(coordinator.adaptivePresentationStyle(
+            for: presentation, traitCollection: UITraitCollection(horizontalSizeClass: .compact)
+        ), .none)
     }
 }
