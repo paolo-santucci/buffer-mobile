@@ -2,7 +2,8 @@ import UIKit
 
 @MainActor
 enum SystemSharePresenter {
-    static func present(text: String, from source: UIBarButtonItem, in presenting: UIViewController) {
+    static func present(text: String, from source: UIBarButtonItem, in presenting: UIViewController,
+                        delegate: UIPopoverPresentationControllerDelegate? = nil) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               presenting.view.window != nil,
               presenting.presentedViewController == nil else { return }
@@ -10,8 +11,20 @@ enum SystemSharePresenter {
         controller.modalPresentationStyle = .popover
         guard let popover = controller.popoverPresentationController else { return }
         popover.sourceItem = source
-        popover.delegate = SharePopoverAdaptivity.shared
+        popover.delegate = delegate ?? SharePopoverAdaptivity.shared
         presenting.present(controller, animated: !UIAccessibility.isReduceMotionEnabled)
+    }
+}
+
+enum PillPopoverAlignment {
+    static func margins(pillFrame: CGRect, bounds: CGRect, minimum: UIEdgeInsets) -> UIEdgeInsets {
+        guard !pillFrame.isEmpty, !pillFrame.isNull, !pillFrame.isInfinite else { return minimum }
+        return UIEdgeInsets(
+            top: max(minimum.top, pillFrame.minY - bounds.minY),
+            left: minimum.left,
+            bottom: minimum.bottom,
+            right: max(minimum.right, bounds.maxX - pillFrame.maxX)
+        )
     }
 }
 

@@ -98,6 +98,26 @@ final class MenuViewModelTests: XCTestCase {
 
 @MainActor
 final class ChromeBarCoordinatorTests: XCTestCase {
+    func testPopoverTrailingEdgeMovesWithPill() {
+        let bounds = CGRect(x: 0, y: 0, width: 390, height: 844)
+        let minimum = UIEdgeInsets(top: 0, left: 16, bottom: 16, right: 0)
+        let closed = PillPopoverAlignment.margins(
+            pillFrame: CGRect(x: 274, y: 59, width: 100, height: 44), bounds: bounds, minimum: minimum
+        )
+        let editing = PillPopoverAlignment.margins(
+            pillFrame: CGRect(x: 214, y: 59, width: 100, height: 44), bounds: bounds, minimum: minimum
+        )
+        XCTAssertEqual(closed.right, 16)
+        XCTAssertEqual(editing.right, 76)
+        XCTAssertEqual(editing.top, 59)
+        XCTAssertEqual(editing.left, closed.left)
+    }
+
+    func testMissingPillFrameKeepsSafeMargins() {
+        let minimum = UIEdgeInsets(top: 12, left: 16, bottom: 16, right: 12)
+        XCTAssertEqual(PillPopoverAlignment.margins(pillFrame: .null, bounds: .zero, minimum: minimum), minimum)
+    }
+
     private func makeMenu() -> MenuViewModel {
         MenuViewModel(
             recovery: StubRecoveryRepository(),
@@ -192,6 +212,8 @@ final class ChromeBarCoordinatorTests: XCTestCase {
         wait(for: [visible], timeout: 3)
 
         for attempt in 1...3 {
+            coordinator.updateKeyboard(isPresented: attempt == 2, onClose: {})
+            navigation.view.layoutIfNeeded()
             let presented = expectation(description: "Menu opens on tap \(attempt)")
             navigation.onPresent = { presented.fulfill() }
             coordinator.presentMenu()
@@ -200,6 +222,13 @@ final class ChromeBarCoordinatorTests: XCTestCase {
             XCTAssertGreaterThan(menu.preferredContentSize.width, 0)
             XCTAssertGreaterThan(menu.preferredContentSize.height, 0)
             XCTAssertNotNil(menu.popoverPresentationController?.sourceItem)
+            let popover = try XCTUnwrap(menu.popoverPresentationController)
+            let container = try XCTUnwrap(popover.containerView)
+            let source = try XCTUnwrap(popover.sourceItem)
+            let sourceFrame = try XCTUnwrap(source.frame(in: container))
+            XCTAssertEqual(popover.popoverLayoutMargins.right, container.bounds.maxX - sourceFrame.maxX, accuracy: 1)
+            let panelFrame = menu.view.convert(menu.view.bounds, to: container)
+            XCTAssertLessThanOrEqual(panelFrame.maxX, sourceFrame.maxX + 1)
             let dismissed = expectation(description: "Menu dismisses \(attempt)")
             menu.dismiss(animated: false) { dismissed.fulfill() }
             wait(for: [dismissed], timeout: 3)
