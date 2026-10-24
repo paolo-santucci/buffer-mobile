@@ -25,7 +25,9 @@ struct ContentView: View {
                 text: viewModel.text,
                 menuVM: menuVM,
                 canUndo: coordinatorBox.canUndo,
-                onUndo: { [coordinatorBox] in coordinatorBox.coordinator?.undo() }
+                onUndo: { [coordinatorBox] in coordinatorBox.coordinator?.undo() },
+                isKeyboardPresented: isKeyboardPresented,
+                onCloseKeyboard: { [coordinatorBox] in coordinatorBox.coordinator?.closeKeyboard() }
             ) {
                 BufferEditor(viewModel: viewModel, coordinatorBox: coordinatorBox)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -37,6 +39,7 @@ struct ContentView: View {
             .ignoresSafeArea(.container)
         }
         .preferredColorScheme(nil)
+        .tint(Color("AccentColor"))
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
             isKeyboardPresented = true
         }
@@ -51,9 +54,9 @@ struct ContentView: View {
     private func bottomToolbar(bottomSafeAreaInset: CGFloat) -> some View {
         HStack {
             BottomToolbar(
+                isKeyboardPresented: isKeyboardPresented,
                 onCopy: { [coordinatorBox] in coordinatorBox.coordinator?.copyToPasteboard() },
                 onPaste: { [coordinatorBox] in coordinatorBox.coordinator?.pasteAtCaret() },
-                onCloseKeyboard: { [coordinatorBox] in coordinatorBox.coordinator?.closeKeyboard() },
                 onIndent: { [coordinatorBox, viewModel] in
                     guard let textView = coordinatorBox.coordinator?.textView else { return }
                     let result = viewModel.indent(in: textView.selectedRange, of: textView.text ?? "")
@@ -65,10 +68,11 @@ struct ContentView: View {
                     coordinatorBox.coordinator?.applyIndentResult(text: result.text, range: result.selection)
                 }
             )
-            Spacer()
+            if !isKeyboardPresented { Spacer() }
         }
-        .padding(.leading, ChromeMetrics.toolbarFloatingPadding)
-        .padding(.bottom, isKeyboardPresented ? 0 : -min(bottomSafeAreaInset, ChromeMetrics.toolbarBottomOverhang))
+        .padding(.leading, isKeyboardPresented ? ChromeMetrics.keyboardToolbarSideInset : ChromeMetrics.toolbarFloatingPadding)
+        .padding(.trailing, isKeyboardPresented ? ChromeMetrics.keyboardToolbarSideInset : 0)
+        .padding(.bottom, isKeyboardPresented ? ChromeMetrics.keyboardToolbarGap : -min(bottomSafeAreaInset, ChromeMetrics.toolbarBottomOverhang))
     }
 
     @MainActor

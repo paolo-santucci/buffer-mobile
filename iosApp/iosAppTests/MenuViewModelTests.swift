@@ -149,6 +149,30 @@ final class ChromeBarCoordinatorTests: XCTestCase {
         ), .none)
     }
 
+    func testKeyboardDismissalHasSeparateProminentGroupAndPreservesMenuAnchor() throws {
+        let root = UIViewController()
+        let navigation = UINavigationController(rootViewController: root)
+        let coordinator = ChromeBarCoordinator()
+        coordinator.attach(to: navigation)
+        let menuGroup = try XCTUnwrap(root.navigationItem.trailingItemGroups.first)
+
+        coordinator.updateKeyboard(isPresented: true, onClose: {})
+        let groups = root.navigationItem.trailingItemGroups
+        XCTAssertEqual(groups.count, 2)
+        XCTAssertTrue(groups[0] === menuGroup)
+        let dismiss = try XCTUnwrap(groups.last?.barButtonItems.first)
+        XCTAssertEqual(dismiss.style, .prominent)
+        XCTAssertEqual(dismiss.accessibilityLabel, String(localized: "Hide keyboard"))
+        XCTAssertNotNil(dismiss.tintColor)
+
+        coordinator.update(text: "Edited", menuVM: makeMenu(), canUndo: true, onUndo: {})
+        XCTAssertEqual(root.navigationItem.trailingItemGroups.count, 3)
+        XCTAssertTrue(root.navigationItem.trailingItemGroups.last?.barButtonItems.first === dismiss)
+        coordinator.updateKeyboard(isPresented: false, onClose: {})
+        XCTAssertEqual(root.navigationItem.trailingItemGroups.count, 2)
+        XCTAssertTrue(root.navigationItem.trailingItemGroups.last === menuGroup)
+    }
+
     func testIdleMenuPresentationsHaveContentAndCanReopen() throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
         let previousKeyWindow = scene.windows.first(where: \.isKeyWindow)

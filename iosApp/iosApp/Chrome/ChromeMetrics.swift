@@ -14,4 +14,7 @@ enum ChromeMetrics {
     static let capsuleHorizontalPadding: CGFloat = 8
     static let toolbarFloatingPadding: CGFloat = 12
     static let toolbarBottomOverhang: CGFloat = 4
+    static let keyboardToolbarHeight: CGFloat = 48
+    static let keyboardToolbarGap: CGFloat = 10
+    static let keyboardToolbarSideInset: CGFloat = 10
 }

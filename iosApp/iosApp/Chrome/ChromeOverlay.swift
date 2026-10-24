@@ -13,6 +13,8 @@ struct ChromeOverlay<Content: View>: UIViewControllerRepresentable {
     let menuVM: MenuViewModel
     let canUndo: Bool
     let onUndo: () -> Void
+    var isKeyboardPresented = false
+    var onCloseKeyboard: () -> Void = {}
     @ViewBuilder let content: () -> Content
 
     func makeCoordinator() -> ChromeBarCoordinator {
@@ -22,15 +24,18 @@ struct ChromeOverlay<Content: View>: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UINavigationController {
         let editor = UIHostingController(rootView: content())
         let navigation = UINavigationController(rootViewController: editor)
+        navigation.view.tintColor = UIColor(named: "AccentColor")
         navigation.navigationBar.prefersLargeTitles = false
         context.coordinator.attach(to: navigation)
         context.coordinator.update(text: text, menuVM: menuVM, canUndo: canUndo, onUndo: onUndo)
+        context.coordinator.updateKeyboard(isPresented: isKeyboardPresented, onClose: onCloseKeyboard)
         return navigation
     }
 
     func updateUIViewController(_ navigation: UINavigationController, context: Context) {
         (navigation.viewControllers.first as? UIHostingController<Content>)?.rootView = content()
         context.coordinator.update(text: text, menuVM: menuVM, canUndo: canUndo, onUndo: onUndo)
+        context.coordinator.updateKeyboard(isPresented: isKeyboardPresented, onClose: onCloseKeyboard)
     }
 
     static func dismantleUIViewController(_ navigation: UINavigationController, coordinator: ChromeBarCoordinator) {
@@ -46,6 +51,17 @@ final class ChromeBarCoordinator: NSObject, UIPopoverPresentationControllerDeleg
     private var menuVM: MenuViewModel?
     private var onUndo: () -> Void = {}
     private var showsUndo = false
+    private var showsKeyboardDismissal = false
+    private var onCloseKeyboard: () -> Void = {}
+
+    private lazy var closeKeyboardItem = UIBarButtonItem(
+        title: String(localized: "Hide keyboard"),
+        image: UIImage(systemName: "checkmark"),
+        primaryAction: UIAction { [weak self] _ in self?.onCloseKeyboard() }
+    )
+    private lazy var closeKeyboardGroup = UIBarButtonItemGroup(
+        barButtonItems: [closeKeyboardItem], representativeItem: nil
+    )
 
     private lazy var shareItem = UIBarButtonItem(
         title: String(localized: "Share"),
@@ -77,6 +93,9 @@ final class ChromeBarCoordinator: NSObject, UIPopoverPresentationControllerDeleg
         undoItem.accessibilityLabel = String(localized: "Undo")
         shareItem.accessibilityHint = String(localized: "Share text")
         menuItem.accessibilityHint = String(localized: "Open menu")
+        closeKeyboardItem.accessibilityLabel = String(localized: "Hide keyboard")
+        closeKeyboardItem.style = .prominent
+        closeKeyboardItem.tintColor = UIColor(named: "AccentColor")
         updateGroups()
     }
 
@@ -91,9 +110,17 @@ final class ChromeBarCoordinator: NSObject, UIPopoverPresentationControllerDeleg
         }
     }
 
+    func updateKeyboard(isPresented: Bool, onClose: @escaping () -> Void) {
+        onCloseKeyboard = onClose
+        guard showsKeyboardDismissal != isPresented else { return }
+        showsKeyboardDismissal = isPresented
+        updateGroups()
+    }
+
     private func updateGroups() {
-        navigation?.viewControllers.first?.navigationItem.trailingItemGroups =
-            showsUndo ? [undoGroup, shareMenuGroup] : [shareMenuGroup]
+        var groups = showsUndo ? [undoGroup, shareMenuGroup] : [shareMenuGroup]
+        if showsKeyboardDismissal { groups.append(closeKeyboardGroup) }
+        navigation?.viewControllers.first?.navigationItem.trailingItemGroups = groups
     }
 
     func presentMenu() {

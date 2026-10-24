@@ -18,7 +18,9 @@ toolbar = source("iosApp/iosApp/Chrome/BottomToolbar.swift")
 content = source("iosApp/iosApp/ContentView.swift")
 
 checks = {
-    "bottom toolbar action order": 0 <= toolbar.find("closeKeyboardButton") < toolbar.find("copyButton"),
+    "bottom toolbar action order": 0 <= toolbar.find('toolbarButton("doc.on.doc"') < toolbar.find('toolbarButton("doc.on.clipboard"') < toolbar.find('toolbarButton("decrease.indent"') < toolbar.find('toolbarButton("increase.indent"'),
+    "keyboard dismissal in top chrome": "onCloseKeyboard" not in toolbar and all(token in chrome for token in (
+        'UIImage(systemName: "checkmark")', 'closeKeyboardItem.style = .prominent', 'groups.append(closeKeyboardGroup)')),
     "editor inset preserved": "textContainerInset" in editor and not re.search(r"textContainerInset\s*=\s*\.zero", editor),
     "editor fragment padding": "lineFragmentPadding = 0" in editor,
     "real grouped navigation items": all(token in chrome for token in (
