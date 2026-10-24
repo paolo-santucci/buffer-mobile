@@ -148,4 +148,62 @@ final class ChromeBarCoordinatorTests: XCTestCase {
             for: presentation, traitCollection: UITraitCollection(horizontalSizeClass: .compact)
         ), .none)
     }
+
+    func testIdleMenuPresentationsHaveContentAndCanReopen() throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let previousKeyWindow = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        let navigation = ImmediatePresentationNavigationController(rootViewController: UIViewController())
+        let coordinator = ChromeBarCoordinator()
+        coordinator.attach(to: navigation)
+        coordinator.update(text: "Note", menuVM: makeMenu(), canUndo: false, onUndo: {})
+        window.rootViewController = navigation
+        let visible = expectation(description: "Navigation is visible")
+        navigation.onAppear = { visible.fulfill() }
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            previousKeyWindow?.makeKeyAndVisible()
+        }
+        wait(for: [visible], timeout: 3)
+
+        for attempt in 1...3 {
+            let presented = expectation(description: "Menu opens on tap \(attempt)")
+            navigation.onPresent = { presented.fulfill() }
+            coordinator.presentMenu()
+            wait(for: [presented], timeout: 3)
+            let menu = try XCTUnwrap(navigation.presentedViewController)
+            XCTAssertGreaterThan(menu.preferredContentSize.width, 0)
+            XCTAssertGreaterThan(menu.preferredContentSize.height, 0)
+            XCTAssertNotNil(menu.popoverPresentationController?.sourceItem)
+            let dismissed = expectation(description: "Menu dismisses \(attempt)")
+            menu.dismiss(animated: false) { dismissed.fulfill() }
+            wait(for: [dismissed], timeout: 3)
+            XCTAssertNil(navigation.presentedViewController)
+        }
+    }
+}
+
+@MainActor
+private final class ImmediatePresentationNavigationController: UINavigationController {
+    var onAppear: (() -> Void)?
+    var onPresent: (() -> Void)?
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        let completion = onAppear
+        onAppear = nil
+        completion?()
+    }
+
+    override func present(
+        _ controller: UIViewController,
+        animated: Bool,
+        completion: (() -> Void)? = nil
+    ) {
+        super.present(controller, animated: false) {
+            completion?()
+            self.onPresent?()
+        }
+    }
 }

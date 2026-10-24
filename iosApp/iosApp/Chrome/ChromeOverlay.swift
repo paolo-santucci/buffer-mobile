@@ -96,7 +96,7 @@ final class ChromeBarCoordinator: NSObject, UIPopoverPresentationControllerDeleg
             showsUndo ? [undoGroup, shareMenuGroup] : [shareMenuGroup]
     }
 
-    private func presentMenu() {
+    func presentMenu() {
         guard let navigation, let menuVM,
               navigation.view.window != nil,
               navigation.presentedViewController == nil else { return }
