@@ -1,13 +1,10 @@
 import SwiftUI
-import shared
+import UIKit
 
 struct MenuBubble: View {
     let menuVM: MenuViewModel
     var maximumHeight: CGFloat = 480
     let onDismiss: () -> Void
-    @State private var isAboutExpanded = false
-    @State private var isRecoveryExpanded = false
-    @State private var recoveryVM: RecoveryListViewModel?
 
     var body: some View {
         ViewThatFits(in: .vertical) {
@@ -21,187 +18,114 @@ struct MenuBubble: View {
 
     private var rows: some View {
         VStack(alignment: .leading, spacing: ChromeMetrics.menuRowSpacing) {
-            RecoverySection(
-                menuVM: menuVM,
-                onDismiss: onDismiss,
-                isExpanded: $isRecoveryExpanded,
-                recoveryVM: $recoveryVM
+            NativeSubmenuButton(
+                title: String(localized: "Recent notes"),
+                symbol: "clock.arrow.trianglehead.counterclockwise.rotate.90",
+                makeChildren: recoveryActions
             )
-            Divider()
-                .padding(.horizontal, ChromeMetrics.menuRowHorizontalPadding)
-            AboutSection(isExpanded: $isAboutExpanded)
-        }
-        .padding(.vertical, ChromeMetrics.menuRowVerticalPadding)
-    }
-}
-
-private struct AboutSection: View {
-    @Binding var isExpanded: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: ChromeMetrics.menuRowSpacing) {
-            Button {
-                withAnimation(reduceMotion ? nil : ChromeMetrics.submenuExpandAnimation) {
-                    isExpanded.toggle()
-                }
-            } label: {
-                MenuRow(icon: "info.circle", label: String(localized: "About"), isExpanded: isExpanded)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(String(localized: "About"))
-            .help(String(localized: "About"))
-
-            if isExpanded {
-                AboutDetails()
-            }
-        }
-    }
-}
-
-private struct AboutDetails: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: ChromeMetrics.menuRowSpacing) {
-            HStack(spacing: ChromeMetrics.menuRowHorizontalPadding) {
-                Image(systemName: "app")
-                    .frame(width: 24)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: ChromeMetrics.menuRowSpacing) {
-                    Text("Foglietto").font(.headline)
-                    Text("Paolo Santucci").font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: ChromeMetrics.menuRowSpacing) {
-                    if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
-                        Text(version)
-                    }
-                    Text("GPL-3.0")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, ChromeMetrics.menuRowHorizontalPadding)
-            .padding(.vertical, ChromeMetrics.menuRowVerticalPadding)
             .frame(minHeight: 44)
-
-            Link(destination: URL(string: "https://buffer.paolosantucci.com/bug/")!) {
-                MenuRow(icon: "exclamationmark.bubble", label: String(localized: "Report an issue"))
-            }
-            Link(destination: URL(string: "https://buffer.paolosantucci.com/")!) {
-                MenuRow(icon: "globe", label: String(localized: "Website"))
-            }
+            Divider().padding(.horizontal, ChromeMetrics.menuRowHorizontalPadding)
+            NativeSubmenuButton(
+                title: String(localized: "About"), symbol: "info.circle",
+                makeChildren: aboutActions
+            )
+            .frame(minHeight: 44)
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, ChromeMetrics.menuRowVerticalPadding)
+    }
+
+    private func recoveryActions() -> [UIMenuElement] {
+        let model = menuVM.makeRecoveryListViewModel()
+        model.refresh()
+        guard !model.rows.isEmpty else {
+            return [UIAction(title: String(localized: "No recent notes."), attributes: .disabled) { _ in }]
+        }
+        return model.rows.map { row in
+            let action = UIAction(title: row.previewTitle, image: UIImage(systemName: "doc.text")) { _ in
+                model.select(path: row.path)
+                onDismiss()
+            }
+            action.subtitle = row.dateSubtitle
+            action.accessibilityLabel = String(
+                format: String(localized: "Restore note: %@, saved %@"), row.previewTitle, row.dateSubtitle
+            )
+            action.accessibilityHint = String(localized: "Restore this note")
+            return action
+        }
+    }
+
+    private func aboutActions() -> [UIMenuElement] {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let identity = UIAction(title: "Foglietto", image: UIImage(systemName: "app"), attributes: .disabled) { _ in }
+        identity.subtitle = [version, "Paolo Santucci", "GPL-3.0"].filter { !$0.isEmpty }.joined(separator: " · ")
+        return [
+            identity,
+            linkAction(title: String(localized: "Report an issue"), symbol: "exclamationmark.bubble",
+                       address: "https://buffer.paolosantucci.com/bug/"),
+            linkAction(title: String(localized: "Website"), symbol: "globe",
+                       address: "https://buffer.paolosantucci.com/")
+        ]
+    }
+
+    private func linkAction(title: String, symbol: String, address: String) -> UIAction {
+        UIAction(title: title, image: UIImage(systemName: symbol)) { _ in
+            guard let url = URL(string: address) else { return }
+            onDismiss()
+            UIApplication.shared.open(url)
+        }
     }
 }
 
-private struct MenuRow: View {
-    let icon: String
-    let label: String
-    var isExpanded: Bool? = nil
+struct NativeSubmenuButton: UIViewRepresentable {
+    let title: String
+    let symbol: String
+    let makeChildren: () -> [UIMenuElement]
 
-    var body: some View {
-        HStack(spacing: ChromeMetrics.menuRowHorizontalPadding) {
-            Image(systemName: icon)
-                .font(.body.weight(ChromeMetrics.iconScaleWeight))
-                .frame(width: 24)
-                .accessibilityHidden(true)
-            Text(label).font(.body)
-            Spacer()
-            if let isExpanded {
-                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                    .font(.caption.weight(ChromeMetrics.iconScaleWeight))
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-            }
-        }
-        .padding(.horizontal, ChromeMetrics.menuRowHorizontalPadding)
-        .padding(.vertical, ChromeMetrics.menuRowVerticalPadding)
-        .frame(minHeight: 44)
-        .contentShape(.rect)
-    }
-}
-
-private struct RecoverySection: View {
-    let menuVM: MenuViewModel
-    let onDismiss: () -> Void
-    @Binding var isExpanded: Bool
-    @Binding var recoveryVM: RecoveryListViewModel?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: ChromeMetrics.menuRowSpacing) {
-            Button(action: toggleExpansion) {
-                MenuRow(
-                    icon: "clock.arrow.trianglehead.counterclockwise.rotate.90",
-                    label: String(localized: "Recent notes"),
-                    isExpanded: isExpanded
-                )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(String(localized: "Recent notes"))
-            .help(String(localized: "Recent notes"))
-
-            if isExpanded, let recoveryVM {
-                recoveryContent(recoveryVM)
-            }
-        }
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type: .system)
+        button.showsMenuAsPrimaryAction = true
+        button.contentHorizontalAlignment = .leading
+        let chevron = UIImageView(image: UIImage(systemName: "chevron.forward"))
+        chevron.tintColor = .secondaryLabel
+        chevron.isAccessibilityElement = false
+        chevron.translatesAutoresizingMaskIntoConstraints = false
+        button.addSubview(chevron)
+        NSLayoutConstraint.activate([
+            chevron.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -ChromeMetrics.menuRowHorizontalPadding),
+            chevron.centerYAnchor.constraint(equalTo: button.centerYAnchor)
+        ])
+        return button
     }
 
-    private func toggleExpansion() {
-        withAnimation(reduceMotion ? nil : ChromeMetrics.submenuExpandAnimation) {
-            isExpanded.toggle()
-            if isExpanded {
-                let model = menuVM.makeRecoveryListViewModel()
-                model.refresh()
-                recoveryVM = model
-            } else {
-                recoveryVM = nil
-            }
+    func updateUIView(_ button: UIButton, context: Context) {
+        var configuration = UIButton.Configuration.plain()
+        configuration.title = title
+        configuration.image = UIImage(systemName: symbol)
+        configuration.imagePadding = ChromeMetrics.menuRowHorizontalPadding
+        configuration.baseForegroundColor = .label
+        configuration.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { incoming in
+            var attributes = incoming
+            attributes.font = UIFont.preferredFont(forTextStyle: .body)
+            return attributes
         }
+        configuration.contentInsets = NSDirectionalEdgeInsets(
+            top: ChromeMetrics.menuRowVerticalPadding, leading: ChromeMetrics.menuRowHorizontalPadding,
+            bottom: ChromeMetrics.menuRowVerticalPadding, trailing: ChromeMetrics.pillHeight
+        )
+        button.configuration = configuration
+        button.accessibilityLabel = title
+        button.menu = Self.menu(title: title, makeChildren: makeChildren)
     }
 
-    @ViewBuilder
-    private func recoveryContent(_ model: RecoveryListViewModel) -> some View {
-        if model.rows.isEmpty {
-            Text(String(localized: "No recent notes."))
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, ChromeMetrics.menuRowHorizontalPadding)
-                .padding(.vertical, ChromeMetrics.menuRowVerticalPadding)
-        } else {
-            ForEach(model.rows) { row in
-                Button {
-                    model.select(path: row.path)
-                    onDismiss()
-                } label: {
-                    recoveryLabel(row)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(String(
-                    format: String(localized: "Restore note: %@, saved %@"),
-                    row.previewTitle, row.dateSubtitle
-                ))
-                .help(String(localized: "Restore this note"))
-            }
-        }
+    static func menu(title: String, makeChildren: @escaping () -> [UIMenuElement]) -> UIMenu {
+        UIMenu(title: title, children: [UIDeferredMenuElement.uncached { completion in
+            completion(makeChildren())
+        }])
     }
 
-    private func recoveryLabel(_ row: RecoveryRow) -> some View {
-        HStack(spacing: ChromeMetrics.menuRowHorizontalPadding) {
-            Image(systemName: "doc.text")
-                .frame(width: 24)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: ChromeMetrics.menuRowSpacing) {
-                Text(row.previewTitle).font(.subheadline).lineLimit(1)
-                Text(row.dateSubtitle).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-        }
-        .padding(.horizontal, ChromeMetrics.menuRowHorizontalPadding)
-        .padding(.vertical, ChromeMetrics.menuRowVerticalPadding)
-        .frame(minHeight: 44)
-        .contentShape(.rect)
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIButton, context: Context) -> CGSize? {
+        let width = proposal.width ?? ChromeMetrics.menuPanelWidth
+        let size = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: width, height: max(44, size.height))
     }
 }

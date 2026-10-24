@@ -33,7 +33,11 @@ checks = {
         r"glassEffect|GlassEffectContainer|dropCarrier|journeyTask|shareBlob|ShareSourceAnchor|Task\.sleep",
         chrome + menu + share),
     "reduce motion preserved": "UIAccessibility.isReduceMotionEnabled" in chrome
-        and "UIAccessibility.isReduceMotionEnabled" in share and "accessibilityReduceMotion" in menu,
+        and "UIAccessibility.isReduceMotionEnabled" in share and "showsMenuAsPrimaryAction = true" in menu,
+    "native popup submenus refreshed on open": "UIDeferredMenuElement.uncached" in menu
+        and "isRecoveryExpanded" not in menu and "isAboutExpanded" not in menu,
+    "panels follow pill frame": "frame(in: container)" in chrome
+        and "popover.popoverLayoutMargins" in chrome and "delegate: self" in chrome,
     "native compact-width presentation": "adaptivePresentationStyle" in chrome and ".none" in chrome
         and "adaptivePresentationStyle" in share and ".none" in share,
     "keyboard-safe bottom toolbar": ".safeAreaInset(edge: .bottom" in content,
