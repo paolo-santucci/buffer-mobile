@@ -231,3 +231,37 @@ private final class ImmediatePresentationNavigationController: UINavigationContr
         }
     }
 }
+
+final class MenuLocalizationTests: XCTestCase {
+    private let locales = "en it af ar bg bn ca cs da de el es et eu fa fi fil fr gl he hi hr hu id is ja ko lt lv mk ms nb nl pl pt-BR pt-PT ro ru sk sl sq sr sv sw ta te th tr uk ur vi zh-Hans zh-Hant".split(separator: " ").map(String.init)
+    private let keys = [
+        "About", "Undo", "Copy", "Copy text", "Hide keyboard", "Indent", "Menu",
+        "No recent notes.", "Open menu", "Outdent", "Paste", "Paste text", "Recent notes",
+        "Report an issue", "Restore note: %@, saved %@", "Restore this note", "Share", "Share text", "Website"
+    ]
+
+    func testEverySupportedLocaleShipsEveryInterfaceString() throws {
+        for locale in locales {
+            XCTAssertTrue(Bundle.main.localizations.contains(locale), "Missing locale: \(locale)")
+            let path = try XCTUnwrap(Bundle.main.path(forResource: locale, ofType: "lproj"))
+            let bundle = try XCTUnwrap(Bundle(path: path))
+            for key in keys {
+                let value = bundle.localizedString(forKey: key, value: "MISSING_TRANSLATION", table: nil)
+                XCTAssertNotEqual(value, "MISSING_TRANSLATION", "\(locale): \(key)")
+                XCTAssertFalse(value.isEmpty, "\(locale): \(key)")
+                XCTAssertEqual(value.components(separatedBy: "%@").count,
+                               key.components(separatedBy: "%@").count, "\(locale): \(key)")
+            }
+        }
+    }
+
+    func testUnsupportedLanguageFallsBackToEnglish() throws {
+        XCTAssertEqual(Bundle.main.developmentLocalization, "en")
+        XCTAssertEqual(Bundle.preferredLocalizations(from: locales, forPreferences: ["zz-ZZ"]).first, "en")
+        let path = try XCTUnwrap(Bundle.main.path(forResource: "en", ofType: "lproj"))
+        let english = try XCTUnwrap(Bundle(path: path))
+        for key in keys {
+            XCTAssertEqual(english.localizedString(forKey: key, value: nil, table: nil), key)
+        }
+    }
+}
