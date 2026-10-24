@@ -1,40 +1,6 @@
-// BufferEditor.swift
-// iosApp
-//
-// UIViewRepresentable wrapping a UITextView — the editor content surface. The SwiftUI
-// built-in editor and text-field wrappers stay unused (AR-02 / FR-01).
-//
-// Presentation contract (FR-09, FR-12, FR-13): plain theme background, monospaced font
-// at the shared absolute slot sizes, line height 1.4, and a full-bleed first line that
-// flows UNDER the floating glass chrome (contentTopGap below the safe area — the glass
-// refracts content, user-directed supersession of the keep-out lockstep). Text handling,
-// delegate behaviour, and the shared font-size table are frozen.
-//
-// Spec refs: FR-01, FR-09, FR-10, FR-12, FR-13, FR-15; §5.1.d, §5.2;
-//            §6.1 EC-03, EC-12, EC-13, EC-24, EC-25; NFR-03, NFR-06.
-// CI-verified on macos-26 iOS Simulator — not locally compilable (no macOS host).
-
 import UIKit
 import SwiftUI
 import shared
-
-// MARK: - Editor inset seam
-
-/// Full-bleed top inset: the first text line flows UNDER the floating glass
-/// chrome (a small breathing gap below the safe area, Apple-Notes style), so
-/// the Liquid Glass material on the chrome has content to blur, refract and
-/// reflect — the transparency the user requires. Supersedes the former FR-10
-/// keep-out lockstep (first line below the pill): the glass is now expected to
-/// sit over content.
-///
-/// Pure and total over `safeAreaTop`. Independent of chrome state, so text never
-/// moves under chrome changes (C-06).
-///
-/// - Parameter safeAreaTop: The device safe-area top inset in points.
-/// - Returns: The total inset to apply to `textContainerInset.top` (NFR-03).
-func kEditorTopInset(safeAreaTop: CGFloat) -> CGFloat {
-    safeAreaTop + ChromeMetrics.contentTopGap
-}
 
 // MARK: - Editor font
 
@@ -60,8 +26,8 @@ private func applyFont(to textView: UITextView) {
 
 /// `UIViewRepresentable` wrapping a `BufferTextView` — the editor content surface.
 ///
-/// The wrapped view keeps `textContainerInset` aligned with the attached window's live safe
-/// area. That reconciliation writes nothing but the inset, so text, selection, typing
+/// UIKit adjusts the scroll view for native navigation and safe areas. The text container
+/// adds only content padding. Reconciliation writes nothing but the inset, so text, selection, typing
 /// attributes, and scroll offset survive every tick (EC-12).
 ///
 /// `makeUIView` publishes the coordinator into `coordinatorBox.coordinator` (weak) so the
@@ -95,8 +61,7 @@ struct BufferEditor: UIViewRepresentable {
 
     // MARK: Editor text view
 
-    /// `UITextView` that keeps `textContainerInset` aligned with the attached window's
-    /// live safe area.
+    /// `UITextView` whose content padding is independent of UIKit's adjusted scroll insets.
     ///
     /// Reconciliation is window-guarded and divergence-only: only `textContainerInset` is
     /// ever written, so in-session text, selection, and typing attributes survive every tick
@@ -114,13 +79,10 @@ struct BufferEditor: UIViewRepresentable {
             reconcileTopInset()
         }
 
-        /// Converge `textContainerInset` on the attached window's live safe area.
-        ///
-        /// No-op while detached, and no-op while the top inset already matches the window's
-        /// safe area, so repeated ticks never invalidate layout for nothing.
+        /// Applies content padding without adding the safe area a second time.
         func reconcileTopInset() {
-            guard let window = window else { return }
-            let desired = kEditorTopInset(safeAreaTop: window.safeAreaInsets.top)
+            guard window != nil else { return }
+            let desired = ChromeMetrics.contentTopGap
             guard textContainerInset.top != desired else { return }
             textContainerInset = UIEdgeInsets(
                 top: desired,
@@ -133,17 +95,16 @@ struct BufferEditor: UIViewRepresentable {
 
     // MARK: UIViewRepresentable
 
-    /// Build the editor surface: plain theme background, token-derived inset (provisional
-    /// until the window attaches), zero line-fragment padding, monospaced font, coordinator
-    /// wiring.
+    /// Builds the editor with system-managed scroll insets and content-only text padding.
     func makeUIView(context: Context) -> UITextView {
         let textView = BufferTextView()
 
         textView.backgroundColor = .systemBackground
         textView.textColor = .label
+        textView.contentInsetAdjustmentBehavior = .automatic
 
         textView.textContainerInset = UIEdgeInsets(
-            top: kEditorTopInset(safeAreaTop: 0),
+            top: ChromeMetrics.contentTopGap,
             left: ChromeMetrics.chromeHorizontalInset,
             bottom: 0,
             right: ChromeMetrics.chromeHorizontalInset

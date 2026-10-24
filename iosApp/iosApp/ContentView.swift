@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import shared
 
 struct ContentView: View {
@@ -9,6 +10,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var coordinatorBox = CoordinatorBox()
     @State private var menuVM: MenuViewModel
+    @State private var isKeyboardPresented = false
 
     init(viewModel: BufferViewModel, recovery: RecoveryRepository, lifecycle: LifecycleSaveCoordinator) {
         self.viewModel = viewModel
@@ -18,27 +20,35 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ChromeOverlay(
-            text: viewModel.text,
-            menuVM: menuVM,
-            canUndo: coordinatorBox.canUndo,
-            onUndo: { [coordinatorBox] in coordinatorBox.coordinator?.undo() }
-        ) {
-            BufferEditor(viewModel: viewModel, coordinatorBox: coordinatorBox)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea()
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    bottomToolbar
-                }
+        GeometryReader { geometry in
+            ChromeOverlay(
+                text: viewModel.text,
+                menuVM: menuVM,
+                canUndo: coordinatorBox.canUndo,
+                onUndo: { [coordinatorBox] in coordinatorBox.coordinator?.undo() }
+            ) {
+                BufferEditor(viewModel: viewModel, coordinatorBox: coordinatorBox)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea()
+                    .safeAreaInset(edge: .bottom, spacing: 0) {
+                        bottomToolbar(bottomSafeAreaInset: geometry.safeAreaInsets.bottom)
+                    }
+            }
+            .ignoresSafeArea(.container)
         }
-        .ignoresSafeArea(.container)
         .preferredColorScheme(nil)
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            isKeyboardPresented = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            isKeyboardPresented = false
+        }
         .onChange(of: scenePhase) { _, newPhase in
             ContentView.dispatchScenePhase(newPhase, to: lifecycle)
         }
     }
 
-    private var bottomToolbar: some View {
+    private func bottomToolbar(bottomSafeAreaInset: CGFloat) -> some View {
         HStack {
             BottomToolbar(
                 onCopy: { [coordinatorBox] in coordinatorBox.coordinator?.copyToPasteboard() },
@@ -58,7 +68,7 @@ struct ContentView: View {
             Spacer()
         }
         .padding(.leading, ChromeMetrics.toolbarFloatingPadding)
-        .padding(.bottom, ChromeMetrics.toolbarFloatingPadding)
+        .padding(.bottom, isKeyboardPresented ? 0 : -min(bottomSafeAreaInset, ChromeMetrics.toolbarBottomOverhang))
     }
 
     @MainActor
