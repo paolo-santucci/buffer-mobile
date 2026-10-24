@@ -249,7 +249,8 @@ final class MenuLocalizationTests: XCTestCase {
                 let value = bundle.localizedString(forKey: key, value: "MISSING_TRANSLATION", table: nil)
                 XCTAssertNotEqual(value, "MISSING_TRANSLATION", "\(locale): \(key)")
                 XCTAssertFalse(value.isEmpty, "\(locale): \(key)")
-                XCTAssertEqual(value.components(separatedBy: "%@").count,
+                let normalized = value.replacingOccurrences(of: #"%\d+\$@"#, with: "%@", options: .regularExpression)
+                XCTAssertEqual(normalized.components(separatedBy: "%@").count,
                                key.components(separatedBy: "%@").count, "\(locale): \(key)")
             }
         }
