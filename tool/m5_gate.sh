@@ -23,6 +23,12 @@
 
 set -uo pipefail
 
+if command -v rg >/dev/null 2>&1; then
+    xgrep_q() { rg --no-ignore -q "$@"; }
+else
+    xgrep_q() { grep -qE "$@"; }
+fi
+
 PASS=0
 FAIL=0
 
@@ -212,11 +218,11 @@ if [[ ! -f "$chrome_overlay_file" ]]; then
     result "share-empty-gate" fail "$chrome_overlay_file not found on disk (FR-20)"
 elif [[ ! -f "$menu_bubble_file" ]]; then
     result "share-empty-gate" fail "$menu_bubble_file not found on disk (FR-20)"
-elif ! rg --no-ignore -q -F "SystemSharePresenter.present(" "$chrome_overlay_file"; then
+elif ! xgrep_q 'SystemSharePresenter\.present\(' "$chrome_overlay_file"; then
     result "share-empty-gate" fail "'SystemSharePresenter.present(' not found in $chrome_overlay_file (FR-20 — pill anchored-popover share missing)"
-elif ! rg --no-ignore -q -F 'shareItem.isEnabled = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty' "$chrome_overlay_file"; then
+elif ! xgrep_q 'shareItem\.isEnabled = !text\.trimmingCharacters\(in: \.whitespacesAndNewlines\)\.isEmpty' "$chrome_overlay_file"; then
     result "share-empty-gate" fail "Native Share item empty-buffer gate missing"
-elif rg --no-ignore -q "ShareLink" "$menu_bubble_file"; then
+elif xgrep_q "ShareLink" "$menu_bubble_file"; then
     result "share-empty-gate" fail "'ShareLink' found in $menu_bubble_file (FR-20 — the panel Share row was removed per user direction; Share lives only on the pill)"
 else
     result "share-empty-gate" ok
