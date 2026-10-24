@@ -136,7 +136,7 @@ private final class MenuPopoverController: UIHostingController<MenuBubble> {
     }
 
     @MainActor required dynamic init?(coder: NSCoder) {
-        nil
+        return nil
     }
 
     override func viewWillLayoutSubviews() {
