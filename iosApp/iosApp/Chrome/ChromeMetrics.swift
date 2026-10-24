@@ -42,6 +42,18 @@ enum ChromeMetrics {
     static let sharePanelBlobWidth: CGFloat = 320
     static let sharePanelBlobHeight: CGFloat = 480
 
+    // Drop-journey morph (the pill melts into an egg that travels to the landing
+    // anchor, rests, then blooms into the menu panel — and back on close)
+    static let dropEggSize = CGSize(width: 44, height: 56)
+    static let dropLandingHorizontalAnchor: CGFloat = 0.5
+    static let dropLandingVerticalAnchor: CGFloat = 0.60
+    static let dropFallSpring: Animation = .bouncy(duration: 0.50, extraBounce: 0.15)
+    static let dropTravelSettle: TimeInterval = 0.55
+    static let dropShrinkSpring: Animation = .bouncy(duration: 0.35, extraBounce: 0.10)
+    static let dropShrinkSettle: TimeInterval = 0.40
+    static let dropRiseSpring: Animation = .bouncy(duration: 0.45, extraBounce: 0.12)
+    static let dropRiseSettle: TimeInterval = 0.50
+
     // Chrome motion (gated to nil at the consuming seam under Reduce Motion)
     static let menuOpenSpring: Animation = .bouncy(duration: 0.55, extraBounce: 0.10)
     static let menuCloseSpring: Animation = .bouncy(duration: 0.40, extraBounce: 0.10)

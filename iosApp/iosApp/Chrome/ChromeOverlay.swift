@@ -3,11 +3,12 @@
 //
 // Container view composing the top-right chrome: a standalone Undo glass circle
 // beside ONE glass capsule (rc24 anatomy: Share + `…` behind a single pinned
-// `.regular` capsule) that deforms as a liquid unit into the menu
+// `.regular` capsule) that melts into a travelling drop and blooms into the menu
 // panel (MenuBubble) and back, over the editor. The chrome is permanently visible:
 // the auto-hide state machine (ChromeVisibility) is retired — no fade while
 // writing, no scroll-direction hide. Owns the ONE shared morph container, the
-// morph namespace, and the private `isMenuPresented` state.
+// morph namespace, the drop-journey stage machine, and the private
+// `isMenuPresented` state.
 //
 // ┌─ MORPH TOPOLOGY (read before changing) ────────────────────────────────────┐
 // │ ONE positioned top-trailing container holding EXACTLY ONE child per state:  │
@@ -17,9 +18,12 @@
 // │       undoButton                     // PINNED trailing inset — never moved │
 // │       shareAnchor                    // invisible popover anchor, every state│
 // │       morphContainer(spacing: 35) {  // LAST z-child — expands OVER Undo     │
-// │           if sharing { blob }         // pill stretches into the panel     │
-// │           else if open { MenuBubble } else { closedPill }  // XOR          │
-// │               .glassEffectID(chromeGlassID)  — NO .transition on children   │
+// │         GeometryReader {             // the drop's whole-overlay travel field│
+// │           if sharing { blob }        // pill stretches into the share panel │
+// │           else if stage == .dropping { dropCarrier } // the traveling egg  │
+// │           else if stage == .open { MenuBubble } else { closedPill } // XOR │
+// │               .glassEffectID(...)    — NO .transition on children           │
+// │         }                                                                   │
 // │       }                                                                     │
 // │   }                                                                         │
 // │                                                                            │
@@ -42,6 +46,22 @@
 // │  Share unmounts on open (consumed into the panel's first row, Apple-Notes  │
 // │  pattern, FR-04), so nothing live can glue to the flying glass (rc18-cut1).│
 // │  Undo is the one chrome artifact OUTSIDE the container (its own glass).     │
+// │ WHY the three-act drop journey (user direction — the pill must TRAVEL): the │
+// │  old in-place deflate/inflate read wrong against Notes. `stage`             │
+// │  (closed → dropping → open) drives ONE `dropCarrier` glass:                 │
+// │   ACT 1 — the pill's capsule MELTS into an egg (44×56) WHILE it travels to  │
+// │           the centre-bottom of the screen; melt and travel are ONE bouncy   │
+// │           spring, so the drop elongates as it falls.                        │
+// │   ACT 2 — it rests: a beat of stillness with residual spring wobble.        │
+// │   ACT 3 — it BLOOMS: the egg's glass morphs up into the panel's frame at    │
+// │           the top-right, the panel's rows arriving refracted inside it.     │
+// │  Close runs the film backward: the panel shrinks into the egg at the resting│
+// │  point (same-identity swap), pause, the egg rises and regrows to the pill's │
+// │  frame, then the pill (icons) takes over frame-identically. A close that    │
+// │  interrupts a fall skips the shrink and simply reverses the drop.           │
+// │  Every handoff is an exclusive same-transaction swap: the drop inherits     │
+// │  `chrome.morph` while falling and flips to `chrome.panel` only while it is  │
+// │  the SOLE holder of both ids (the panel mounts in that same transaction).   │
 // └────────────────────────────────────────────────────────────────────────────┘
 //
 // ┌─ PROHIBITED TOPOLOGIES (device-confirmed; do NOT reintroduce) ─────────────┐
@@ -86,7 +106,8 @@
 // reintroduce"). That guard protected against Share fusing with the OPEN panel while
 // coexisting as a SECOND live glass element. This design has no such counterpart:
 // exactly one glass shape exists per state INSIDE the morph container — the closed
-// fused capsule XOR the open panel — so two shapes never coalesce there, and while
+// fused capsule XOR the travelling drop XOR the open panel (XOR the share blob) —
+// so two shapes never coalesce there, and while
 // the panel is open Share is a plain row inside it. The Undo circle is a second
 // top-chrome glass artifact by design; it lives OUTSIDE the container, giving it its
 // own non-merging glass surface in both states. Every other entry of that history
@@ -103,6 +124,9 @@
 // never touch it (FR-08/FR-08n). (The former Share-row writer is retired with the
 // panel's Share row — removed per user direction; Share lives only on the pill. The
 // former chrome-hide writer is retired with ChromeVisibility.)
+// The overlay's own morph stage machine (closed → dropping → open) is driven by
+// `.onChange(of: isMenuPresented)`: it OBSERVES that state, never writes it, so the
+// three-writer set above is untouched.
 //
 // `isShareSurfacePresented` writer set is EXHAUSTIVE (two sources):
 //   (1) presentShareSheet()      — the pill's Share button — withAnimation(menuOpenAnimation)
@@ -161,21 +185,23 @@ final class CoordinatorBox {
 ///   - A pinned standalone Undo glass circle (own trailing inset — never moves;
 ///     hit-testing off while glass renders over it).
 ///   - The shared morph container — the positioned top-trailing child, holding EXACTLY one
-///     child per state: `closedPill` (closed) XOR `MenuBubble` (open), sharing the morph ID.
-///     As the LAST z-child it expands OVER the Undo circle instead of pushing it.
+///     child per state: `closedPill` (closed) XOR the `dropCarrier` (mid-journey) XOR
+///     `MenuBubble` (open), sharing the morph identity per stage. As the LAST z-child it
+///     expands OVER the Undo circle instead of pushing it.
 ///   - Transparent full-screen tap-catcher (only while open) — outside-tap dismiss (EC-14).
 ///
-/// **Glass morph (FR-02/FR-03):** see the header topology diagram. The fused closed
-/// capsule carries the same glass identity as the panel, so the iOS 26 glass system
-/// deforms the whole capsule into the panel and back as one unit — no stranded Share,
-/// no notch.
+/// **Glass morph (FR-02/FR-03):** see the header topology diagram. The pill's glass
+/// detaches as a drop, travels to the centre-bottom of the screen, rests, and blooms into
+/// the panel; closing runs the film backward. The iOS 26 glass system owns every
+/// deformation (one identity holder at a time) — no stranded Share, no notch.
 ///
 /// **Hit-testing:** the chrome is permanently visible (no ChromeVisibility
 /// crossfade/gate anymore). The pinned Undo circle alone is hit-gated while
 /// open glass renders over it (see the body).
 ///
 /// **Reduce Motion (FR-21):** both animation seams resolve to `nil`, so every state
-/// change applies instantaneously instead of springing.
+/// change applies instantaneously instead of springing — and both drop journeys
+/// short-circuit, so the traveling carrier never even mounts.
 ///
 /// **Bubble dismiss contract (EC-14):** write-sources 1, 2 are declared here;
 /// source 3 lives in `MenuBubble` behind the `isPresented` binding. The
@@ -222,24 +248,62 @@ struct ChromeOverlay: View {
     /// anchored popover's geometric source — the closed pill's exact slot).
     @State private var shareAnchorBox = ShareAnchorBox()
 
+    // MARK: - Drop-journey stage machine (three-act morph)
+
+    /// The three acts of the pill↔panel journey: the pill at rest, the traveling drop,
+    /// the fully bloomed panel. Driven exclusively by `onChange(of: isMenuPresented)`.
+    private enum MorphStage {
+        case closed
+        case dropping
+        case open
+    }
+
+    /// Which act is live right now.
+    @State private var stage: MorphStage = .closed
+
+    /// The drop carrier's frame — animates between the pill's frame and the egg frame.
+    @State private var dropSize: CGSize = .zero
+
+    /// The drop carrier's centre in the morph container's coordinate space — animates
+    /// between the pill's slot centre and the landing point.
+    @State private var dropCenter: CGPoint = .zero
+
+    /// The glass identity the drop carries at this instant: `chromeGlassID` while it
+    /// falls (inherited from the pill, so the handoff is frame-identical) and
+    /// `panelGlassID` while it blooms into the panel or shrinks back out of it.
+    @State private var currentDropGlassID: String = ChromeOverlay.chromeGlassID
+
+    /// The morph container's measured size — the space `pillCenter` and `landingCenter`
+    /// are derived from. A measurement that cannot contain the pill (e.g. an unresolved
+    /// first layout) makes the journeys take the instantaneous path (see the guards in
+    /// `presentMenuJourney` / `dismissMenuJourney`) instead of deriving bogus coordinates.
+    @State private var overlaySize: CGSize = .zero
+
+    /// The running act sequence. Every journey start cancels it first, so a close that
+    /// interrupts a fall (or an open that interrupts a close) reverses cleanly.
+    @State private var journeyTask: Task<Void, Never>? = nil
+
     // MARK: - Morph identity (§5.1.a morph identity seam)
 
     /// Namespace binding the closed capsule and the menu panel into one shared glass
     /// identity for the capsule↔panel morph inside the shared morph container (C-03).
     @Namespace private var glassNamespace
 
-    /// Shared glass effect ID — carried by the closed pill AND the share blob
-    /// blob (the pill↔blob stretch). The menu PANEL deliberately carries a
-    /// DIFFERENT id (`panelGlassID`): with one shared id the system merges the
-    /// two shapes into ONE identity and morphs their captured CONTENTS into
-    /// each other — the horizontal content smear the user showed against the
-    /// Notes reference. With separate ids the pill and the panel animate as
-    /// two shapes in one container: the pill deflates with its own icons, the
-    /// panel inflates with its own rows (refracted), and the container's
-    /// metaball field fuses the two silhouettes — the goccia d'acqua.
+    /// Shared glass effect ID — carried by the closed pill, by the share blob (the
+    /// pill↔blob stretch) and by the DROP while it falls (it inherits the pill's
+    /// identity so the pill→drop mount is an invisible frame-identical swap). The menu
+    /// PANEL deliberately carries a DIFFERENT id (`panelGlassID`): with one shared id
+    /// the system merges the two shapes into ONE identity and morphs their captured
+    /// CONTENTS into each other — the horizontal content smear the user showed against
+    /// the Notes reference. With separate ids the travelling egg and the panel animate
+    /// as two shapes in one container: the drop's glass morphs into the panel's frame
+    /// while the panel's rows arrive refracted. AT MOST ONE live view holds an id at any
+    /// instant, and every handoff is an exclusive same-transaction swap.
     private static let chromeGlassID = "chrome.morph"
 
-    /// The menu panel's own glass identity (see chromeGlassID rationale).
+    /// The menu panel's own glass identity (see chromeGlassID rationale). Also carried
+    /// by the DROP while it blooms into the panel and while it shrinks back out of it —
+    /// the drop is the sole holder of `chrome.panel` for the duration of those swaps.
     private static let panelGlassID = "chrome.panel"
 
     // MARK: - Accessibility
@@ -252,6 +316,8 @@ struct ChromeOverlay: View {
     /// Opening spring — used by write-source 1 (and resolved to `nil` under Reduce Motion).
     /// Slower + slightly less bouncy than the demo's 0.45/0.15: the drop lingers
     /// elongated before settling, matching the Notes blob's reading.
+    /// The journey's bloom step reuses `ChromeMetrics.menuOpenSpring` directly: both
+    /// journeys short-circuit under Reduce Motion, so the raw spring is unreachable there.
     private var menuOpenAnimation: Animation? {
         reduceMotion ? nil : ChromeMetrics.menuOpenSpring
     }
@@ -269,6 +335,30 @@ struct ChromeOverlay: View {
     /// row, so the two Share surfaces can never diverge.
     private var isShareDisabled: Bool {
         text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    // MARK: - Journey geometry (derived from the measured morph container)
+
+    /// The closed pill's frame — the journey's start and end size.
+    private var pillSize: CGSize {
+        CGSize(width: ChromeMetrics.closedPillWidth, height: ChromeMetrics.pillHeight)
+    }
+
+    /// The closed pill's centre in the morph container's measured space: its slot is the
+    /// top-trailing corner of the padded region, so the drop mounts exactly under it.
+    private var pillCenter: CGPoint {
+        CGPoint(
+            x: overlaySize.width - ChromeMetrics.closedPillWidth / 2,
+            y: ChromeMetrics.pillHeight / 2
+        )
+    }
+
+    /// Where the drop comes to rest: the centre-bottom anchor of the overlay.
+    private var landingCenter: CGPoint {
+        CGPoint(
+            x: overlaySize.width * ChromeMetrics.dropLandingHorizontalAnchor,
+            y: overlaySize.height * ChromeMetrics.dropLandingVerticalAnchor
+        )
     }
 
     // MARK: - Body
@@ -314,44 +404,203 @@ struct ChromeOverlay: View {
                 .padding(.top, ChromeMetrics.pillTopGap)
                 .padding(.trailing, ChromeMetrics.chromeHorizontalInset)
 
-            GlassEffectContainer(spacing: ChromeMetrics.metaballSpacing) {
-                if isShareSurfacePresented {
-                    // The share blob: the pill's morph identity stretches into
-                    // a panel-sized glass surface while the system share
-                    // popover presents over it — the pill "becomes" the share
-                    // panel, and its content arrives refracted on top. The
-                    // identity continuity is what deforms the capsule into the
-                    // blob instead of hard-swapping it.
-                    Color.clear
-                        .frame(
-                            width: ChromeMetrics.sharePanelBlobWidth,
-                            height: ChromeMetrics.sharePanelBlobHeight
-                        )
-                        .glassEffect(.regular, in: .rect(cornerRadius: ChromeMetrics.menuPanelCornerRadius))
-                        .glassEffectTransition(.matchedGeometry)
-                        .glassEffectID(Self.chromeGlassID, in: glassNamespace)
-                } else if isMenuPresented {
-                    MenuBubble(
-                        menuVM: menuVM,
-                        isPresented: $isMenuPresented,
-                        glassNamespace: glassNamespace,
-                        glassID: Self.panelGlassID,
-                        dismissAnimation: menuCloseAnimation
-                    )
-                    // No transition modifier on either XOR child — .identity kills
-                    // the morph (rc21). The branch crossfade stays (demo parity);
-                    // rows inside the panel add none (rc22 D1).
-                } else {
-                    closedPill
-                }
-            }
-            .padding(.top, ChromeMetrics.pillTopGap)
-            .padding(.trailing, ChromeMetrics.chromeHorizontalInset)
+            morphContainer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .onChange(of: isMenuPresented) { _, presented in
+            if presented {
+                presentMenuJourney()
+            } else {
+                dismissMenuJourney()
+            }
+        }
         // The chrome is PERMANENTLY visible (user direction: the pill never fades
         // while writing — the auto-hide state machine is retired). No crossfade,
         // no hit-testing gate, no chrome-hide dismissal writer.
+    }
+
+    // MARK: - Morph container (the ONE glass shape per state)
+
+    /// The overlay-spanning glass morph container.
+    ///
+    /// The top-trailing paddings stay OUTSIDE the measured region, so the pill, the panel
+    /// and the share blob keep EXACTLY their previous slots (the padded region's
+    /// top-trailing corner); the inner `GeometryReader` gives the drop the whole-overlay
+    /// travel field the journey needs.
+    private var morphContainer: some View {
+        GlassEffectContainer(spacing: ChromeMetrics.metaballSpacing) {
+            GeometryReader { geo in
+                ZStack(alignment: .topTrailing) {
+                    morphChild
+                }
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .topTrailing)
+                .onAppear { overlaySize = geo.size }
+                .onChange(of: geo.size) { _, size in overlaySize = size }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .padding(.top, ChromeMetrics.pillTopGap)
+        .padding(.trailing, ChromeMetrics.chromeHorizontalInset)
+    }
+
+    /// The morph container's XOR state branch: EXACTLY ONE glass child is live per state —
+    /// share blob XOR the traveling drop XOR the open panel XOR the closed pill.
+    ///
+    /// No `.transition` on any branch — `.identity` removes the animated
+    /// insertion/removal window the glass container needs to interpolate and KILLS the
+    /// morph (rc21). The default branch crossfade is demo parity; the panel's rows add
+    /// none (rc22 D1). Geometry is owned entirely by `.glassEffectID`.
+    @ViewBuilder
+    private var morphChild: some View {
+        if isShareSurfacePresented {
+            shareBlob
+        } else if stage == .dropping {
+            dropCarrier
+        } else if stage == .open {
+            MenuBubble(
+                menuVM: menuVM,
+                isPresented: $isMenuPresented,
+                glassNamespace: glassNamespace,
+                glassID: Self.panelGlassID,
+                dismissAnimation: menuCloseAnimation
+            )
+        } else {
+            closedPill
+        }
+    }
+
+    /// The share blob: the pill's morph identity stretches into a panel-sized glass
+    /// surface while the system share popover presents over it — the pill "becomes" the
+    /// share panel, and its content arrives refracted on top. The identity continuity is
+    /// what deforms the capsule into the blob instead of hard-swapping it.
+    private var shareBlob: some View {
+        Color.clear
+            .frame(
+                width: ChromeMetrics.sharePanelBlobWidth,
+                height: ChromeMetrics.sharePanelBlobHeight
+            )
+            .glassEffect(.regular, in: .rect(cornerRadius: ChromeMetrics.menuPanelCornerRadius))
+            .glassEffectTransition(.matchedGeometry)
+            .glassEffectID(Self.chromeGlassID, in: glassNamespace)
+    }
+
+    // MARK: - Drop carrier (the traveling glass identity)
+
+    /// The ONLY glass shape while `stage == .dropping`: a small egg-shaped capsule that
+    /// melts out of the pill's frame, travels to the landing point, and rests there before
+    /// blooming into the panel. One `.glassEffect` on a clear fill — never content, never
+    /// nested glass, never hit-testable, hidden from VoiceOver.
+    private var dropCarrier: some View {
+        Color.clear
+            .frame(width: dropSize.width, height: dropSize.height)
+            .glassEffect(.regular, in: .capsule)
+            .glassEffectTransition(.matchedGeometry)
+            .glassEffectID(currentDropGlassID, in: glassNamespace)
+            .position(x: dropCenter.x, y: dropCenter.y)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    // MARK: - Drop journey (three-act choreography)
+
+    /// The open journey, driven by `.onChange(of: isMenuPresented)`.
+    ///
+    /// The `…` writer has already flipped `isMenuPresented` under `menuOpenAnimation`;
+    /// every subsequent frame belongs to this journey, so it applies its own explicit
+    /// springs. The drop first mounts at the pill's exact frame and identity (an invisible
+    /// swap), then ACT 1 melts + travels under one bouncy spring, ACT 2 rests for the
+    /// settle beat, ACT 3 flips to the panel identity in the SAME transaction that mounts
+    /// `MenuBubble` — the glass morph from egg to panel.
+    ///
+    /// Reduce Motion (FR-21): short-circuits to `.open`, so the drop never mounts — the
+    /// writers' animation seam is already `nil`. An unmeasured container takes the same
+    /// path, so the chrome can never get stuck mid-journey.
+    private func presentMenuJourney() {
+        journeyTask?.cancel()
+        journeyTask = nil
+        guard !reduceMotion,
+              overlaySize.width > ChromeMetrics.closedPillWidth,
+              overlaySize.height > ChromeMetrics.pillHeight else {
+            stage = .open
+            return
+        }
+        var mount = Transaction()
+        mount.disablesAnimations = true
+        withTransaction(mount) {
+            stage = .dropping
+            currentDropGlassID = Self.chromeGlassID
+            dropCenter = pillCenter
+            dropSize = pillSize
+        }
+        journeyTask = Task { @MainActor in
+            await self.runPresentJourney()
+        }
+    }
+
+    /// The reverse film, driven by `.onChange(of: isMenuPresented)`.
+    ///
+    /// From `.open` the panel first shrinks into the egg at the resting point (an
+    /// exclusive same-identity swap), then — after the settle beat — the egg rises and
+    /// regrows to the pill's frame. A close that interrupts a fall skips the shrink: the
+    /// drop simply reverses course from wherever it is.
+    ///
+    /// Reduce Motion (FR-21): short-circuits to `.closed`, so the drop never mounts.
+    private func dismissMenuJourney() {
+        journeyTask?.cancel()
+        journeyTask = nil
+        guard !reduceMotion,
+              overlaySize.width > ChromeMetrics.closedPillWidth,
+              overlaySize.height > ChromeMetrics.pillHeight else {
+            stage = .closed
+            return
+        }
+        let shrinksFromPanel = stage == .open
+        if shrinksFromPanel {
+            withAnimation(ChromeMetrics.dropShrinkSpring) {
+                currentDropGlassID = Self.panelGlassID
+                stage = .dropping
+                dropCenter = landingCenter
+                dropSize = ChromeMetrics.dropEggSize
+            }
+        }
+        journeyTask = Task { @MainActor in
+            await self.runDismissJourney(shrinksFromPanel: shrinksFromPanel)
+        }
+    }
+
+    /// ACT 1–3: melt + travel, rest, bloom.
+    @MainActor
+    private func runPresentJourney() async {
+        try? await Task.sleep(for: .milliseconds(50))
+        guard !Task.isCancelled else { return }
+        withAnimation(ChromeMetrics.dropFallSpring) {
+            dropSize = ChromeMetrics.dropEggSize
+            dropCenter = landingCenter
+        }
+        try? await Task.sleep(for: .seconds(ChromeMetrics.dropTravelSettle))
+        guard !Task.isCancelled else { return }
+        withAnimation(ChromeMetrics.menuOpenSpring) {
+            currentDropGlassID = Self.panelGlassID
+            stage = .open
+        }
+    }
+
+    /// The reverse film: shrink into the egg (when coming from the panel), rise + regrow,
+    /// then hand the frame over to the pill.
+    @MainActor
+    private func runDismissJourney(shrinksFromPanel: Bool) async {
+        if shrinksFromPanel {
+            try? await Task.sleep(for: .seconds(ChromeMetrics.dropShrinkSettle))
+            guard !Task.isCancelled else { return }
+        }
+        withAnimation(ChromeMetrics.dropRiseSpring) {
+            currentDropGlassID = Self.chromeGlassID
+            dropCenter = pillCenter
+            dropSize = pillSize
+        }
+        try? await Task.sleep(for: .seconds(ChromeMetrics.dropRiseSettle))
+        guard !Task.isCancelled else { return }
+        stage = .closed
     }
 
     // MARK: - Undo circle (DD-3/DD-10)
