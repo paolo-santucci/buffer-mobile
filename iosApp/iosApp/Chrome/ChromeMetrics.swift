@@ -4,6 +4,7 @@ enum ChromeMetrics {
     static let pillHeight: CGFloat = 44
     static let chromeHorizontalInset: CGFloat = 16
     static let menuPanelWidth: CGFloat = 280
+    static let submenuPanelWidth: CGFloat = 300
     static let menuRowVerticalPadding: CGFloat = 11
     static let menuRowHorizontalPadding: CGFloat = 16
     static let menuRowSpacing: CGFloat = 2
