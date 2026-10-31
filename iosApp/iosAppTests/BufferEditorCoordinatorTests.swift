@@ -106,6 +106,35 @@ private func makeMountedCoordinator(
 @MainActor
 final class BufferEditorCoordinatorTests: XCTestCase {
 
+    func testClearEditorIsUndoableAndKeepsKeyboardFocus() throws {
+        let vm = BufferViewModel(settings: StubSettingsRepository())
+        let (textView, coordinator, window) = makeMountedCoordinator(viewModel: vm)
+        defer { window.isHidden = true }
+        let original = "Note 👨‍👩‍👧‍👦\nSecond line"
+        textView.text = original
+        vm.updateText(original)
+        textView.becomeFirstResponder()
+        textView.selectedRange = NSRange(location: 2, length: 3)
+        coordinator.clearEditor()
+        XCTAssertEqual(textView.text, "")
+        XCTAssertEqual(vm.text, "")
+        XCTAssertTrue(textView.isFirstResponder)
+        XCTAssertTrue(try XCTUnwrap(textView.undoManager).canUndo)
+        coordinator.undo()
+        XCTAssertEqual(textView.text, original)
+        XCTAssertEqual(vm.text, original)
+    }
+
+    func testClearEmptyEditorDoesNotCreateUndoEntry() {
+        let vm = BufferViewModel(settings: StubSettingsRepository())
+        let (textView, coordinator, window) = makeMountedCoordinator(viewModel: vm)
+        defer { window.isHidden = true }
+        textView.undoManager?.removeAllActions()
+        coordinator.clearEditor()
+        XCTAssertEqual(vm.text, "")
+        XCTAssertFalse(textView.undoManager?.canUndo ?? false)
+    }
+
     // -----------------------------------------------------------------------
     // MARK: - §5.1.d Row 1 — continuation branch
 

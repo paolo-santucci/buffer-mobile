@@ -2,6 +2,8 @@ import SwiftUI
 
 struct BottomToolbar: View {
     var isKeyboardPresented = false
+    var isEditorEmpty = true
+    var onClear: () -> Void = {}
     let onCopy: () -> Void
     let onPaste: () -> Void
     let onIndent: () -> Void
@@ -17,6 +19,9 @@ struct BottomToolbar: View {
                           hint: String(localized: "Outdent"), action: onOutdent)
             toolbarButton("increase.indent", label: String(localized: "Indent"),
                           hint: String(localized: "Indent"), action: onIndent)
+            toolbarButton("eraser", label: String(localized: "Clear editor"),
+                          hint: String(localized: "Clear editor"), action: onClear)
+                .disabled(isEditorEmpty)
         }
         .padding(.horizontal, ChromeMetrics.capsuleHorizontalPadding)
         .glassEffect(in: .capsule)
@@ -28,7 +33,7 @@ struct BottomToolbar: View {
             Image(systemName: symbol)
                 .imageScale(.large)
                 .fontWeight(ChromeMetrics.iconScaleWeight)
-                .frame(minWidth: ChromeMetrics.pillHeight,
+                .frame(minWidth: 44,
                        maxWidth: isKeyboardPresented ? .infinity : nil,
                        minHeight: isKeyboardPresented ? ChromeMetrics.keyboardToolbarHeight : ChromeMetrics.pillHeight)
                 .contentShape(.rect)

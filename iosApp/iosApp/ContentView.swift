@@ -55,6 +55,8 @@ struct ContentView: View {
         HStack {
             BottomToolbar(
                 isKeyboardPresented: isKeyboardPresented,
+                isEditorEmpty: viewModel.text.isEmpty,
+                onClear: { [coordinatorBox] in coordinatorBox.coordinator?.clearEditor() },
                 onCopy: { [coordinatorBox] in coordinatorBox.coordinator?.copyToPasteboard() },
                 onPaste: { [coordinatorBox] in coordinatorBox.coordinator?.pasteAtCaret() },
                 onIndent: { [coordinatorBox, viewModel] in

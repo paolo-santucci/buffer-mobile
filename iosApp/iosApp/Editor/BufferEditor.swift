@@ -242,6 +242,17 @@ struct BufferEditor: UIViewRepresentable {
             textView?.resignFirstResponder()
         }
 
+        func clearEditor() {
+            guard let tv = textView, !tv.text.isEmpty,
+                  let range = tv.textRange(from: tv.beginningOfDocument, to: tv.endOfDocument) else { return }
+            tv.unmarkText()
+            tv.undoManager?.beginUndoGrouping()
+            tv.replace(range, withText: "")
+            tv.undoManager?.endUndoGrouping()
+            viewModel.updateText(tv.text ?? "")
+            mirrorUndoState()
+        }
+
         /// Assign the indent/outdent result back to the live text view (FR-17).
         ///
         /// Sets `textView.text` and `textView.selectedRange`. No-op after teardown (EC-13).
