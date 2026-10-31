@@ -5,6 +5,47 @@
 	};
 	objectVersion = 56;
 	objects = {
+		B2000001 = {isa = PBXBuildFile; fileRef = B2000002; };
+		B2000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iosAppUITests/MenuPresentationTests.swift; sourceTree = SOURCE_ROOT; };
+		B2000003 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = iosAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B2000004 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (B2000001,); runOnlyForDeploymentPostprocessing = 0; };
+		B2000005 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		B2000006 = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B2000007;
+			buildPhases = (B2000004, B2000005,);
+			buildRules = ();
+			dependencies = (A1000088,);
+			name = iosAppUITests;
+			productName = iosAppUITests;
+			productReference = B2000003;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		B2000007 = {isa = XCConfigurationList; buildConfigurations = (B2000008, B2000009,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		B2000008 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.paolosantucci.foglietto.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = iosApp;
+			};
+			name = Debug;
+		};
+		B2000009 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.paolosantucci.foglietto.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = iosApp;
+			};
+			name = Release;
+		};
 
 /* Begin PBXBuildFile section */
 		A1000001 /* iosAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000010 /* iosAppApp.swift */; };
@@ -99,6 +140,7 @@
 			isa = PBXGroup;
 			children = (
 				A1000031 /* iosApp */,
+				B2000002,
 				A1000089 /* iosAppTests */,
 				A1000032 /* Products */,
 			);
@@ -140,6 +182,7 @@
 			children = (
 				A1000009 /* iosApp.app */,
 				A1000086 /* iosAppTests.xctest */,
+				B2000003,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -287,7 +330,8 @@
 			productRefGroup = A1000032 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (
+				targets = (
+				B2000006,
 				A1000008 /* iosApp */,
 				A1000085 /* iosAppTests */,
 			);

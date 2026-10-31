@@ -163,6 +163,18 @@ jobs:
 
           echo "False-green guard PASSED — at least 1 test executed."
 
+      - name: Export UI screenshots
+        if: always()
+        run: |
+          xcrun xcresulttool export attachments --path "$RUNNER_TEMP/iosAppTests.xcresult" --output-path "$RUNNER_TEMP/ui-screenshots"
+
+      - name: Upload UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-screenshots
+          path: ${{ runner.temp }}/ui-screenshots
+
   # ---------------------------------------------------------------------------
   # deploy_testflight — gated to v* tags only.
   # Full signing + export + TestFlight upload via xcrun altool.
