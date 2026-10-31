@@ -118,17 +118,6 @@ final class ChromeBarCoordinatorTests: XCTestCase {
         XCTAssertEqual(PillPopoverAlignment.margins(pillFrame: .null, bounds: .zero, minimum: minimum), minimum)
     }
 
-    func testPanelMarginsPinTopEdgeToPill() {
-        let margins = PillPopoverAlignment.margins(
-            pillFrame: CGRect(x: 214, y: 59, width: 100, height: 44),
-            bounds: CGRect(x: 0, y: 0, width: 390, height: 844),
-            panelHeight: 120,
-            minimum: UIEdgeInsets(top: 0, left: 16, bottom: 16, right: 0)
-        )
-        XCTAssertEqual(margins.top, 59)
-        XCTAssertEqual(margins.bottom, 665)
-    }
-
     private func makeMenu() -> MenuViewModel {
         MenuViewModel(
             recovery: StubRecoveryRepository(),
@@ -234,7 +223,6 @@ final class ChromeBarCoordinatorTests: XCTestCase {
             XCTAssertGreaterThan(menu.preferredContentSize.height, 0)
             XCTAssertNotNil(menu.popoverPresentationController?.sourceItem)
             let popover = try XCTUnwrap(menu.popoverPresentationController)
-            XCTAssertTrue(popover.canOverlapSourceViewRect)
             let container = try XCTUnwrap(popover.containerView)
             let source = try XCTUnwrap(popover.sourceItem)
             let sourceFrame = try XCTUnwrap(source.frame(in: container))
@@ -247,7 +235,6 @@ final class ChromeBarCoordinatorTests: XCTestCase {
             XCTAssertNil(navigation.presentedViewController)
         }
     }
-
 }
 
 @MainActor

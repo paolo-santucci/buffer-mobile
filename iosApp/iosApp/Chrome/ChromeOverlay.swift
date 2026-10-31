@@ -133,7 +133,6 @@ final class ChromeBarCoordinator: NSObject, UIPopoverPresentationControllerDeleg
         controller.modalPresentationStyle = .popover
         guard let popover = controller.popoverPresentationController else { return }
         popover.sourceItem = menuItem
-        popover.canOverlapSourceViewRect = true
         popover.delegate = self
         menuController = controller
         navigation.present(controller, animated: !UIAccessibility.isReduceMotionEnabled)
@@ -164,13 +163,8 @@ final class ChromeBarCoordinator: NSObject, UIPopoverPresentationControllerDeleg
         guard frames.count == 2 else { return }
         let pillFrame = frames.reduce(CGRect.null) { $0.union($1) }
         let inset = ChromeMetrics.chromeHorizontalInset
-        let preferredHeight = popover.presentedViewController.preferredContentSize.height
-        let panelHeight = popover.presentedViewController is MenuPopoverController && preferredHeight > 0
-            ? preferredHeight
-            : nil
         popover.popoverLayoutMargins = PillPopoverAlignment.margins(
             pillFrame: pillFrame, bounds: container.bounds,
-            panelHeight: panelHeight,
             minimum: UIEdgeInsets(top: 0, left: inset, bottom: inset, right: 0)
         )
     }

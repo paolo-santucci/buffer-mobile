@@ -17,19 +17,12 @@ enum SystemSharePresenter {
 }
 
 enum PillPopoverAlignment {
-    static func margins(
-        pillFrame: CGRect,
-        bounds: CGRect,
-        panelHeight: CGFloat? = nil,
-        minimum: UIEdgeInsets
-    ) -> UIEdgeInsets {
+    static func margins(pillFrame: CGRect, bounds: CGRect, minimum: UIEdgeInsets) -> UIEdgeInsets {
         guard !pillFrame.isEmpty, !pillFrame.isNull, !pillFrame.isInfinite else { return minimum }
-        let top = max(minimum.top, pillFrame.minY - bounds.minY)
-        let bottom = panelHeight.map { max(minimum.bottom, bounds.height - top - $0) } ?? minimum.bottom
         return UIEdgeInsets(
-            top: top,
+            top: max(minimum.top, pillFrame.minY - bounds.minY),
             left: minimum.left,
-            bottom: bottom,
+            bottom: minimum.bottom,
             right: max(minimum.right, bounds.maxX - pillFrame.maxX)
         )
     }
