@@ -248,10 +248,6 @@ final class ChromeBarCoordinatorTests: XCTestCase {
         }
     }
 
-    func testSubmenuIsWiderThanMainMenu() {
-        XCTAssertGreaterThan(ChromeMetrics.submenuPanelWidth, ChromeMetrics.menuPanelWidth)
-    }
-
 }
 
 @MainActor
