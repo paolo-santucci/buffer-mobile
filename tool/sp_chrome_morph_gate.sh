@@ -25,15 +25,15 @@ checks = {
     "editor fragment padding": "lineFragmentPadding = 0" in editor,
     "real grouped navigation items": all(token in chrome for token in (
         "UINavigationController(rootViewController: editor)", "trailingItemGroups", "[shareItem, menuItem]")),
-    "menu popover anchored to menu item": all(token in chrome for token in (
-        "modalPresentationStyle = .popover", "popover.sourceItem = menuItem", "popover.delegate = self")),
+    "native menu attached to bar item": "menuItem.menu = NativeEditorMenu.make" in chrome
+        and "MenuPopoverController" not in chrome and "presentMenu()" not in chrome,
     "share popover anchored to bar item": all(token in share for token in (
         "from source: UIBarButtonItem", "popover.sourceItem = source", "modalPresentationStyle = .popover")),
     "system owns presentation glass": not re.search(
         r"glassEffect|GlassEffectContainer|dropCarrier|journeyTask|shareBlob|ShareSourceAnchor|Task\.sleep",
         chrome + menu + share),
-    "reduce motion preserved": "UIAccessibility.isReduceMotionEnabled" in chrome
-        and "UIAccessibility.isReduceMotionEnabled" in share and "showsMenuAsPrimaryAction = true" in menu,
+    "system owns menu motion": "UIMenu(" in menu and "withAnimation" not in menu
+        and "UIAccessibility.isReduceMotionEnabled" in share,
     "native popup submenus refreshed on open": "UIDeferredMenuElement.uncached" in menu
         and "isRecoveryExpanded" not in menu and "isAboutExpanded" not in menu,
     "panels follow pill frame": "frame(in: container)" in chrome
@@ -41,7 +41,8 @@ checks = {
     "native compact-width presentation": "adaptivePresentationStyle" in chrome and ".none" in chrome
         and "adaptivePresentationStyle" in share and ".none" in share,
     "keyboard-safe bottom toolbar": ".safeAreaInset(edge: .bottom" in content,
-    "bounded scrolling menu": "ScrollView" in menu and "maximumHeight" in menu,
+    "system owns menu sizing and scrolling": "UIDeferredMenuElement.uncached" in menu
+        and "UIHostingController" not in menu and "popover" not in menu,
 }
 for label, passed in checks.items():
     print(f"{'PASS' if passed else 'FAIL'}: {label}")

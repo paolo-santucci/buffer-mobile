@@ -193,71 +193,43 @@ final class ChromeBarCoordinatorTests: XCTestCase {
         XCTAssertTrue(root.navigationItem.trailingItemGroups.last === menuGroup)
     }
 
-    func testIdleMenuPresentationsHaveContentAndCanReopen() throws {
-        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
-        let previousKeyWindow = scene.windows.first(where: \.isKeyWindow)
-        let window = UIWindow(windowScene: scene)
-        let navigation = ImmediatePresentationNavigationController(rootViewController: UIViewController())
+    func testNativeMenuSurvivesKeyboardAndUndoUpdates() throws {
+        let root = UIViewController()
+        let navigation = UINavigationController(rootViewController: root)
         let coordinator = ChromeBarCoordinator()
         coordinator.attach(to: navigation)
-        coordinator.update(text: "Note", menuVM: makeMenu(), canUndo: false, onUndo: {})
-        window.rootViewController = navigation
-        let visible = expectation(description: "Navigation is visible")
-        navigation.onAppear = { visible.fulfill() }
-        window.makeKeyAndVisible()
-        defer {
-            window.isHidden = true
-            previousKeyWindow?.makeKeyAndVisible()
-        }
-        wait(for: [visible], timeout: 3)
-
-        for attempt in 1...3 {
-            coordinator.updateKeyboard(isPresented: attempt == 2, onClose: {})
-            navigation.view.layoutIfNeeded()
-            let presented = expectation(description: "Menu opens on tap \(attempt)")
-            navigation.onPresent = { presented.fulfill() }
-            coordinator.presentMenu()
-            wait(for: [presented], timeout: 3)
-            let menu = try XCTUnwrap(navigation.presentedViewController)
-            XCTAssertGreaterThan(menu.preferredContentSize.width, 0)
-            XCTAssertGreaterThan(menu.preferredContentSize.height, 0)
-            XCTAssertNotNil(menu.popoverPresentationController?.sourceItem)
-            let popover = try XCTUnwrap(menu.popoverPresentationController)
-            let container = try XCTUnwrap(popover.containerView)
-            let source = try XCTUnwrap(popover.sourceItem)
-            let sourceFrame = try XCTUnwrap(source.frame(in: container))
-            XCTAssertEqual(popover.popoverLayoutMargins.right, container.bounds.maxX - sourceFrame.maxX, accuracy: 1)
-            let panelFrame = menu.view.convert(menu.view.bounds, to: container)
-            XCTAssertLessThanOrEqual(panelFrame.maxX, sourceFrame.maxX + 1)
-            let dismissed = expectation(description: "Menu dismisses \(attempt)")
-            menu.dismiss(animated: false) { dismissed.fulfill() }
-            wait(for: [dismissed], timeout: 3)
-            XCTAssertNil(navigation.presentedViewController)
+        let model = makeMenu()
+        coordinator.update(text: "Note", menuVM: model, canUndo: false, onUndo: {})
+        let item = try XCTUnwrap(root.navigationItem.trailingItemGroups.first?.barButtonItems.last)
+        let menu = try XCTUnwrap(item.menu)
+        for editing in [true, false, true] {
+            coordinator.updateKeyboard(isPresented: editing, onClose: {})
+            coordinator.update(text: "Edited", menuVM: model, canUndo: editing, onUndo: {})
+            XCTAssertTrue(item.menu === menu)
+            XCTAssertNil(item.primaryAction)
         }
     }
-}
 
-@MainActor
-private final class ImmediatePresentationNavigationController: UINavigationController {
-    var onAppear: (() -> Void)?
-    var onPresent: (() -> Void)?
-
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        let completion = onAppear
-        onAppear = nil
-        completion?()
+    func testSubmenusRetainTitlesAndIconsInNativeHierarchy() throws {
+        let menu = NativeEditorMenu.make(menuVM: makeMenu())
+        XCTAssertEqual(menu.children.count, 2)
+        let recent = try XCTUnwrap(menu.children.first as? UIMenu)
+        let about = try XCTUnwrap(menu.children.last as? UIMenu)
+        XCTAssertEqual(recent.title, String(localized: "Recent notes"))
+        XCTAssertNotNil(recent.image)
+        XCTAssertFalse(recent.options.contains(.displayInline))
+        XCTAssertTrue(recent.children.first is UIDeferredMenuElement)
+        XCTAssertEqual(about.title, String(localized: "About"))
+        XCTAssertNotNil(about.image)
+        XCTAssertEqual(about.children.count, 3)
     }
 
-    override func present(
-        _ controller: UIViewController,
-        animated: Bool,
-        completion: (() -> Void)? = nil
-    ) {
-        super.present(controller, animated: false) {
-            completion?()
-            self.onPresent?()
-        }
+    func testEmptyRecoveryRemainsADisabledMenuRow() throws {
+        let rows = NativeEditorMenu.recoveryActions(menuVM: makeMenu())
+        XCTAssertEqual(rows.count, 1)
+        let empty = try XCTUnwrap(rows.first as? UIAction)
+        XCTAssertEqual(empty.title, String(localized: "No recent notes."))
+        XCTAssertTrue(empty.attributes.contains(.disabled))
     }
 }
 

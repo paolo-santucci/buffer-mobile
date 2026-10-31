@@ -46,7 +46,6 @@ struct ChromeOverlay<Content: View>: UIViewControllerRepresentable {
 @MainActor
 final class ChromeBarCoordinator: NSObject, UIPopoverPresentationControllerDelegate {
     private weak var navigation: UINavigationController?
-    private weak var menuController: UIViewController?
     private var text = ""
     private var menuVM: MenuViewModel?
     private var onUndo: () -> Void = {}
@@ -72,7 +71,7 @@ final class ChromeBarCoordinator: NSObject, UIPopoverPresentationControllerDeleg
     private lazy var menuItem = UIBarButtonItem(
         title: String(localized: "Menu"),
         image: UIImage(systemName: "ellipsis"),
-        primaryAction: UIAction { [weak self] _ in self?.presentMenu() }
+        menu: UIMenu(children: [])
     )
 
     private lazy var undoItem = UIBarButtonItem(
@@ -101,7 +100,10 @@ final class ChromeBarCoordinator: NSObject, UIPopoverPresentationControllerDeleg
 
     func update(text: String, menuVM: MenuViewModel, canUndo: Bool, onUndo: @escaping () -> Void) {
         self.text = text
-        self.menuVM = menuVM
+        if self.menuVM !== menuVM {
+            self.menuVM = menuVM
+            menuItem.menu = NativeEditorMenu.make(menuVM: menuVM)
+        }
         self.onUndo = onUndo
         shareItem.isEnabled = !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if showsUndo != canUndo {
@@ -121,21 +123,6 @@ final class ChromeBarCoordinator: NSObject, UIPopoverPresentationControllerDeleg
         var groups = showsUndo ? [undoGroup, shareMenuGroup] : [shareMenuGroup]
         if showsKeyboardDismissal { groups.append(closeKeyboardGroup) }
         navigation?.viewControllers.first?.navigationItem.trailingItemGroups = groups
-    }
-
-    func presentMenu() {
-        guard let navigation, let menuVM,
-              navigation.view.window != nil,
-              navigation.presentedViewController == nil else { return }
-        let controller = MenuPopoverController(menuVM: menuVM, source: navigation) { [weak self] in
-            self?.menuController?.dismiss(animated: !UIAccessibility.isReduceMotionEnabled)
-        }
-        controller.modalPresentationStyle = .popover
-        guard let popover = controller.popoverPresentationController else { return }
-        popover.sourceItem = menuItem
-        popover.delegate = self
-        menuController = controller
-        navigation.present(controller, animated: !UIAccessibility.isReduceMotionEnabled)
     }
 
     private func presentShare() {
@@ -174,34 +161,5 @@ final class ChromeBarCoordinator: NSObject, UIPopoverPresentationControllerDeleg
         traitCollection: UITraitCollection
     ) -> UIModalPresentationStyle {
         .none
-    }
-}
-
-private final class MenuPopoverController: UIHostingController<MenuBubble> {
-    private weak var source: UIViewController?
-
-    init(menuVM: MenuViewModel, source: UIViewController, onDismiss: @escaping () -> Void) {
-        self.source = source
-        super.init(rootView: MenuBubble(menuVM: menuVM, onDismiss: onDismiss))
-        sizingOptions = .preferredContentSize
-        view.backgroundColor = .clear
-        updateHeightLimit()
-    }
-
-    @MainActor required dynamic init?(coder: NSCoder) {
-        return nil
-    }
-
-    override func viewWillLayoutSubviews() {
-        super.viewWillLayoutSubviews()
-        updateHeightLimit()
-    }
-
-    private func updateHeightLimit() {
-        guard let source else { return }
-        let height = max(44, source.view.safeAreaLayoutGuide.layoutFrame.height - 2 * ChromeMetrics.chromeHorizontalInset)
-        if rootView.maximumHeight != height {
-            rootView.maximumHeight = height
-        }
     }
 }
