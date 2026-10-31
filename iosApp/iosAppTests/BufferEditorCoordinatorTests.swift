@@ -43,6 +43,24 @@ private final class StubSettingsRepository: SettingsRepository {
     func save(settings: AppSettings) { storedSettings = settings }
 }
 
+private final class ClearEditorRecoverySpy: RecoveryRepository {
+    var savedTexts: [String] = []
+    var trimLimits: [Int32] = []
+    var onSave: ((String) -> Void)?
+
+    func save(text: String) -> String {
+        onSave?(text)
+        savedTexts.append(text)
+        return "/recovery/cleared-note.txt"
+    }
+
+    func trim(keep: Int32) { trimLimits.append(keep) }
+    func list() -> [RecoveryNote] { [] }
+    func read(path: String) -> String? { nil }
+    func delete(path: String) {}
+    func deleteAll() {}
+}
+
 /// Spy subclass of `BufferViewModel` that counts `updateText(_:)` calls (EC-03 / FR-13).
 private final class UpdateTextSpy: BufferViewModel {
     private(set) var updateTextCallCount = 0
@@ -115,7 +133,13 @@ final class BufferEditorCoordinatorTests: XCTestCase {
         vm.updateText(original)
         textView.becomeFirstResponder()
         textView.selectedRange = NSRange(location: 2, length: 3)
-        coordinator.clearEditor()
+        let recovery = ClearEditorRecoverySpy()
+        recovery.onSave = { text in
+            XCTAssertEqual(textView.text, text)
+        }
+        coordinator.clearEditor(savingTo: recovery)
+        XCTAssertEqual(recovery.savedTexts, [original])
+        XCTAssertEqual(recovery.trimLimits, [10])
         XCTAssertEqual(textView.text, "")
         XCTAssertEqual(vm.text, "")
         XCTAssertTrue(textView.isFirstResponder)
@@ -123,6 +147,7 @@ final class BufferEditorCoordinatorTests: XCTestCase {
         coordinator.undo()
         XCTAssertEqual(textView.text, original)
         XCTAssertEqual(vm.text, original)
+        XCTAssertEqual(recovery.savedTexts, [original])
     }
 
     func testClearEmptyEditorDoesNotCreateUndoEntry() {
@@ -130,7 +155,10 @@ final class BufferEditorCoordinatorTests: XCTestCase {
         let (textView, coordinator, window) = makeMountedCoordinator(viewModel: vm)
         defer { window.isHidden = true }
         textView.undoManager?.removeAllActions()
-        coordinator.clearEditor()
+        let recovery = ClearEditorRecoverySpy()
+        coordinator.clearEditor(savingTo: recovery)
+        XCTAssertTrue(recovery.savedTexts.isEmpty)
+        XCTAssertTrue(recovery.trimLimits.isEmpty)
         XCTAssertEqual(vm.text, "")
         XCTAssertFalse(textView.undoManager?.canUndo ?? false)
     }

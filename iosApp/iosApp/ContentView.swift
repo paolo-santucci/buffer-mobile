@@ -56,7 +56,9 @@ struct ContentView: View {
             BottomToolbar(
                 isKeyboardPresented: isKeyboardPresented,
                 isEditorEmpty: viewModel.text.isEmpty,
-                onClear: { [coordinatorBox] in coordinatorBox.coordinator?.clearEditor() },
+                onClear: { [coordinatorBox, recovery] in
+                    coordinatorBox.coordinator?.clearEditor(savingTo: recovery)
+                },
                 onCopy: { [coordinatorBox] in coordinatorBox.coordinator?.copyToPasteboard() },
                 onPaste: { [coordinatorBox] in coordinatorBox.coordinator?.pasteAtCaret() },
                 onIndent: { [coordinatorBox, viewModel] in

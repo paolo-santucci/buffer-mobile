@@ -242,10 +242,11 @@ struct BufferEditor: UIViewRepresentable {
             textView?.resignFirstResponder()
         }
 
-        func clearEditor() {
+        func clearEditor(savingTo recovery: RecoveryRepository) {
             guard let tv = textView, !tv.text.isEmpty,
                   let range = tv.textRange(from: tv.beginningOfDocument, to: tv.endOfDocument) else { return }
             tv.unmarkText()
+            _ = SaveBufferToRecovery(repository: recovery).invoke(text: tv.text)
             tv.undoManager?.beginUndoGrouping()
             tv.replace(range, withText: "")
             tv.undoManager?.endUndoGrouping()
